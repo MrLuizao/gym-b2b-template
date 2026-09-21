@@ -208,7 +208,7 @@ function submitClass(): void {
           Clases programadas
         </h2>
         <button
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-white transition hover:opacity-90"
+          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="createModalOpen = true"
         >
           <Plus class="h-3.5 w-3.5" />

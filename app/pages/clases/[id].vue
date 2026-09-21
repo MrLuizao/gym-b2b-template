@@ -406,7 +406,7 @@ async function deleteClass(): Promise<void> {
             Cancelar
           </button>
           <button
-            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-white transition hover:opacity-90 disabled:opacity-50"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-50"
             :disabled="saving"
             @click="confirmSave"
           >

@@ -15,6 +15,7 @@ const form = ref({
   title: '',
   subtitle: '',
   badge: 'ALIADO',
+  brandColor: '#f4e701',
   imageUrl: '',
   ctaLabel: 'Ver oferta',
   branchId: 'todas',
@@ -45,7 +46,10 @@ const preview = computed(() => ({
   title: form.value.title || 'Título del anuncio',
   subtitle: form.value.subtitle,
   ctaLabel: form.value.ctaLabel || 'Ver oferta',
+  brandColor: form.value.brandColor,
 }));
+
+const onAlly = computed(() => readableOn(preview.value.brandColor));
 
 function branchName(id: string | null): string {
   if (!id) return 'Todas las sedes';
@@ -118,6 +122,7 @@ async function publish(): Promise<void> {
       endsAt: endsAtTs.value,
       status: form.value.status,
       description: form.value.description.trim(),
+      brandColor: hexToArgb(form.value.brandColor),
       address: form.value.address.trim(),
       lat: parseCoord(form.value.lat),
       lng: parseCoord(form.value.lng),
@@ -183,34 +188,46 @@ onMounted(async () => {
             <ImageUp class="h-5 w-5 text-text-dim" />
           </div>
           <div
-            class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"
+            class="absolute inset-0 bg-gradient-to-b from-black/20 to-transparent"
           />
-          <span
-            class="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[9px] font-black text-white"
-          >
-            {{ preview.badge }}
-          </span>
           <div
-            class="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-3"
+            class="absolute inset-x-0 bottom-0 backdrop-blur-md"
+            :style="{ backgroundColor: `${preview.brandColor}9e` }"
           >
-            <div class="min-w-0">
-              <p
-                class="text-[9px] font-bold uppercase tracking-widest text-white/60"
-              >
-                {{ preview.advertiser }}
-              </p>
-              <p class="truncate text-xs font-black text-white">
-                {{ preview.title }}
-              </p>
-              <p class="truncate text-[10px] text-white/70">
-                {{ preview.subtitle }}
-              </p>
-            </div>
-            <span
-              class="shrink-0 rounded-full bg-white px-2.5 py-1 text-[9px] font-black text-black"
+            <div
+              class="flex items-center justify-between gap-2 px-3 py-2.5"
             >
-              {{ preview.ctaLabel }}
-            </span>
+              <div class="min-w-0">
+                <p
+                  class="text-[8px] font-black uppercase tracking-[0.14em]"
+                  :style="{ color: `${onAlly}bf` }"
+                >
+                  {{ preview.advertiser }}
+                </p>
+                <p
+                  class="truncate text-xs font-black"
+                  :style="{ color: onAlly }"
+                >
+                  {{ preview.title }}
+                </p>
+                <p
+                  class="truncate text-[10px] font-semibold"
+                  :style="{ color: `${onAlly}bf` }"
+                >
+                  {{ preview.subtitle }}
+                </p>
+              </div>
+              <span
+                class="shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black"
+                :style="{
+                  color: onAlly,
+                  borderColor: `${onAlly}8c`,
+                  backgroundColor: `${onAlly}29`,
+                }"
+              >
+                {{ preview.ctaLabel }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -280,6 +297,25 @@ onMounted(async () => {
             placeholder="ALIADO"
             class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
           />
+        </label>
+        <label class="block">
+          <span
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >Color de marca del aliado</span
+          >
+          <div class="mt-1 flex items-center gap-2">
+            <input
+              v-model="form.brandColor"
+              type="color"
+              class="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-stroke bg-base p-1"
+            />
+            <input
+              v-model="form.brandColor"
+              type="text"
+              placeholder="#f97316"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+          </div>
         </label>
         <label class="block">
           <span
@@ -454,8 +490,12 @@ onMounted(async () => {
         @click="form.status = form.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE'"
       >
         <span
-          class="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
-          :class="form.status === 'ACTIVE' ? 'left-[22px]' : 'left-0.5'"
+          class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+          :class="
+            form.status === 'ACTIVE'
+              ? 'left-[22px] bg-base'
+              : 'left-0.5 bg-white'
+          "
         />
       </button>
     </div>
@@ -465,7 +505,7 @@ onMounted(async () => {
     </p>
 
     <button
-      class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-white transition hover:opacity-90 disabled:opacity-50"
+      class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
       :disabled="saving"
       @click="askPublish"
     >

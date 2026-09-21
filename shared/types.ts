@@ -137,6 +137,8 @@ export interface Branch {
   address: string;
   openMinutes: number;
   closeMinutes: number;
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface BranchDetail {
@@ -238,6 +240,7 @@ export interface SponsorAd {
   title: string;
   subtitle: string;
   badge: string;
+  brandColor: number | null;
   imageUrl: string;
   ctaLabel: string;
   branchId: string | null;

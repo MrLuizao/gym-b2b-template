@@ -30,6 +30,7 @@ export interface AdDraft {
   title: string;
   subtitle: string;
   badge: string;
+  brandColor?: number | null;
   imageUrl: string;
   ctaLabel: string;
   branchId: string | null;

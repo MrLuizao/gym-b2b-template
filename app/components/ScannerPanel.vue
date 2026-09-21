@@ -109,7 +109,7 @@ onMounted(() => {
     <div class="mt-4 flex gap-2">
       <button
         v-if="!cameraActive"
-        class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-black text-white shadow-lg shadow-accent/30 transition hover:brightness-110 disabled:opacity-50"
+        class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-black text-base transition hover:brightness-110 disabled:opacity-50"
         :disabled="starting"
         @click="startCamera()"
       >

@@ -287,7 +287,7 @@ function exportCsv(): void {
 
       <div class="mt-4 flex justify-end">
         <button
-          class="flex h-10 cursor-pointer items-center gap-2 rounded-full bg-accent px-5 text-[11px] font-black text-white transition hover:opacity-90 disabled:opacity-50"
+          class="flex h-10 cursor-pointer items-center gap-2 rounded-full bg-accent px-5 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-50"
           :disabled="generating"
           @click="generate"
         >

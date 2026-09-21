@@ -18,18 +18,42 @@ import {
 const route = useRoute();
 const { session, logout } = useAuth();
 
-const navItems = [
-  { to: '/sedes', label: 'Sedes', icon: MapPin },
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/recepcion', label: 'Recepción', icon: ScanLine },
-  { to: '/socios', label: 'Socios', icon: Users },
-  { to: '/membresias', label: 'Membresías', icon: CreditCard },
-  { to: '/clases', label: 'Clases', icon: CalendarDays },
-  { to: '/entrenadores', label: 'Entrenadores', icon: Medal },
-  { to: '/reportes', label: 'Reportes', icon: BarChart3 },
-  { to: '/publicidad', label: 'Publicidad', icon: Handshake },
-  { to: '/cms', label: 'CMS & Push', icon: Megaphone },
+const logoutConfirmOpen = ref(false);
+
+const navGroups = [
+  {
+    label: null,
+    items: [
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/recepcion', label: 'Recepción', icon: ScanLine },
+    ],
+  },
+  {
+    label: 'Operación',
+    items: [
+      { to: '/sedes', label: 'Sedes', icon: MapPin },
+      { to: '/clases', label: 'Clases', icon: CalendarDays },
+      { to: '/entrenadores', label: 'Entrenadores', icon: Medal },
+    ],
+  },
+  {
+    label: 'Miembros',
+    items: [
+      { to: '/socios', label: 'Socios', icon: Users },
+      { to: '/membresias', label: 'Membresías', icon: CreditCard },
+    ],
+  },
+  {
+    label: 'Comercial',
+    items: [
+      { to: '/publicidad', label: 'Publicidad', icon: Handshake },
+      { to: '/cms', label: 'CMS & Push', icon: Megaphone },
+      { to: '/reportes', label: 'Reportes', icon: BarChart3 },
+    ],
+  },
 ];
+
+const navItems = navGroups.flatMap((group) => group.items);
 
 const pageTitle = computed(() => {
   const item = navItems.find(
@@ -47,8 +71,8 @@ const pageTitle = computed(() => {
       class="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-stroke bg-surface md:flex"
     >
       <div class="flex items-center gap-3 border-b border-stroke px-6 py-5">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-accent shadow-lg shadow-accent/30">
-          <Dumbbell class="h-5 w-5 text-white" />
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">
+          <Dumbbell class="h-5 w-5 text-base" />
         </div>
         <div>
           <p class="text-sm font-black tracking-wide text-text-primary">CAPITAL FITNESS</p>
@@ -58,25 +82,35 @@ const pageTitle = computed(() => {
         </div>
       </div>
 
-      <nav class="flex-1 space-y-1 px-3 py-6">
-        <NuxtLink
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition"
-          :class="
-            route.path === item.to
-              ? 'bg-accent/10 text-text-primary'
-              : 'text-text-muted hover:bg-white/5 hover:text-text-primary'
-          "
-        >
-          <span
-            class="h-4 w-1 rounded-full"
-            :class="route.path === item.to ? 'bg-accent' : 'bg-transparent'"
-          />
-          <component :is="item.icon" class="h-4 w-4" />
-          {{ item.label }}
-        </NuxtLink>
+      <nav class="flex-1 space-y-5 overflow-y-auto px-3 py-5">
+        <div v-for="group in navGroups" :key="group.label ?? 'main'">
+          <p
+            v-if="group.label"
+            class="mb-1.5 px-3 text-[9px] font-black uppercase tracking-[0.2em] text-text-dim"
+          >
+            {{ group.label }}
+          </p>
+          <div class="space-y-1">
+            <NuxtLink
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition"
+              :class="
+                route.path === item.to
+                  ? 'bg-accent/10 text-text-primary'
+                  : 'text-text-muted hover:bg-white/5 hover:text-text-primary'
+              "
+            >
+              <span
+                class="h-4 w-1 rounded-full"
+                :class="route.path === item.to ? 'bg-accent' : 'bg-transparent'"
+              />
+              <component :is="item.icon" class="h-4 w-4" />
+              {{ item.label }}
+            </NuxtLink>
+          </div>
+        </div>
       </nav>
 
       <div class="border-t border-stroke px-4 py-4">
@@ -91,7 +125,7 @@ const pageTitle = computed(() => {
           <button
             class="rounded-lg p-1.5 text-text-dim transition hover:bg-white/5 hover:text-accent"
             title="Cerrar sesión"
-            @click="logout()"
+            @click="logoutConfirmOpen = true"
           >
             <LogOut class="h-4 w-4" />
           </button>
@@ -131,5 +165,28 @@ const pageTitle = computed(() => {
         <slot />
       </main>
     </div>
+
+    <UModal
+      v-model:open="logoutConfirmOpen"
+      title="Cerrar sesión"
+      description="Saldrás del panel y tendrás que ingresar tus credenciales de nuevo."
+    >
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="logoutConfirmOpen = false"
+          />
+          <UButton
+            label="Cerrar sesión"
+            icon="i-lucide-log-out"
+            color="error"
+            @click="logout()"
+          />
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>

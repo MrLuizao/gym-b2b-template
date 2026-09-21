@@ -14,6 +14,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
     title?: string;
     subtitle?: string;
     badge?: string;
+    brandColor?: number | null;
     imageUrl?: string;
     ctaLabel?: string;
     branchId?: string | null;
@@ -39,6 +40,12 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   }
   if (body?.subtitle !== undefined) ad.subtitle = body.subtitle.trim().slice(0, 140);
   if (body?.badge !== undefined) ad.badge = body.badge.trim().slice(0, 12) || 'ALIADO';
+  if (body?.brandColor !== undefined) {
+    ad.brandColor =
+      typeof body.brandColor === 'number' && Number.isFinite(body.brandColor)
+        ? body.brandColor
+        : null;
+  }
   if (body?.imageUrl !== undefined) ad.imageUrl = body.imageUrl.trim();
   if (body?.ctaLabel !== undefined) ad.ctaLabel = body.ctaLabel.trim().slice(0, 24) || 'Ver más';
   if (body?.branchId !== undefined) ad.branchId = body.branchId || null;

@@ -150,8 +150,12 @@ async function runToggleDuty(): Promise<void> {
             @click="confirmToggleDuty(trainer)"
           >
             <span
-              class="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
-              :class="trainer.isOnDuty ? 'left-[22px]' : 'left-0.5'"
+              class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+              :class="
+                trainer.isOnDuty
+                  ? 'left-[22px] bg-base'
+                  : 'left-0.5 bg-white'
+              "
             />
           </button>
         </div>

@@ -102,6 +102,8 @@ function createMockDb(): MockDb {
       address: 'Av. Arce · Zona Central',
       openMinutes: 360,
       closeMinutes: 1320,
+      lat: -16.504,
+      lng: -68.13,
     },
     {
       id: 'xpress',
@@ -114,6 +116,8 @@ function createMockDb(): MockDb {
       address: 'C. Belisario Salinas #412',
       openMinutes: 360,
       closeMinutes: 1320,
+      lat: -16.501,
+      lng: -68.135,
     },
     {
       id: 'centro',
@@ -126,6 +130,8 @@ function createMockDb(): MockDb {
       address: 'Av. Mariscal Santa Cruz #129',
       openMinutes: 420,
       closeMinutes: 1320,
+      lat: -16.499,
+      lng: -68.124,
     },
     {
       id: 'carranza',
@@ -138,6 +144,8 @@ function createMockDb(): MockDb {
       address: 'C. Carranza #285',
       openMinutes: 420,
       closeMinutes: 1300,
+      lat: -16.497,
+      lng: -68.141,
     },
   ];
 
@@ -275,6 +283,7 @@ function createMockDb(): MockDb {
         title: 'Whey X-Treme -20%',
         subtitle: 'Solo con tu credencial de socio',
         badge: 'ALIADO',
+        brandColor: 0xfff97316,
         imageUrl: 'https://picsum.photos/seed/ad-nutri/700/400',
         ctaLabel: 'Ver oferta',
         branchId: null,
@@ -308,6 +317,7 @@ function createMockDb(): MockDb {
         title: 'Guantes y straps -15%',
         subtitle: 'En sucursal Plaza o online',
         badge: 'ALIADO',
+        brandColor: 0xffef4444,
         imageUrl: 'https://picsum.photos/seed/ad-sport/700/400',
         ctaLabel: 'Comprar',
         branchId: 'select',
@@ -340,6 +350,7 @@ function createMockDb(): MockDb {
         title: 'Cold brew 2x1 post-entreno',
         subtitle: 'A dos cuadras de sede Centro',
         badge: 'ALIADO',
+        brandColor: 0xff22c55e,
         imageUrl: 'https://picsum.photos/seed/ad-cafe/700/400',
         ctaLabel: 'Cómo llegar',
         branchId: 'centro',

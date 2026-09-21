@@ -196,7 +196,7 @@ onMounted(async () => {
           </p>
         </div>
         <button
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-white transition hover:opacity-90"
+          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="navigateTo('/publicidad/nuevo')"
         >
           <Plus class="h-3.5 w-3.5" />
@@ -232,13 +232,21 @@ onMounted(async () => {
                     class="h-9 w-14 rounded-lg border border-stroke object-cover"
                   />
                   <div class="min-w-0">
-                    <button
-                      type="button"
-                      class="block max-w-full cursor-pointer truncate text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
-                      @click="navigateTo(`/publicidad/${ad.id}`)"
-                    >
-                      {{ ad.advertiser }}
-                    </button>
+                    <div class="flex items-center gap-1.5">
+                      <span
+                        v-if="argbToHex(ad.brandColor)"
+                        class="h-2.5 w-2.5 shrink-0 rounded-full"
+                        :style="{ backgroundColor: argbToHex(ad.brandColor) ?? '' }"
+                        :title="`Color de marca: ${argbToHex(ad.brandColor)}`"
+                      />
+                      <button
+                        type="button"
+                        class="block max-w-full cursor-pointer truncate text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
+                        @click="navigateTo(`/publicidad/${ad.id}`)"
+                      >
+                        {{ ad.advertiser }}
+                      </button>
+                    </div>
                     <p class="truncate text-[10px] text-text-dim">
                       {{ ad.title }}
                     </p>

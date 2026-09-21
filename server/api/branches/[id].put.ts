@@ -29,6 +29,12 @@ export default defineEventHandler(async (event): Promise<Branch> => {
       branch.maxCapacity,
     );
   }
+  if (body.lat !== undefined) {
+    branch.lat = typeof body.lat === 'number' ? body.lat : null;
+  }
+  if (body.lng !== undefined) {
+    branch.lng = typeof body.lng === 'number' ? body.lng : null;
+  }
   if (body.status === 'OPEN' || body.status === 'CLOSED') {
     branch.status = body.status;
   }

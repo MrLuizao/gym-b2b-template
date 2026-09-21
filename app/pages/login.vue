@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Dumbbell } from '@lucide/vue';
 
+definePageMeta({ layout: false });
+
 const { login } = useAuth();
 
 const email = ref('recepcion@capitalfitness.bo');
@@ -26,8 +28,8 @@ async function submit(): Promise<void> {
   <div class="flex min-h-screen items-center justify-center bg-base px-4">
     <div class="w-full max-w-sm rounded-2xl border border-stroke bg-surface p-8">
       <div class="flex flex-col items-center gap-3 text-center">
-        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent shadow-lg shadow-accent/40">
-          <Dumbbell class="h-7 w-7 text-white" />
+        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent">
+          <Dumbbell class="h-7 w-7 text-base" />
         </div>
         <div>
           <h1 class="text-lg font-black tracking-tight text-text-primary">
@@ -81,7 +83,7 @@ async function submit(): Promise<void> {
         <button
           type="submit"
           :disabled="submitting"
-          class="w-full rounded-xl bg-accent py-2.5 text-sm font-black text-white shadow-lg shadow-accent/30 transition hover:brightness-110 disabled:opacity-50"
+          class="w-full rounded-xl bg-accent py-2.5 text-sm font-black text-base transition hover:brightness-110 disabled:opacity-50"
         >
           {{ submitting ? 'Ingresando…' : 'Ingresar al panel' }}
         </button>

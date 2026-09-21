@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, Pencil, Plus, Trash2, UserPlus, X } from '@lucide/vue';
+import { ArrowLeft, Check, MapPin, Pencil, Plus, Trash2, UserPlus, X } from '@lucide/vue';
 
 import type { Branch, BranchDetail, ClassSchedule, MemberAdmin, Trainer } from '#shared/types';
 
@@ -19,6 +19,8 @@ const editForm = ref({
   status: 'OPEN' as Branch['status'],
   openTime: '06:00',
   closeTime: '22:00',
+  lat: '',
+  lng: '',
 });
 
 const editingClassId = ref<string | null>(null);
@@ -105,6 +107,11 @@ const branchChanges = computed<string[]>(() => {
     changes.push(`Nombre: '${b.name}' → '${editForm.value.name}'`);
   if (editForm.value.address !== b.address)
     changes.push('Se actualizará la dirección');
+  if (
+    parseCoord(editForm.value.lat) !== b.lat ||
+    parseCoord(editForm.value.lng) !== b.lng
+  )
+    changes.push('Se actualizará la ubicación en el mapa');
   if (editForm.value.imageUrl !== b.imageUrl)
     changes.push('Se actualizará la imagen de la sede');
   if (editForm.value.maxCapacity !== b.maxCapacity)
@@ -194,6 +201,11 @@ function hhmm(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function parseCoord(raw: string): number | null {
+  const value = Number(raw.trim());
+  return raw.trim() !== '' && Number.isFinite(value) ? value : null;
+}
+
 function toMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
@@ -210,6 +222,8 @@ function startEdit(): void {
     status: detail.value.branch.status,
     openTime: hhmm(detail.value.branch.openMinutes),
     closeTime: hhmm(detail.value.branch.closeMinutes),
+    lat: detail.value.branch.lat?.toString() ?? '',
+    lng: detail.value.branch.lng?.toString() ?? '',
   };
   editing.value = true;
 }
@@ -226,6 +240,8 @@ async function saveBranch(): Promise<void> {
           ...editForm.value,
           openMinutes: toMinutes(editForm.value.openTime),
           closeMinutes: toMinutes(editForm.value.closeTime),
+          lat: parseCoord(editForm.value.lat),
+          lng: parseCoord(editForm.value.lng),
         },
       },
     );
@@ -535,6 +551,16 @@ async function unassignTrainer(): Promise<void> {
           <p class="mt-1 text-sm font-black text-text-primary">
             {{ detail.branch.address }}
           </p>
+          <a
+            v-if="detail.branch.lat != null && detail.branch.lng != null"
+            :href="`https://www.google.com/maps/search/?api=1&query=${detail.branch.lat},${detail.branch.lng}`"
+            target="_blank"
+            rel="noopener"
+            class="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-accent transition hover:underline"
+          >
+            <MapPin class="h-3 w-3" />
+            Ver en Google Maps
+          </a>
         </div>
         <div>
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
@@ -583,6 +609,30 @@ async function unassignTrainer(): Promise<void> {
               v-model="editForm.address"
               type="text"
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Latitud
+            </span>
+            <input
+              v-model="editForm.lat"
+              type="text"
+              inputmode="decimal"
+              placeholder="-16.504"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Longitud
+            </span>
+            <input
+              v-model="editForm.lng"
+              type="text"
+              inputmode="decimal"
+              placeholder="-68.130"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
             />
           </label>
           <div class="col-span-2">
@@ -656,8 +706,12 @@ async function unassignTrainer(): Promise<void> {
             "
           >
             <span
-              class="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
-              :class="editForm.status === 'OPEN' ? 'left-[22px]' : 'left-0.5'"
+              class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+              :class="
+                editForm.status === 'OPEN'
+                  ? 'left-[22px] bg-base'
+                  : 'left-0.5 bg-white'
+              "
             />
           </button>
         </div>
@@ -670,7 +724,7 @@ async function unassignTrainer(): Promise<void> {
             Cancelar
           </button>
           <button
-            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-white transition hover:opacity-90 disabled:opacity-50"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-50"
             :disabled="saving"
             @click="
               confirmSave(
@@ -787,7 +841,7 @@ async function unassignTrainer(): Promise<void> {
           class="flex-1"
         />
         <button
-          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-white transition hover:opacity-90 disabled:opacity-40"
+          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-40"
           :disabled="!assignTrainerId"
           @click="assignTrainer"
         >
@@ -872,7 +926,7 @@ async function unassignTrainer(): Promise<void> {
                 Cancelar
               </button>
               <button
-                class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-white transition hover:opacity-90"
+                class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90"
                 :disabled="saving"
                 @click="
                   confirmSave(
@@ -954,7 +1008,7 @@ async function unassignTrainer(): Promise<void> {
           class="flex-1"
         />
         <button
-          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-white transition hover:opacity-90 disabled:opacity-40"
+          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-40"
           :disabled="!assignClassId"
           @click="assignClass"
         >

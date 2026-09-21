@@ -9,6 +9,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
     title?: string;
     subtitle?: string;
     badge?: string;
+    brandColor?: number | null;
     imageUrl?: string;
     ctaLabel?: string;
     branchId?: string | null;
@@ -52,6 +53,10 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
     title: String(body.title).slice(0, 80),
     subtitle: String(body.subtitle ?? '').slice(0, 140),
     badge: String(body.badge ?? 'ALIADO').slice(0, 12),
+    brandColor:
+      typeof body.brandColor === 'number' && Number.isFinite(body.brandColor)
+        ? body.brandColor
+        : null,
     imageUrl: String(body.imageUrl),
     ctaLabel: String(body.ctaLabel ?? 'Ver más').slice(0, 24),
     branchId: body.branchId || null,

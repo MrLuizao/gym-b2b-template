@@ -57,7 +57,7 @@ const barColor = computed(() => {
         <Minus class="h-3.5 w-3.5" />
       </button>
       <button
-        class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white shadow-lg shadow-accent/30 transition hover:brightness-110 disabled:opacity-40"
+        class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-base transition hover:brightness-110 disabled:opacity-40"
         :disabled="branch.currentCapacity >= branch.maxCapacity"
         title="Registrar ingreso manual"
         @click="emit('adjust', 1)"

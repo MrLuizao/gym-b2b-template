@@ -23,12 +23,19 @@ const createError = ref<string | null>(null);
 const createForm = ref({
   name: '',
   address: '',
+  lat: '',
+  lng: '',
   imageUrl: '',
   maxCapacity: 100,
   openTime: '06:00',
   closeTime: '22:00',
   status: 'OPEN' as Branch['status'],
 });
+
+function parseCoord(raw: string): number | null {
+  const value = Number(raw.trim());
+  return raw.trim() !== '' && Number.isFinite(value) ? value : null;
+}
 
 const confirmOpen = ref(false);
 const confirmTitle = ref('');
@@ -178,12 +185,19 @@ function submitBranch(): void {
       try {
         const branch = await $fetch<Branch>('/api/branches', {
           method: 'POST',
-          body: { ...createForm.value, name: createForm.value.name.trim() },
+          body: {
+            ...createForm.value,
+            name: createForm.value.name.trim(),
+            lat: parseCoord(createForm.value.lat),
+            lng: parseCoord(createForm.value.lng),
+          },
         });
         branches.value.push(branch);
         createForm.value = {
           name: '',
           address: '',
+          lat: '',
+          lng: '',
           imageUrl: '',
           maxCapacity: 100,
           openTime: '06:00',
@@ -305,7 +319,7 @@ function submitBranch(): void {
           Sedes
         </h2>
         <button
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-white transition hover:opacity-90"
+          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="createModalOpen = true"
         >
           <Plus class="h-3.5 w-3.5" />
@@ -412,9 +426,11 @@ function submitBranch(): void {
                   @click="toggleBranchStatus(branch)"
                 >
                   <span
-                    class="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
+                    class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
                     :class="
-                      branch.status === 'OPEN' ? 'left-[22px]' : 'left-0.5'
+                      branch.status === 'OPEN'
+                        ? 'left-[22px] bg-base'
+                        : 'left-0.5 bg-white'
                     "
                   />
                 </button>
@@ -454,6 +470,22 @@ function submitBranch(): void {
             placeholder="Dirección"
             class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
           />
+          <div class="grid grid-cols-2 gap-3">
+            <input
+              v-model="createForm.lat"
+              type="text"
+              inputmode="decimal"
+              placeholder="Latitud (ej. -16.504)"
+              class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+            <input
+              v-model="createForm.lng"
+              type="text"
+              inputmode="decimal"
+              placeholder="Longitud (ej. -68.130)"
+              class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+          </div>
           <ImagePicker
             v-model="createForm.imageUrl"
             label="Subir imagen de la sede (opcional)"
@@ -516,9 +548,11 @@ function submitBranch(): void {
               "
             >
               <span
-                class="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
+                class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
                 :class="
-                  createForm.status === 'OPEN' ? 'left-[22px]' : 'left-0.5'
+                  createForm.status === 'OPEN'
+                    ? 'left-[22px] bg-base'
+                    : 'left-0.5 bg-white'
                 "
               />
             </button>

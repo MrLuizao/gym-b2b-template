@@ -317,7 +317,7 @@ onMounted(async () => {
           Cupones
         </h2>
         <button
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-white transition hover:opacity-90"
+          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="couponModalOpen = true"
         >
           <Plus class="h-3.5 w-3.5" />
@@ -406,7 +406,7 @@ onMounted(async () => {
           Banners
         </h2>
         <button
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-white transition hover:opacity-90"
+          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="bannerModalOpen = true"
         >
           <Plus class="h-3.5 w-3.5" />
@@ -483,7 +483,7 @@ onMounted(async () => {
           Notificaciones enviadas
         </h2>
         <button
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-white transition hover:opacity-90"
+          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="pushModalOpen = true"
         >
           <Plus class="h-3.5 w-3.5" />
@@ -626,7 +626,7 @@ onMounted(async () => {
                   <ImageUp class="h-5 w-5 text-text-dim" />
                 </div>
                 <span
-                  class="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[9px] font-black text-white"
+                  class="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[9px] font-black text-base"
                 >
                   {{ bannerBadge || 'NUEVO' }}
                 </span>
@@ -841,7 +841,7 @@ onMounted(async () => {
                 <div
                   class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent"
                 >
-                  <Dumbbell class="h-4 w-4 text-white" />
+                  <Dumbbell class="h-4 w-4 text-base" />
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center justify-between">

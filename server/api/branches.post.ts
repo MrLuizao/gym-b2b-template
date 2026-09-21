@@ -23,6 +23,8 @@ export default defineEventHandler(async (event): Promise<Branch> => {
     maxCapacity?: number;
     openTime?: string;
     closeTime?: string;
+    lat?: number | null;
+    lng?: number | null;
     status?: Branch['status'];
   }>(event);
 
@@ -60,6 +62,8 @@ export default defineEventHandler(async (event): Promise<Branch> => {
       `https://picsum.photos/seed/cf-${id}/800/500`,
     maxCapacity: Math.max(1, Math.round(body.maxCapacity ?? 100)),
     currentCapacity: 0,
+    lat: typeof body.lat === 'number' ? body.lat : null,
+    lng: typeof body.lng === 'number' ? body.lng : null,
     status: body.status === 'CLOSED' ? 'CLOSED' : 'OPEN',
     openMinutes:
       openMinutes !== null && closeMinutes !== null && closeMinutes > openMinutes

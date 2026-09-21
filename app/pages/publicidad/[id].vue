@@ -27,6 +27,7 @@ const editForm = ref({
   title: '',
   subtitle: '',
   badge: 'ALIADO',
+  brandColor: '#f4e701',
   imageUrl: '',
   ctaLabel: 'Ver oferta',
   branchId: 'todas',
@@ -114,6 +115,7 @@ const preview = computed(() => {
       title: editForm.value.title || 'Título del anuncio',
       subtitle: editForm.value.subtitle,
       ctaLabel: editForm.value.ctaLabel || 'Ver oferta',
+      brandColor: editForm.value.brandColor,
     };
   }
   const a = ad.value;
@@ -124,8 +126,11 @@ const preview = computed(() => {
     title: a?.title ?? '',
     subtitle: a?.subtitle ?? '',
     ctaLabel: a?.ctaLabel ?? '',
+    brandColor: argbToHex(a?.brandColor) ?? '#f4e701',
   };
 });
+
+const onAlly = computed(() => readableOn(preview.value.brandColor));
 
 onMounted(async () => {
   try {
@@ -154,6 +159,7 @@ function startEdit(): void {
     title: ad.value.title,
     subtitle: ad.value.subtitle,
     badge: ad.value.badge,
+    brandColor: argbToHex(ad.value.brandColor) ?? '#f4e701',
     imageUrl: ad.value.imageUrl,
     ctaLabel: ad.value.ctaLabel,
     branchId: ad.value.branchId ?? 'todas',
@@ -188,6 +194,10 @@ function confirmSave(): void {
     changes.push('Se actualizará el subtítulo');
   if (editForm.value.badge !== a.badge)
     changes.push(`Badge: '${a.badge}' → '${editForm.value.badge || 'ALIADO'}'`);
+  if (editForm.value.brandColor !== (argbToHex(a.brandColor) ?? '#f4e701'))
+    changes.push(
+      `Color de marca: ${argbToHex(a.brandColor) ?? 'acento'} → ${editForm.value.brandColor}`,
+    );
   if (editForm.value.ctaLabel !== a.ctaLabel)
     changes.push(`Botón: '${a.ctaLabel}' → '${editForm.value.ctaLabel}'`);
   if (editForm.value.imageUrl !== a.imageUrl)
@@ -233,6 +243,7 @@ async function saveAd(): Promise<void> {
       title: editForm.value.title.trim(),
       subtitle: editForm.value.subtitle.trim(),
       badge: editForm.value.badge.trim() || 'ALIADO',
+      brandColor: hexToArgb(editForm.value.brandColor),
       imageUrl: editForm.value.imageUrl.trim(),
       ctaLabel: editForm.value.ctaLabel.trim() || 'Ver oferta',
       branchId:
@@ -396,34 +407,46 @@ async function removeAd(): Promise<void> {
             <ImageUp class="h-5 w-5 text-text-dim" />
           </div>
           <div
-            class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"
+            class="absolute inset-0 bg-gradient-to-b from-black/20 to-transparent"
           />
-          <span
-            class="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[9px] font-black text-white"
-          >
-            {{ preview.badge }}
-          </span>
           <div
-            class="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-3"
+            class="absolute inset-x-0 bottom-0 backdrop-blur-md"
+            :style="{ backgroundColor: `${preview.brandColor}9e` }"
           >
-            <div class="min-w-0">
-              <p
-                class="text-[9px] font-bold uppercase tracking-widest text-white/60"
-              >
-                {{ preview.advertiser }}
-              </p>
-              <p class="truncate text-xs font-black text-white">
-                {{ preview.title }}
-              </p>
-              <p class="truncate text-[10px] text-white/70">
-                {{ preview.subtitle }}
-              </p>
-            </div>
-            <span
-              class="shrink-0 rounded-full bg-white px-2.5 py-1 text-[9px] font-black text-black"
+            <div
+              class="flex items-center justify-between gap-2 px-3 py-2.5"
             >
-              {{ preview.ctaLabel }}
-            </span>
+              <div class="min-w-0">
+                <p
+                  class="text-[8px] font-black uppercase tracking-[0.14em]"
+                  :style="{ color: `${onAlly}bf` }"
+                >
+                  {{ preview.advertiser }}
+                </p>
+                <p
+                  class="truncate text-xs font-black"
+                  :style="{ color: onAlly }"
+                >
+                  {{ preview.title }}
+                </p>
+                <p
+                  class="truncate text-[10px] font-semibold"
+                  :style="{ color: `${onAlly}bf` }"
+                >
+                  {{ preview.subtitle }}
+                </p>
+              </div>
+              <span
+                class="shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black"
+                :style="{
+                  color: onAlly,
+                  borderColor: `${onAlly}8c`,
+                  backgroundColor: `${onAlly}29`,
+                }"
+              >
+                {{ preview.ctaLabel }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -619,6 +642,25 @@ async function removeAd(): Promise<void> {
           <label class="block">
             <span
               class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >Color de marca del aliado</span
+            >
+            <div class="mt-1 flex items-center gap-2">
+              <input
+                v-model="editForm.brandColor"
+                type="color"
+                class="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-stroke bg-base p-1"
+              />
+              <input
+                v-model="editForm.brandColor"
+                type="text"
+                placeholder="#f97316"
+                class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </div>
+          </label>
+          <label class="block">
+            <span
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
               >Sede</span
             >
             <USelectMenu
@@ -767,7 +809,7 @@ async function removeAd(): Promise<void> {
             Cancelar
           </button>
           <button
-            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-white transition hover:opacity-90 disabled:opacity-50"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-50"
             :disabled="saving"
             @click="confirmSave"
           >
