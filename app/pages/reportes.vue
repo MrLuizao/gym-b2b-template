@@ -2,6 +2,7 @@
 import { Download, FileBarChart, Play } from '@lucide/vue';
 
 import type {
+  AdsReportResponse,
   Branch,
   CheckInsReport,
   PaymentsReport,
@@ -11,11 +12,12 @@ const branches = ref<Branch[]>([]);
 const pending = ref(true);
 const generating = ref(false);
 
-type ReportType = 'payments' | 'checkins';
+type ReportType = 'payments' | 'checkins' | 'ads';
 
 const reportTypes = [
   { label: 'Pagos por rango de fechas', value: 'payments' },
   { label: 'Check-ins por rango de fechas', value: 'checkins' },
+  { label: 'Publicidad de aliados', value: 'ads' },
 ];
 
 const reportType = ref<ReportType>('payments');
@@ -26,6 +28,7 @@ const generated = ref(false);
 
 const paymentsReport = ref<PaymentsReport | null>(null);
 const checkInsReport = ref<CheckInsReport | null>(null);
+const adsReport = ref<AdsReportResponse | null>(null);
 
 onMounted(async () => {
   try {
@@ -69,11 +72,19 @@ async function generate(): Promise<void> {
         `/api/reports/payments?${qs}`,
       );
       checkInsReport.value = null;
-    } else {
+      adsReport.value = null;
+    } else if (reportType.value === 'checkins') {
       checkInsReport.value = await $fetch<CheckInsReport>(
         `/api/reports/checkins?${qs}`,
       );
       paymentsReport.value = null;
+      adsReport.value = null;
+    } else {
+      adsReport.value = await $fetch<AdsReportResponse>(
+        `/api/reports/ads?${qs}`,
+      );
+      paymentsReport.value = null;
+      checkInsReport.value = null;
     }
     generated.value = true;
   } finally {
@@ -133,6 +144,32 @@ function exportCsv(): void {
         c.method,
         c.granted ? 'OK' : 'DENEGADO',
         new Date(c.checkInAt).toISOString(),
+      ]),
+    ];
+  } else if (reportType.value === 'ads' && adsReport.value) {
+    filename = 'reporte-ads.csv';
+    rows = [
+      [
+        'Anunciante',
+        'Anuncio',
+        'Sede',
+        'Estado',
+        'Vigencia',
+        'Impresiones',
+        'Taps',
+        'CTR %',
+      ],
+      ...adsReport.value.ads.map((ad) => [
+        ad.advertiser,
+        ad.title,
+        ad.branchId ? branchName(ad.branchId) : 'Todas las sedes',
+        ad.status,
+        new Date(ad.endsAt).toISOString().slice(0, 10),
+        String(ad.impressions),
+        String(ad.taps),
+        ad.impressions > 0
+          ? ((ad.taps / ad.impressions) * 100).toFixed(1)
+          : '0',
       ]),
     ];
   } else {
@@ -558,6 +595,146 @@ function exportCsv(): void {
             Sin check-ins en el rango seleccionado
           </p>
         </div>
+      </section>
+    </template>
+
+    <template v-else-if="generated && adsReport">
+      <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Impresiones
+          </p>
+          <p class="mt-1 text-xl font-black text-text-primary">
+            {{ adsReport.stats.impressions.toLocaleString('es-BO') }}
+          </p>
+        </div>
+        <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Taps
+          </p>
+          <p class="mt-1 text-xl font-black text-text-primary">
+            {{ adsReport.stats.taps.toLocaleString('es-BO') }}
+          </p>
+        </div>
+        <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            CTR global
+          </p>
+          <p class="mt-1 text-xl font-black text-accent">
+            {{ adsReport.stats.ctr }}%
+          </p>
+        </div>
+        <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Audiencia promos
+          </p>
+          <p class="mt-1 text-xl font-black text-text-primary">
+            {{ adsReport.stats.optedInMembers.toLocaleString('es-BO') }}
+          </p>
+          <p class="text-[9px] text-text-dim">socios con promos de aliados</p>
+        </div>
+      </div>
+
+      <section>
+        <div class="mb-3 flex items-center justify-between">
+          <h2
+            class="text-sm font-black uppercase tracking-widest text-text-muted"
+          >
+            Rendimiento por anuncio
+          </h2>
+          <button
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1.5 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
+            @click="exportCsv"
+          >
+            <Download class="h-3.5 w-3.5" />
+            Exportar CSV
+          </button>
+        </div>
+        <div class="overflow-hidden rounded-2xl border border-stroke bg-surface">
+          <table class="w-full text-left">
+            <thead>
+              <tr
+                class="border-b border-stroke text-[10px] uppercase tracking-widest text-text-dim"
+              >
+                <th class="px-5 py-3 font-bold">Anuncio</th>
+                <th class="px-5 py-3 font-bold">Sede</th>
+                <th class="px-5 py-3 font-bold">Vigencia</th>
+                <th class="px-5 py-3 font-bold">Estado</th>
+                <th class="px-5 py-3 font-bold">Impresiones</th>
+                <th class="px-5 py-3 font-bold">Taps</th>
+                <th class="px-5 py-3 text-right font-bold">CTR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="ad in adsReport.ads"
+                :key="ad.id"
+                class="border-t border-stroke"
+              >
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-3">
+                    <img
+                      :src="ad.imageUrl"
+                      :alt="ad.title"
+                      class="h-9 w-14 rounded-lg border border-stroke object-cover"
+                    />
+                    <div>
+                      <p class="text-xs font-bold text-text-primary">
+                        {{ ad.advertiser }}
+                      </p>
+                      <p class="text-[10px] text-text-dim">{{ ad.title }}</p>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-5 py-3 text-[11px] text-text-muted">
+                  {{ ad.branchId ? branchName(ad.branchId) : 'Todas' }}
+                </td>
+                <td class="px-5 py-3 font-mono text-[10px] text-text-dim">
+                  {{ new Date(ad.endsAt).toLocaleDateString('es-BO') }}
+                </td>
+                <td class="px-5 py-3">
+                  <span
+                    class="rounded-full border px-2.5 py-0.5 text-[10px] font-black"
+                    :class="
+                      ad.status === 'ACTIVE'
+                        ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
+                        : 'border-stroke bg-base text-text-dim'
+                    "
+                  >
+                    {{ ad.status === 'ACTIVE' ? 'ACTIVO' : 'PAUSADO' }}
+                  </span>
+                </td>
+                <td class="px-5 py-3 text-[11px] font-bold text-text-primary">
+                  {{ ad.impressions.toLocaleString('es-BO') }}
+                </td>
+                <td class="px-5 py-3 text-[11px] font-bold text-text-primary">
+                  {{ ad.taps.toLocaleString('es-BO') }}
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <span
+                    class="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-black text-accent"
+                  >
+                    {{
+                      ad.impressions > 0
+                        ? ((ad.taps / ad.impressions) * 100).toFixed(1) + '%'
+                        : '—'
+                    }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p
+            v-if="adsReport.ads.length === 0"
+            class="py-8 text-center text-xs font-semibold text-text-dim"
+          >
+            Sin anuncios en el rango seleccionado
+          </p>
+        </div>
+        <p class="mt-2 text-[10px] text-text-dim">
+          Este reporte es el que el comercial le muestra al anunciante para
+          justificar el costo del espacio publicitario.
+        </p>
       </section>
     </template>
 

@@ -1,4 +1,4 @@
-import type { CmsResponse, Coupon, MembershipLevel, PromoBanner, PushLog } from '#shared/types';
+import type { CmsResponse, Coupon, MembershipLevel, PromoBanner, PushLog, SponsorAd } from '#shared/types';
 
 export interface PromoDraft {
   title: string;
@@ -22,12 +22,33 @@ export interface PushDraft {
   body: string;
   audience: 'ALL' | 'BRANCH' | 'EXPIRED';
   branchId: string | null;
+  kind: PushLog['kind'];
+}
+
+export interface AdDraft {
+  advertiser: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  imageUrl: string;
+  ctaLabel: string;
+  branchId: string | null;
+  endsAt: number;
+  status?: SponsorAd['status'];
+  description?: string;
+  address?: string;
+  lat?: number | null;
+  lng?: number | null;
+  phone?: string;
+  socials?: SponsorAd['socials'];
+  photos?: string[];
 }
 
 export function useCms() {
   const promos = ref<PromoBanner[]>([]);
   const coupons = ref<Coupon[]>([]);
   const pushes = ref<PushLog[]>([]);
+  const ads = ref<SponsorAd[]>([]);
   const pending = ref(true);
 
   async function load(): Promise<void> {
@@ -36,6 +57,7 @@ export function useCms() {
       promos.value = response.promos;
       coupons.value = response.coupons;
       pushes.value = response.pushes;
+      ads.value = response.ads;
     } finally {
       pending.value = false;
     }
@@ -68,5 +90,55 @@ export function useCms() {
     return log;
   }
 
-  return { promos, coupons, pushes, pending, load, createPromo, createCoupon, sendPush };
+  async function createAd(draft: AdDraft): Promise<SponsorAd> {
+    const ad = await $fetch<SponsorAd>('/api/cms/ads', {
+      method: 'POST',
+      body: draft,
+    });
+    ads.value.unshift(ad);
+    return ad;
+  }
+
+  async function updateAdStatus(
+    ad: SponsorAd,
+    status: SponsorAd['status'],
+  ): Promise<void> {
+    const updated = await $fetch<SponsorAd>(`/api/cms/ads/${ad.id}`, {
+      method: 'PUT',
+      body: { status },
+    });
+    Object.assign(ad, updated);
+  }
+
+  async function updateAd(
+    ad: SponsorAd,
+    draft: Partial<AdDraft> & { status?: SponsorAd['status'] },
+  ): Promise<void> {
+    const updated = await $fetch<SponsorAd>(`/api/cms/ads/${ad.id}`, {
+      method: 'PUT',
+      body: draft,
+    });
+    Object.assign(ad, updated);
+  }
+
+  async function deleteAd(ad: SponsorAd): Promise<void> {
+    await $fetch(`/api/cms/ads/${ad.id}`, { method: 'DELETE' });
+    ads.value = ads.value.filter((item) => item.id !== ad.id);
+  }
+
+  return {
+    promos,
+    coupons,
+    pushes,
+    ads,
+    pending,
+    load,
+    createPromo,
+    createCoupon,
+    sendPush,
+    createAd,
+    updateAd,
+    updateAdStatus,
+    deleteAd,
+  };
 }

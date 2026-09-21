@@ -454,11 +454,10 @@ function submitBranch(): void {
             placeholder="Dirección"
             class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
           />
-          <input
+          <ImagePicker
             v-model="createForm.imageUrl"
-            type="url"
-            placeholder="URL de imagen (opcional)"
-            class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            label="Subir imagen de la sede (opcional)"
+            @error="createError = $event"
           />
           <div class="grid grid-cols-3 gap-3">
             <label class="block">

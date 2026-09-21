@@ -280,6 +280,59 @@ const classToRemove = ref<ClassSchedule | null>(null);
 const removeClassModalOpen = ref(false);
 const removingClass = ref(false);
 
+const selectedClass = ref<ClassSchedule | null>(null);
+const classDetailOpen = ref(false);
+
+function openClassDetail(gymClass: ClassSchedule): void {
+  selectedClass.value = gymClass;
+  classDetailOpen.value = true;
+}
+
+function classDuration(gymClass: ClassSchedule): string {
+  return `${gymClass.endMinutes - gymClass.startMinutes} min`;
+}
+
+function classFill(gymClass: ClassSchedule): number {
+  return gymClass.capacity > 0
+    ? Math.min(1, gymClass.booked / gymClass.capacity)
+    : 0;
+}
+
+const selectedClassBranches = computed(() =>
+  (selectedClass.value?.branchIds ?? []).map(branchName),
+);
+
+function editSelectedClass(): void {
+  if (!selectedClass.value) return;
+  startEditClass(selectedClass.value);
+  classDetailOpen.value = false;
+}
+
+const selectedTrainer = ref<Trainer | null>(null);
+const trainerDetailOpen = ref(false);
+
+function openTrainerDetail(trainer: Trainer): void {
+  selectedTrainer.value = trainer;
+  trainerDetailOpen.value = true;
+}
+
+const selectedTrainerBranches = computed(() =>
+  (selectedTrainer.value?.branchIds ?? []).map(branchName),
+);
+
+const selectedTrainerClasses = computed(
+  () =>
+    detail.value?.classes.filter(
+      (c) => c.coach === selectedTrainer.value?.name,
+    ) ?? [],
+);
+
+function askRemoveSelectedTrainer(): void {
+  const trainer = selectedTrainer.value;
+  trainerDetailOpen.value = false;
+  if (trainer) confirmRemoveTrainer(trainer);
+}
+
 const removeClassDescription = computed(() => {
   if (!classToRemove.value || !detail.value) return '';
   const c = classToRemove.value;
@@ -532,17 +585,17 @@ async function unassignTrainer(): Promise<void> {
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             />
           </label>
-          <label class="col-span-2 block">
+          <div class="col-span-2">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Imagen (URL)
+              Imagen
             </span>
-            <input
+            <ImagePicker
               v-model="editForm.imageUrl"
-              type="url"
-              placeholder="https://…"
-              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              label="Subir imagen de la sede"
+              compact
+              class="mt-1"
             />
-          </label>
+          </div>
           <label class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Aforo máximo
@@ -671,31 +724,36 @@ async function unassignTrainer(): Promise<void> {
           :key="trainer.id"
           class="flex items-center gap-3 rounded-2xl border border-stroke bg-surface p-4"
         >
-          <img
-            :src="trainer.photoUrl"
-            :alt="trainer.name"
-            class="h-10 w-10 rounded-xl border border-stroke object-cover"
-          />
-          <div class="min-w-0 flex-1">
-            <button
-              type="button"
-              class="block max-w-full cursor-pointer truncate text-xs font-bold text-text-primary hover:text-accent hover:underline"
-              @click="navigateTo(`/entrenadores/${trainer.id}`)"
-            >
-              {{ trainer.name }}
-            </button>
-            <p class="truncate text-[10px] text-text-dim">
-              {{ trainer.specialty }}
-            </p>
-            <p
-              v-if="otherBranches(trainer)"
-              class="truncate text-[9px] text-text-dim"
-            >
-              También en: {{ otherBranches(trainer) }}
-            </p>
-          </div>
+          <button
+            type="button"
+            class="group flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+            title="Ver detalle del entrenador"
+            @click="openTrainerDetail(trainer)"
+          >
+            <img
+              :src="trainer.photoUrl"
+              :alt="trainer.name"
+              class="h-10 w-10 shrink-0 rounded-xl border border-stroke object-cover"
+            />
+            <div class="min-w-0">
+              <p
+                class="truncate text-xs font-bold text-text-primary transition group-hover:text-accent"
+              >
+                {{ trainer.name }}
+              </p>
+              <p class="truncate text-[10px] text-text-dim">
+                {{ trainer.specialty }}
+              </p>
+              <p
+                v-if="otherBranches(trainer)"
+                class="truncate text-[9px] text-text-dim"
+              >
+                También en: {{ otherBranches(trainer) }}
+              </p>
+            </div>
+          </button>
           <span
-            class="rounded-full border px-2.5 py-0.5 text-[10px] font-black"
+            class="shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-black"
             :class="
               trainer.isOnDuty
                 ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
@@ -831,32 +889,48 @@ async function unassignTrainer(): Promise<void> {
           </div>
 
           <div v-else class="flex items-center gap-3">
-            <div class="min-w-0 flex-1">
-              <button
-                type="button"
-                class="block max-w-full cursor-pointer truncate text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
-                @click="navigateTo(`/clases/${gymClass.id}`)"
+            <button
+              type="button"
+              class="group flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+              title="Ver detalle de la clase"
+              @click="openClassDetail(gymClass)"
+            >
+              <div
+                class="shrink-0 rounded-xl border border-stroke bg-base px-2.5 py-1.5 text-center"
               >
-                {{ gymClass.name }}
-              </button>
-              <p class="text-[10px] text-text-dim">
-                {{ gymClass.coach }} · {{ gymClass.room }}
-              </p>
-            </div>
-            <span class="text-[11px] font-bold text-text-dim">
+                <p class="font-mono text-[11px] font-black text-accent">
+                  {{ hhmm(gymClass.startMinutes) }}
+                </p>
+                <p class="font-mono text-[9px] text-text-dim">
+                  {{ hhmm(gymClass.endMinutes) }}
+                </p>
+              </div>
+              <div class="min-w-0">
+                <p
+                  class="truncate text-xs font-bold text-text-primary transition group-hover:text-accent"
+                >
+                  {{ gymClass.name }}
+                </p>
+                <p class="truncate text-[10px] text-text-dim">
+                  {{ gymClass.coach }} · {{ gymClass.room }} ·
+                  {{ classDuration(gymClass) }}
+                </p>
+              </div>
+            </button>
+            <span class="shrink-0 text-[11px] font-bold text-text-dim">
               {{ gymClass.booked }}/{{ gymClass.capacity }} cupos
             </span>
             <button
               class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-accent hover:text-accent"
               title="Editar clase"
-              @click="startEditClass(gymClass)"
+              @click.stop="startEditClass(gymClass)"
             >
               <Pencil class="h-3 w-3" />
             </button>
             <button
               class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-stroke text-red-400 transition hover:border-red-400"
               title="Quitar de esta sede"
-              @click="confirmRemoveClass(gymClass)"
+              @click.stop="confirmRemoveClass(gymClass)"
             >
               <X class="h-3 w-3" />
             </button>
@@ -914,6 +988,110 @@ async function unassignTrainer(): Promise<void> {
     </UModal>
 
     <UModal
+      v-model:open="trainerDetailOpen"
+      :title="selectedTrainer?.name ?? 'Detalle del entrenador'"
+      description="Entrenador asignado a esta sede."
+    >
+      <template #body>
+        <div v-if="selectedTrainer" class="space-y-4">
+          <div class="flex items-center gap-4">
+            <img
+              :src="selectedTrainer.photoUrl"
+              :alt="selectedTrainer.name"
+              class="h-16 w-16 rounded-2xl border border-stroke object-cover"
+            />
+            <div class="min-w-0">
+              <p class="text-sm font-black text-text-primary">
+                {{ selectedTrainer.specialty }}
+              </p>
+              <p class="mt-0.5 text-[11px] text-text-dim">
+                Turno {{ selectedTrainer.shift.toLowerCase() }}
+              </p>
+              <span
+                class="mt-1.5 inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-black"
+                :class="
+                  selectedTrainer.isOnDuty
+                    ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
+                    : 'border-stroke bg-base text-text-dim'
+                "
+              >
+                {{ selectedTrainer.isOnDuty ? 'EN TURNO AHORA' : 'FUERA DE TURNO' }}
+              </span>
+            </div>
+          </div>
+          <div>
+            <p
+              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Sedes asignadas
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="name in selectedTrainerBranches"
+                :key="name"
+                class="rounded-full border px-2.5 py-0.5 text-[10px] font-bold"
+                :class="
+                  name === detail.branch.name
+                    ? 'border-accent/40 bg-accent/10 text-accent'
+                    : 'border-stroke bg-base text-text-muted'
+                "
+              >
+                {{ name }}
+              </span>
+            </div>
+          </div>
+          <div>
+            <p
+              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Clases que imparte en esta sede
+            </p>
+            <div v-if="selectedTrainerClasses.length" class="space-y-1.5">
+              <div
+                v-for="c in selectedTrainerClasses"
+                :key="c.id"
+                class="flex items-center justify-between rounded-xl border border-stroke bg-base px-3 py-2"
+              >
+                <p class="text-[11px] font-bold text-text-primary">
+                  {{ c.name }}
+                  <span class="font-semibold text-text-dim">· {{ c.room }}</span>
+                </p>
+                <p class="font-mono text-[10px] text-text-dim">
+                  {{ hhmm(c.startMinutes) }}–{{ hhmm(c.endMinutes) }}
+                </p>
+              </div>
+            </div>
+            <p v-else class="text-[11px] text-text-dim">
+              Sin clases asignadas en esta sede
+            </p>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-between gap-2">
+          <UButton
+            label="Ver ficha completa"
+            color="neutral"
+            variant="outline"
+            icon="i-lucide-arrow-right"
+            trailing
+            @click="
+              trainerDetailOpen = false;
+              navigateTo(`/entrenadores/${selectedTrainer?.id}`);
+            "
+          />
+          <UButton
+            label="Quitar de la sede"
+            color="error"
+            variant="soft"
+            icon="i-lucide-x"
+            @click="askRemoveSelectedTrainer"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
       v-model:open="removeModalOpen"
       title="Quitar entrenador de la sede"
       :description="removeDescription"
@@ -931,6 +1109,128 @@ async function unassignTrainer(): Promise<void> {
             color="error"
             :loading="removing"
             @click="unassignTrainer"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="classDetailOpen"
+      :title="selectedClass?.name ?? 'Detalle de clase'"
+      description="Actividad que se imparte en esta sede."
+    >
+      <template #body>
+        <div v-if="selectedClass" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >
+                Horario
+              </p>
+              <p class="mt-1 text-sm font-black text-text-primary">
+                {{ hhmm(selectedClass.startMinutes) }} –
+                {{ hhmm(selectedClass.endMinutes) }}
+                <span class="text-[10px] font-semibold text-text-dim">
+                  ({{ classDuration(selectedClass) }})
+                </span>
+              </p>
+            </div>
+            <div>
+              <p
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >
+                Coach
+              </p>
+              <p class="mt-1 text-sm font-black text-text-primary">
+                {{ selectedClass.coach }}
+              </p>
+            </div>
+            <div>
+              <p
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >
+                Sala
+              </p>
+              <p class="mt-1 text-sm font-black text-text-primary">
+                {{ selectedClass.room }}
+              </p>
+            </div>
+            <div>
+              <p
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >
+                Ocupación
+              </p>
+              <div class="mt-1.5 flex items-center gap-2">
+                <div
+                  class="h-1.5 flex-1 overflow-hidden rounded-full bg-base"
+                >
+                  <div
+                    class="h-full rounded-full transition-all"
+                    :class="
+                      classFill(selectedClass) >= 1
+                        ? 'bg-red-400'
+                        : classFill(selectedClass) >= 0.7
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-400'
+                    "
+                    :style="{ width: `${classFill(selectedClass) * 100}%` }"
+                  />
+                </div>
+                <span class="text-[11px] font-black text-text-primary">
+                  {{ selectedClass.booked }}/{{ selectedClass.capacity }}
+                </span>
+              </div>
+              <p class="mt-0.5 text-[9px] font-semibold text-text-dim">
+                {{
+                  classFill(selectedClass) >= 1
+                    ? 'Clase llena'
+                    : `${selectedClass.capacity - selectedClass.booked} cupos disponibles`
+                }}
+              </p>
+            </div>
+          </div>
+          <div>
+            <p
+              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Se imparte en
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="name in selectedClassBranches"
+                :key="name"
+                class="rounded-full border px-2.5 py-0.5 text-[10px] font-bold"
+                :class="
+                  name === detail.branch.name
+                    ? 'border-accent/40 bg-accent/10 text-accent'
+                    : 'border-stroke bg-base text-text-muted'
+                "
+              >
+                {{ name }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-between gap-2">
+          <UButton
+            label="Ver ficha completa"
+            color="neutral"
+            variant="outline"
+            icon="i-lucide-arrow-right"
+            trailing
+            @click="
+              classDetailOpen = false;
+              navigateTo(`/clases/${selectedClass?.id}`);
+            "
+          />
+          <UButton
+            label="Editar clase"
+            icon="i-lucide-pencil"
+            @click="editSelectedClass"
           />
         </div>
       </template>

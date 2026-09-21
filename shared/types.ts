@@ -224,12 +224,44 @@ export interface PromoBanner {
   createdAt: number;
 }
 
+export interface SponsorAdSocials {
+  instagram: string;
+  facebook: string;
+  tiktok: string;
+  website: string;
+  whatsapp: string;
+}
+
+export interface SponsorAd {
+  id: string;
+  advertiser: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  imageUrl: string;
+  ctaLabel: string;
+  branchId: string | null;
+  status: 'ACTIVE' | 'PAUSED';
+  endsAt: number;
+  impressions: number;
+  taps: number;
+  createdAt: number;
+  description: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  phone: string;
+  socials: SponsorAdSocials;
+  photos: string[];
+}
+
 export interface PushLog {
   id: string;
   title: string;
   body: string;
   audience: 'ALL' | 'BRANCH' | 'EXPIRED';
   branchId: string | null;
+  kind: 'BRAND' | 'SPONSOR';
   sent: number;
   createdAt: number;
 }
@@ -238,4 +270,15 @@ export interface CmsResponse {
   promos: PromoBanner[];
   coupons: Coupon[];
   pushes: PushLog[];
+  ads: SponsorAd[];
+}
+
+export interface AdsReportResponse {
+  ads: SponsorAd[];
+  stats: {
+    impressions: number;
+    taps: number;
+    ctr: number;
+    optedInMembers: number;
+  };
 }

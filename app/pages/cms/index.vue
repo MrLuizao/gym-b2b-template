@@ -45,6 +45,7 @@ const pushTitle = ref('');
 const pushBody = ref('');
 const pushAudience = ref<'ALL' | 'BRANCH' | 'EXPIRED'>('ALL');
 const pushBranch = ref('todas');
+const pushKind = ref<'BRAND' | 'SPONSOR'>('BRAND');
 
 const bannerError = ref<string | null>(null);
 const couponError = ref<string | null>(null);
@@ -66,6 +67,11 @@ const audienceItems = [
   { label: 'Todos los socios', value: 'ALL' },
   { label: 'Por sucursal', value: 'BRANCH' },
   { label: 'Membresías vencidas', value: 'EXPIRED' },
+];
+
+const pushKindItems = [
+  { label: 'De la marca', value: 'BRAND' },
+  { label: 'Publicidad de aliado', value: 'SPONSOR' },
 ];
 
 const confirmOpen = ref(false);
@@ -205,9 +211,13 @@ function submitPush(): void {
       : pushAudience.value === 'EXPIRED'
         ? 'socios con membresía vencida'
         : `los socios de ${branchName(pushBranch.value === 'todas' ? null : pushBranch.value)}`;
+  const optInNote =
+    pushKind.value === 'SPONSOR'
+      ? ' Solo llega a quienes activaron "Promos de aliados" en la app.'
+      : '';
   askConfirm(
     'Enviar notificación push',
-    `Se enviará "${pushTitle.value.trim()}" a ${audienceLabel}.`,
+    `Se enviará "${pushTitle.value.trim()}" a ${audienceLabel}.${optInNote}`,
     async () => {
       try {
         const log = await sendPush({
@@ -218,6 +228,7 @@ function submitPush(): void {
             pushAudience.value === 'BRANCH' && pushBranch.value !== 'todas'
               ? pushBranch.value
               : null,
+          kind: pushKind.value,
         });
         pushResult.value = `Notificación enviada a ${log.sent.toLocaleString('es-BO')} dispositivos`;
         pushTitle.value = '';
@@ -498,9 +509,17 @@ onMounted(async () => {
               class="border-t border-stroke"
             >
               <td class="px-5 py-3">
-                <p class="text-xs font-bold text-text-primary">
-                  {{ log.title }}
-                </p>
+                <div class="flex items-center gap-1.5">
+                  <p class="text-xs font-bold text-text-primary">
+                    {{ log.title }}
+                  </p>
+                  <span
+                    v-if="log.kind === 'SPONSOR'"
+                    class="rounded-full bg-accent/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-accent"
+                  >
+                    Aliado
+                  </span>
+                </div>
                 <p class="mt-0.5 line-clamp-1 text-[10px] text-text-dim">
                   {{ log.body }}
                 </p>
@@ -580,11 +599,9 @@ onMounted(async () => {
               value-key="value"
             />
           </div>
-          <input
+          <ImagePicker
             v-model="bannerImage"
-            type="url"
-            placeholder="URL de imagen (opcional)"
-            class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            label="Subir imagen del banner (opcional)"
           />
           <div>
             <p
@@ -788,18 +805,31 @@ onMounted(async () => {
           />
           <div class="grid grid-cols-2 gap-3">
             <USelectMenu
+              v-model="pushKind"
+              :items="pushKindItems"
+              value-key="value"
+            />
+            <USelectMenu
               v-model="pushAudience"
               :items="audienceItems"
               value-key="value"
             />
-            <USelectMenu
-              v-if="pushAudience === 'BRANCH'"
-              v-model="pushBranch"
-              :items="branchOnlyItems"
-              value-key="value"
-              placeholder="Selecciona sede…"
-            />
           </div>
+          <USelectMenu
+            v-if="pushAudience === 'BRANCH'"
+            v-model="pushBranch"
+            :items="branchOnlyItems"
+            value-key="value"
+            placeholder="Selecciona sede…"
+          />
+          <p
+            v-if="pushKind === 'SPONSOR'"
+            class="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-[10px] font-bold text-text-muted"
+          >
+            Las notificaciones de aliados solo llegan a socios que activaron
+            "Promos de aliados" en su Perfil — el alcance se ajusta
+            automáticamente.
+          </p>
           <div>
             <p
               class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"

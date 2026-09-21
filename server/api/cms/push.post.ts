@@ -1,6 +1,6 @@
 import type { PushLog } from '#shared/types';
 import { randomUUID } from 'node:crypto';
-import { useMockDb } from '../../utils/mock-db';
+import { PROMO_OPT_IN_RATE, TOTAL_DEVICES, useMockDb } from '../../utils/mock-db';
 
 export default defineEventHandler(
   async (event): Promise<PushLog> => {
@@ -10,6 +10,7 @@ export default defineEventHandler(
       body?: string;
       audience?: PushLog['audience'];
       branchId?: string | null;
+      kind?: PushLog['kind'];
     }>(event);
 
     const title = body?.title?.trim();
@@ -23,14 +24,18 @@ export default defineEventHandler(
 
     const audience = body.audience ?? 'ALL';
     const branchId = body.branchId || null;
+    const kind = body.kind === 'SPONSOR' ? 'SPONSOR' : 'BRAND';
 
     let sent = 0;
     if (audience === 'ALL') {
-      sent = 1248;
+      sent = TOTAL_DEVICES;
     } else if (audience === 'EXPIRED') {
       sent = db.members.filter((m) => m.membershipStatus === 'EXPIRED').length * 37;
     } else {
       sent = 180 + Math.floor(Math.random() * 220);
+    }
+    if (kind === 'SPONSOR') {
+      sent = Math.round(sent * PROMO_OPT_IN_RATE);
     }
 
     const log: PushLog = {
@@ -39,6 +44,7 @@ export default defineEventHandler(
       body: message,
       audience,
       branchId,
+      kind,
       sent,
       createdAt: Date.now(),
     };

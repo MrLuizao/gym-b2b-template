@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CreditCard,
   Dumbbell,
+  Handshake,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/clases', label: 'Clases', icon: CalendarDays },
   { to: '/entrenadores', label: 'Entrenadores', icon: Medal },
   { to: '/reportes', label: 'Reportes', icon: BarChart3 },
+  { to: '/publicidad', label: 'Publicidad', icon: Handshake },
   { to: '/cms', label: 'CMS & Push', icon: Megaphone },
 ];
 

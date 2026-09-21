@@ -10,11 +10,15 @@ import type {
   PaymentRecord,
   PromoBanner,
   PushLog,
+  SponsorAd,
   Trainer,
   TrafficPoint,
 } from '#shared/types';
 
 const QR_SIGNING_KEY = 'prototipo-gym-dev-key';
+
+export const PROMO_OPT_IN_RATE = 0.68;
+export const TOTAL_DEVICES = 1248;
 
 interface MockDb {
   branches: Branch[];
@@ -23,6 +27,7 @@ interface MockDb {
   promos: PromoBanner[];
   coupons: Coupon[];
   pushes: PushLog[];
+  ads: SponsorAd[];
   traffic: TrafficPoint[];
   trainers: Trainer[];
   classes: ClassSchedule[];
@@ -258,8 +263,105 @@ function createMockDb(): MockDb {
         body: 'Reserva tu bici para la clase de las 19:00 en Select.',
         audience: 'ALL',
         branchId: null,
+        kind: 'BRAND',
         sent: 1248,
         createdAt: Date.now() - 43_200_000,
+      },
+    ],
+    ads: [
+      {
+        id: 'ad1',
+        advertiser: 'NutriShop',
+        title: 'Whey X-Treme -20%',
+        subtitle: 'Solo con tu credencial de socio',
+        badge: 'ALIADO',
+        imageUrl: 'https://picsum.photos/seed/ad-nutri/700/400',
+        ctaLabel: 'Ver oferta',
+        branchId: null,
+        status: 'ACTIVE',
+        endsAt: Date.now() + 30 * 86_400_000,
+        impressions: 8420,
+        taps: 512,
+        createdAt: Date.now() - 12 * 86_400_000,
+        description:
+          'Tienda de suplementos deportivos. Muestra tu credencial de socio y obtén 20% de descuento en proteínas, creatina y pre-entrenos.',
+        address: 'Av. Tecnológico 1200, Plaza San Carlos, Metepec',
+        lat: 19.2547,
+        lng: -99.6285,
+        phone: '+52 722 555 0101',
+        socials: {
+          instagram: 'https://instagram.com/nutrishop.metepec',
+          facebook: 'https://facebook.com/nutrishopmx',
+          tiktok: '',
+          website: 'https://nutrishop.mx',
+          whatsapp: '+52 722 555 0101',
+        },
+        photos: [
+          'https://picsum.photos/seed/ad-nutri-1/600/400',
+          'https://picsum.photos/seed/ad-nutri-2/600/400',
+          'https://picsum.photos/seed/ad-nutri-3/600/400',
+        ],
+      },
+      {
+        id: 'ad2',
+        advertiser: 'SportLine',
+        title: 'Guantes y straps -15%',
+        subtitle: 'En sucursal Plaza o online',
+        badge: 'ALIADO',
+        imageUrl: 'https://picsum.photos/seed/ad-sport/700/400',
+        ctaLabel: 'Comprar',
+        branchId: 'select',
+        status: 'ACTIVE',
+        endsAt: Date.now() + 15 * 86_400_000,
+        impressions: 3210,
+        taps: 198,
+        createdAt: Date.now() - 8 * 86_400_000,
+        description:
+          'Tienda de artículos deportivos. Descuento en guantes, straps, cinturones y accesorios de entrenamiento para socios.',
+        address: 'Plaza Metepec, Local 214, Metepec',
+        lat: 19.2598,
+        lng: -99.6012,
+        phone: '+52 722 555 0202',
+        socials: {
+          instagram: 'https://instagram.com/sportline.mx',
+          facebook: 'https://facebook.com/sportlinemx',
+          tiktok: 'https://tiktok.com/@sportlinemx',
+          website: 'https://sportline.mx',
+          whatsapp: '',
+        },
+        photos: [
+          'https://picsum.photos/seed/ad-sport-1/600/400',
+          'https://picsum.photos/seed/ad-sport-2/600/400',
+        ],
+      },
+      {
+        id: 'ad3',
+        advertiser: 'Café Verde',
+        title: 'Cold brew 2x1 post-entreno',
+        subtitle: 'A dos cuadras de sede Centro',
+        badge: 'ALIADO',
+        imageUrl: 'https://picsum.photos/seed/ad-cafe/700/400',
+        ctaLabel: 'Cómo llegar',
+        branchId: 'centro',
+        status: 'PAUSED',
+        endsAt: Date.now() + 45 * 86_400_000,
+        impressions: 1180,
+        taps: 74,
+        createdAt: Date.now() - 20 * 86_400_000,
+        description:
+          'Cafetería de especialidad con opciones saludables: cold brew, bowls y snacks post-entreno. 2x1 para socios de lunes a viernes.',
+        address: 'Calle Juárez 45, Centro, Metepec',
+        lat: 19.2511,
+        lng: -99.6049,
+        phone: '+52 722 555 0303',
+        socials: {
+          instagram: 'https://instagram.com/cafeverde.mtp',
+          facebook: '',
+          tiktok: '',
+          website: '',
+          whatsapp: '+52 722 555 0303',
+        },
+        photos: ['https://picsum.photos/seed/ad-cafe-1/600/400'],
       },
     ],
     trainers: [
