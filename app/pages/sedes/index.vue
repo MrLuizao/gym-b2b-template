@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import {
   Activity,
-  Building2,
+  DoorClosed,
   DoorOpen,
+  Layers,
   MapPin,
   Plus,
-  Users,
 } from '@lucide/vue';
 
 import type { Branch, ClassSchedule } from '#shared/types';
@@ -13,6 +13,8 @@ import type { Branch, ClassSchedule } from '#shared/types';
 const branches = ref<Branch[]>([]);
 const classes = ref<ClassSchedule[]>([]);
 const pending = ref(true);
+
+const branchFilter = ref<'todas' | 'OPEN' | 'CLOSED' | 'busy'>('todas');
 
 const createModalOpen = ref(false);
 const creating = ref(false);
@@ -60,18 +62,32 @@ const globalOccupancy = computed(() => {
   return max > 0 ? Math.round((totalCurrent.value / max) * 100) : 0;
 });
 
-const busiest = computed(() => {
-  let best: Branch | null = null;
-  let bestRatio = 0;
-  for (const branch of branches.value) {
-    const ratio = occupancy(branch);
-    if (ratio > bestRatio) {
-      best = branch;
-      bestRatio = ratio;
-    }
+const busyCount = computed(
+  () => branches.value.filter((b) => occupancy(b) > 0.8).length,
+);
+
+const closedCount = computed(
+  () => branches.value.filter((b) => b.status === 'CLOSED').length,
+);
+
+const filteredBranches = computed(() => {
+  switch (branchFilter.value) {
+    case 'OPEN':
+      return branches.value.filter((b) => b.status === 'OPEN');
+    case 'CLOSED':
+      return branches.value.filter((b) => b.status === 'CLOSED');
+    case 'busy':
+      return branches.value.filter((b) => occupancy(b) > 0.8);
+    default:
+      return branches.value;
   }
-  return best ? { name: best.name, pct: Math.round(bestRatio * 100) } : null;
 });
+
+function toggleBranchFilter(
+  key: 'todas' | 'OPEN' | 'CLOSED' | 'busy',
+): void {
+  branchFilter.value = branchFilter.value === key ? 'todas' : key;
+}
 
 function occupancy(branch: Branch): number {
   return branch.maxCapacity > 0
@@ -189,64 +205,96 @@ function submitBranch(): void {
 <template>
   <div class="space-y-6">
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          branchFilter === 'todas'
+            ? 'border-accent bg-accent/10'
+            : 'border-stroke bg-surface hover:border-accent/50'
+        "
+        @click="toggleBranchFilter('todas')"
+      >
         <div class="flex items-center gap-2">
-          <DoorOpen class="h-4 w-4 text-accent" />
+          <Layers class="h-4 w-4 text-accent" />
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
-            Sedes abiertas
+            Todas las sedes
           </p>
         </div>
         <p class="mt-2 text-xl font-black text-text-primary">
+          {{ branches.length }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          {{ totalCurrent }} personas · {{ globalOccupancy }}% aforo
+        </p>
+      </button>
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          branchFilter === 'OPEN'
+            ? 'border-emerald-400 bg-emerald-400/10'
+            : 'border-stroke bg-surface hover:border-emerald-400/50'
+        "
+        @click="toggleBranchFilter('OPEN')"
+      >
+        <div class="flex items-center gap-2">
+          <DoorOpen class="h-4 w-4 text-emerald-400" />
+          <p
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+          >
+            Abiertas
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-emerald-400">
           {{ openCount }}
-          <span class="text-[11px] font-bold text-text-dim">
-            / {{ branches.length }}
-          </span>
         </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
+      </button>
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          branchFilter === 'CLOSED'
+            ? 'border-red-400 bg-red-400/10'
+            : 'border-stroke bg-surface hover:border-red-400/50'
+        "
+        @click="toggleBranchFilter('CLOSED')"
+      >
         <div class="flex items-center gap-2">
-          <Users class="h-4 w-4 text-accent" />
+          <DoorClosed class="h-4 w-4 text-red-400" />
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
-            Personas en sedes
+            Cerradas
           </p>
         </div>
-        <p class="mt-2 text-xl font-black text-text-primary">
-          {{ totalCurrent }}
+        <p class="mt-2 text-xl font-black text-red-400">
+          {{ closedCount }}
         </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
+      </button>
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          branchFilter === 'busy'
+            ? 'border-amber-400 bg-amber-400/10'
+            : 'border-stroke bg-surface hover:border-amber-400/50'
+        "
+        @click="toggleBranchFilter('busy')"
+      >
         <div class="flex items-center gap-2">
-          <Activity class="h-4 w-4 text-accent" />
+          <Activity class="h-4 w-4 text-amber-400" />
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
-            Ocupación global
+            Ocupación alta
           </p>
         </div>
-        <p class="mt-2 text-xl font-black text-text-primary">
-          {{ globalOccupancy }}%
+        <p class="mt-2 text-xl font-black text-amber-400">
+          {{ busyCount }}
         </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
-        <div class="flex items-center gap-2">
-          <Building2 class="h-4 w-4 text-accent" />
-          <p
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-          >
-            Sede más ocupada
-          </p>
-        </div>
-        <p class="mt-2 truncate text-xl font-black text-text-primary">
-          {{ busiest?.name ?? '—' }}
+        <p class="text-[10px] font-semibold text-text-dim">
+          &gt;80% de aforo
         </p>
-        <p v-if="busiest" class="text-[10px] font-semibold text-text-dim">
-          {{ busiest.pct }}% de aforo
-        </p>
-      </div>
+      </button>
     </div>
 
     <section>
@@ -281,7 +329,7 @@ function submitBranch(): void {
           </thead>
           <tbody>
             <tr
-              v-for="branch in branches"
+              v-for="branch in filteredBranches"
               :key="branch.id"
               class="border-t border-stroke"
             >
@@ -375,10 +423,14 @@ function submitBranch(): void {
           </tbody>
         </table>
         <p
-          v-if="!pending && branches.length === 0"
+          v-if="!pending && filteredBranches.length === 0"
           class="py-8 text-center text-xs font-semibold text-text-dim"
         >
-          Sin sedes registradas
+          {{
+            branchFilter === 'todas'
+              ? 'Sin sedes registradas'
+              : 'Sin sedes en este filtro'
+          }}
         </p>
       </div>
     </section>

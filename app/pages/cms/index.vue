@@ -243,7 +243,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
-    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <!-- <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div class="rounded-2xl border border-stroke bg-surface p-4">
         <div class="flex items-center gap-2">
           <TicketPercent class="h-4 w-4 text-accent" />
@@ -296,7 +296,7 @@ onMounted(async () => {
           {{ totalReach.toLocaleString('es-BO') }}
         </p>
       </div>
-    </div>
+    </div> -->
 
     <section>
       <div class="mb-3 flex items-center justify-between">

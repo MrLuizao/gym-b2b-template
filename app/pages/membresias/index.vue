@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { Building2, Crown, TrendingUp, Users } from '@lucide/vue';
+import { Crown, Layers, Medal, Star } from '@lucide/vue';
 
-import type { MemberAdmin, MembershipPlan } from '#shared/types';
+import type { MemberAdmin, MembershipLevel, MembershipPlan } from '#shared/types';
 
 const plans = ref<MembershipPlan[]>([]);
 const members = ref<MemberAdmin[]>([]);
 const pending = ref(true);
+
+const levelFilter = ref<MembershipLevel | 'todos'>('todos');
 
 onMounted(async () => {
   try {
@@ -24,8 +26,10 @@ const sortedPlans = computed(() =>
   [...plans.value].sort((a, b) => a.priceBs - b.priceBs),
 );
 
-const activeMembers = computed(() =>
-  members.value.filter((m) => m.membershipStatus === 'ACTIVE'),
+const filteredPlans = computed(() =>
+  levelFilter.value === 'todos'
+    ? sortedPlans.value
+    : sortedPlans.value.filter((p) => p.level === levelFilter.value),
 );
 
 function membersOnPlan(planName: string): number {
@@ -36,22 +40,21 @@ function planRevenue(plan: MembershipPlan): number {
   return membersOnPlan(plan.name) * plan.priceBs;
 }
 
-const totalRevenue = computed(() =>
-  plans.value.reduce((sum, plan) => sum + planRevenue(plan), 0),
-);
+function levelStats(level: MembershipLevel | 'todos') {
+  const list =
+    level === 'todos'
+      ? plans.value
+      : plans.value.filter((p) => p.level === level);
+  return {
+    plans: list.length,
+    members: list.reduce((sum, p) => sum + membersOnPlan(p.name), 0),
+    revenue: list.reduce((sum, p) => sum + planRevenue(p), 0),
+  };
+}
 
-const topPlan = computed(() => {
-  let best: MembershipPlan | null = null;
-  let bestCount = 0;
-  for (const plan of plans.value) {
-    const count = membersOnPlan(plan.name);
-    if (count > bestCount) {
-      best = plan;
-      bestCount = count;
-    }
-  }
-  return best ? { name: best.name, count: bestCount } : null;
-});
+function toggleLevelFilter(level: MembershipLevel | 'todos'): void {
+  levelFilter.value = levelFilter.value === level ? 'todos' : level;
+}
 
 function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
   if (plan.level === 'BLACK') return 'primary';
@@ -63,56 +66,98 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
 <template>
   <div class="space-y-6">
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          levelFilter === 'todos'
+            ? 'border-accent bg-accent/10'
+            : 'border-stroke bg-surface hover:border-accent/50'
+        "
+        @click="toggleLevelFilter('todos')"
+      >
+        <div class="flex items-center gap-2">
+          <Layers class="h-4 w-4 text-accent" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Todos los planes
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-text-primary">
+          {{ levelStats('todos').plans }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          {{ levelStats('todos').members }} socios · Bs
+          {{ levelStats('todos').revenue }}/mes
+        </p>
+      </button>
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          levelFilter === 'CLASSIC'
+            ? 'border-white/50 bg-white/5'
+            : 'border-stroke bg-surface hover:border-white/30'
+        "
+        @click="toggleLevelFilter('CLASSIC')"
+      >
+        <div class="flex items-center gap-2">
+          <Medal class="h-4 w-4 text-text-muted" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Classic
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-text-primary">
+          {{ levelStats('CLASSIC').plans }} planes
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          {{ levelStats('CLASSIC').members }} socios · Bs
+          {{ levelStats('CLASSIC').revenue }}/mes
+        </p>
+      </button>
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          levelFilter === 'PLUS'
+            ? 'border-sky-400 bg-sky-400/10'
+            : 'border-stroke bg-surface hover:border-sky-400/50'
+        "
+        @click="toggleLevelFilter('PLUS')"
+      >
+        <div class="flex items-center gap-2">
+          <Star class="h-4 w-4 text-sky-400" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Plus
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-sky-400">
+          {{ levelStats('PLUS').plans }} planes
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          {{ levelStats('PLUS').members }} socios · Bs
+          {{ levelStats('PLUS').revenue }}/mes
+        </p>
+      </button>
+      <button
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          levelFilter === 'BLACK'
+            ? 'border-accent bg-accent/10'
+            : 'border-stroke bg-surface hover:border-accent/50'
+        "
+        @click="toggleLevelFilter('BLACK')"
+      >
         <div class="flex items-center gap-2">
           <Crown class="h-4 w-4 text-accent" />
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-            Planes activos
+            Black
           </p>
         </div>
         <p class="mt-2 text-xl font-black text-text-primary">
-          {{ plans.length }}
+          {{ levelStats('BLACK').plans }} planes
         </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
-        <div class="flex items-center gap-2">
-          <Users class="h-4 w-4 text-accent" />
-          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-            Socios con membresía
-          </p>
-        </div>
-        <p class="mt-2 text-xl font-black text-text-primary">
-          {{ activeMembers.length }}
-          <span class="text-[11px] font-bold text-text-dim">
-            / {{ members.length }}
-          </span>
+        <p class="text-[10px] font-semibold text-text-dim">
+          {{ levelStats('BLACK').members }} socios · Bs
+          {{ levelStats('BLACK').revenue }}/mes
         </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
-        <div class="flex items-center gap-2">
-          <TrendingUp class="h-4 w-4 text-accent" />
-          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-            Ingreso mensual estimado
-          </p>
-        </div>
-        <p class="mt-2 text-xl font-black text-text-primary">
-          Bs {{ totalRevenue }}
-        </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
-        <div class="flex items-center gap-2">
-          <Building2 class="h-4 w-4 text-accent" />
-          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-            Plan más popular
-          </p>
-        </div>
-        <p class="mt-2 truncate text-xl font-black text-text-primary">
-          {{ topPlan?.name ?? '—' }}
-        </p>
-        <p v-if="topPlan" class="text-[10px] font-semibold text-text-dim">
-          {{ topPlan.count }} socios
-        </p>
-      </div>
+      </button>
     </div>
 
     <section>
@@ -138,7 +183,7 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
           </thead>
           <tbody>
             <tr
-              v-for="plan in sortedPlans"
+              v-for="plan in filteredPlans"
               :key="plan.id"
               class="border-t border-stroke"
               :class="plan.highlight ? 'bg-accent/5' : ''"
@@ -198,13 +243,16 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
           </tbody>
         </table>
         <p
-          v-if="!pending && plans.length === 0"
+          v-if="!pending && filteredPlans.length === 0"
           class="py-8 text-center text-xs font-semibold text-text-dim"
         >
-          Sin planes configurados
+          {{
+            levelFilter === 'todos'
+              ? 'Sin planes configurados'
+              : 'Sin planes en este nivel'
+          }}
         </p>
       </div>
-
     </section>
   </div>
 </template>
