@@ -41,7 +41,7 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
   async function loadRecent(): Promise<void> {
     try {
       recent.value = await $fetch<CheckInRecord[]>('/api/checkins', {
-        query: { limit: 8 },
+        query: { limit: 8, branchId: toValue(branchId) },
       });
     } catch {
       recent.value = [];
@@ -85,6 +85,7 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
       }
     }
 
+    const branch = toValue(branchId);
     return $fetch<CheckInResult>('/api/checkin', {
       method: 'POST',
       body:
@@ -94,10 +95,12 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
               userId: parsed.uid,
               issuedAt: parsed.ts,
               signature: parsed.sig,
+              branchId: branch,
             }
           : {
               method: 'usb' as const,
               memberNumber: parsed.code,
+              branchId: branch,
             },
     });
   }

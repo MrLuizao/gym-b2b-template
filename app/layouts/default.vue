@@ -83,7 +83,7 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
         to: '/membresias',
         label: 'Membresías',
         icon: CreditCard,
-        roles: ['ADMIN'],
+        roles: ['ADMIN', 'MANAGER'],
       },
     ],
   },
@@ -94,13 +94,13 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
         to: '/publicidad',
         label: 'Publicidad',
         icon: Handshake,
-        roles: ['ADMIN'],
+        roles: ['ADMIN', 'MANAGER'],
       },
       {
         to: '/cms',
         label: 'CMS & Push',
         icon: Megaphone,
-        roles: ['ADMIN'],
+        roles: ['ADMIN', 'MANAGER'],
       },
       {
         to: '/reportes',
@@ -131,7 +131,7 @@ const pageTitle = computed(() => {
       route.path === item.to ||
       (item.to !== '/' && route.path.startsWith(`${item.to}/`)),
   );
-  return item?.label ?? 'Capital Fitness B2B';
+  return item?.label ?? 'RIR-HUB';
 });
 </script>
 
@@ -145,9 +145,9 @@ const pageTitle = computed(() => {
           <Dumbbell class="h-5 w-5 text-base" />
         </div>
         <div>
-          <p class="text-sm font-black tracking-wide text-text-primary">CAPITAL FITNESS</p>
+          <p class="text-sm font-black tracking-wide text-text-primary">RIR-HUB</p>
           <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-dim">
-            Panel B2B
+            B2B & DMS
           </p>
         </div>
       </div>

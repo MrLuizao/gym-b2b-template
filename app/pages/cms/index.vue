@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import {
   BellRing,
-  Dumbbell,
+  FileEdit,
   ImageUp,
-  Images,
   Plus,
   Send,
   TicketPercent,
 } from '@lucide/vue';
 
-import type { Branch, MembershipLevel } from '#shared/types';
+import type { Branch, PushLog } from '#shared/types';
 
 const {
   promos,
@@ -18,15 +17,15 @@ const {
   pending,
   load,
   createPromo,
-  createCoupon,
   sendPush,
 } = useCms();
+const { session } = useAuth();
+/// Cupones y push son contenido comercial global — solo el admin los crea.
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
 const branches = ref<Branch[]>([]);
 
 const bannerModalOpen = ref(false);
-const couponModalOpen = ref(false);
-const pushModalOpen = ref(false);
 
 const bannerTitle = ref('');
 const bannerSubtitle = ref('');
@@ -34,45 +33,12 @@ const bannerBadge = ref('NUEVO');
 const bannerImage = ref('');
 const bannerBranch = ref('todas');
 
-const couponTitle = ref('');
-const couponDescription = ref('');
-const couponBadge = ref('-25%');
-const couponCode = ref('');
-const couponLevels = ref<MembershipLevel[]>(['CLASSIC', 'PLUS', 'BLACK']);
-const couponBranch = ref('todas');
-
-const pushTitle = ref('');
-const pushBody = ref('');
-const pushAudience = ref<'ALL' | 'BRANCH' | 'EXPIRED'>('ALL');
-const pushBranch = ref('todas');
-const pushKind = ref<'BRAND' | 'SPONSOR'>('BRAND');
-
 const bannerError = ref<string | null>(null);
-const couponError = ref<string | null>(null);
-const pushError = ref<string | null>(null);
-const pushResult = ref<string | null>(null);
-
-const LEVEL_OPTIONS: MembershipLevel[] = ['CLASSIC', 'PLUS', 'BLACK'];
 
 const branchItems = computed(() => [
   { label: 'Todas las sedes', value: 'todas' },
   ...branches.value.map((b) => ({ label: b.name, value: b.id })),
 ]);
-
-const branchOnlyItems = computed(() =>
-  branches.value.map((b) => ({ label: b.name, value: b.id })),
-);
-
-const audienceItems = [
-  { label: 'Todos los socios', value: 'ALL' },
-  { label: 'Por sucursal', value: 'BRANCH' },
-  { label: 'Membresías vencidas', value: 'EXPIRED' },
-];
-
-const pushKindItems = [
-  { label: 'De la marca', value: 'BRAND' },
-  { label: 'Publicidad de aliado', value: 'SPONSOR' },
-];
 
 const confirmOpen = ref(false);
 const confirmTitle = ref('');
@@ -106,6 +72,31 @@ const totalReach = computed(() =>
   pushes.value.reduce((sum, log) => sum + log.sent, 0),
 );
 
+const sentCount = computed(
+  () => pushes.value.filter((log) => log.status === 'SENT').length,
+);
+const draftCount = computed(
+  () => pushes.value.filter((log) => log.status === 'DRAFT').length,
+);
+
+function pushAudienceLabel(log: PushLog): string {
+  if (log.audience === 'ALL') return 'todos los socios';
+  if (log.audience === 'EXPIRED')
+    return 'socios con membresía vencida';
+  return `los socios de ${branchName(log.branchId)}`;
+}
+
+/// Lanza el envío (o reenvío) de una notificación — pide confirmación antes.
+function askSendPush(log: PushLog): void {
+  askConfirm(
+    log.status === 'SENT' ? 'Reenviar notificación' : 'Enviar notificación',
+    `Se ${log.status === 'SENT' ? 'reenviará' : 'enviará'} "${log.title}" a ${pushAudienceLabel(log)}. Esta acción no se puede deshacer.`,
+    async () => {
+      await sendPush(log);
+    },
+  );
+}
+
 function branchName(id: string | null): string {
   if (!id) return 'Todas las sedes';
   return branches.value.find((b) => b.id === id)?.name ?? '—';
@@ -118,12 +109,6 @@ function formatDate(ts: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function toggleLevel(level: MembershipLevel): void {
-  couponLevels.value = couponLevels.value.includes(level)
-    ? couponLevels.value.filter((item) => item !== level)
-    : [...couponLevels.value, level];
 }
 
 function submitBanner(): void {
@@ -159,89 +144,6 @@ function submitBanner(): void {
   );
 }
 
-function submitCoupon(): void {
-  if (!couponTitle.value.trim() || !couponCode.value.trim()) {
-    couponError.value = 'Título y código son obligatorios';
-    return;
-  }
-  if (couponLevels.value.length === 0) {
-    couponError.value = 'Selecciona al menos un nivel';
-    return;
-  }
-  couponError.value = null;
-  askConfirm(
-    'Crear cupón',
-    `Se creará el cupón "${couponTitle.value.trim()}" (${couponCode.value.trim().toUpperCase()}) para niveles ${couponLevels.value.join(', ')} · ${branchName(couponBranch.value === 'todas' ? null : couponBranch.value)}.`,
-    async () => {
-      try {
-        await createCoupon({
-          title: couponTitle.value.trim(),
-          description: couponDescription.value.trim(),
-          badge: couponBadge.value.trim() || 'NUEVO',
-          code: couponCode.value.trim().toUpperCase(),
-          levels: couponLevels.value,
-          branchId:
-            couponBranch.value === 'todas' ? null : couponBranch.value,
-        });
-        couponTitle.value = '';
-        couponDescription.value = '';
-        couponBadge.value = '';
-        couponCode.value = '';
-        couponLevels.value = [...LEVEL_OPTIONS];
-        couponBranch.value = 'todas';
-        couponModalOpen.value = false;
-      } catch (cause) {
-        couponError.value =
-          cause instanceof Error ? cause.message : 'No se pudo crear el cupón';
-      }
-    },
-  );
-}
-
-function submitPush(): void {
-  if (!pushTitle.value.trim() || !pushBody.value.trim()) {
-    pushError.value = 'Completa título y mensaje';
-    return;
-  }
-  pushError.value = null;
-  pushResult.value = null;
-  const audienceLabel =
-    pushAudience.value === 'ALL'
-      ? 'todos los socios'
-      : pushAudience.value === 'EXPIRED'
-        ? 'socios con membresía vencida'
-        : `los socios de ${branchName(pushBranch.value === 'todas' ? null : pushBranch.value)}`;
-  const optInNote =
-    pushKind.value === 'SPONSOR'
-      ? ' Solo llega a quienes activaron "Promos de aliados" en la app.'
-      : '';
-  askConfirm(
-    'Enviar notificación push',
-    `Se enviará "${pushTitle.value.trim()}" a ${audienceLabel}.${optInNote}`,
-    async () => {
-      try {
-        const log = await sendPush({
-          title: pushTitle.value.trim(),
-          body: pushBody.value.trim(),
-          audience: pushAudience.value,
-          branchId:
-            pushAudience.value === 'BRANCH' && pushBranch.value !== 'todas'
-              ? pushBranch.value
-              : null,
-          kind: pushKind.value,
-        });
-        pushResult.value = `Notificación enviada a ${log.sent.toLocaleString('es-BO')} dispositivos`;
-        pushTitle.value = '';
-        pushBody.value = '';
-        pushModalOpen.value = false;
-      } catch (cause) {
-        pushError.value =
-          cause instanceof Error ? cause.message : 'No se pudo enviar';
-      }
-    },
-  );
-}
-
 onMounted(async () => {
   await load();
   try {
@@ -254,7 +156,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
-    <!-- <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div class="rounded-2xl border border-stroke bg-surface p-4">
         <div class="flex items-center gap-2">
           <TicketPercent class="h-4 w-4 text-accent" />
@@ -270,20 +172,7 @@ onMounted(async () => {
       </div>
       <div class="rounded-2xl border border-stroke bg-surface p-4">
         <div class="flex items-center gap-2">
-          <Images class="h-4 w-4 text-accent" />
-          <p
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-          >
-            Banners publicados
-          </p>
-        </div>
-        <p class="mt-2 text-xl font-black text-text-primary">
-          {{ promos.length }}
-        </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4">
-        <div class="flex items-center gap-2">
-          <BellRing class="h-4 w-4 text-accent" />
+          <BellRing class="h-4 w-4 text-emerald-400" />
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
@@ -291,7 +180,20 @@ onMounted(async () => {
           </p>
         </div>
         <p class="mt-2 text-xl font-black text-text-primary">
-          {{ pushes.length }}
+          {{ sentCount }}
+        </p>
+      </div>
+      <div class="rounded-2xl border border-stroke bg-surface p-4">
+        <div class="flex items-center gap-2">
+          <FileEdit class="h-4 w-4 text-amber-400" />
+          <p
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+          >
+            Borradores
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-text-primary">
+          {{ draftCount }}
         </p>
       </div>
       <div class="rounded-2xl border border-stroke bg-surface p-4">
@@ -307,7 +209,7 @@ onMounted(async () => {
           {{ totalReach.toLocaleString('es-BO') }}
         </p>
       </div>
-    </div> -->
+    </div>
 
     <section>
       <div class="mb-3 flex items-center justify-between">
@@ -317,8 +219,9 @@ onMounted(async () => {
           Cupones
         </h2>
         <button
+          v-if="isAdmin"
           class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
-          @click="couponModalOpen = true"
+          @click="navigateTo('/cms/cupones/nuevo')"
         >
           <Plus class="h-3.5 w-3.5" />
           Nuevo cupón
@@ -351,9 +254,12 @@ onMounted(async () => {
                     {{ coupon.badge }}
                   </span>
                   <div class="min-w-0">
-                    <p class="truncate text-xs font-bold text-text-primary">
+                    <button
+                      class="block max-w-full cursor-pointer truncate text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
+                      @click="navigateTo(`/cms/cupones/${coupon.id}`)"
+                    >
                       {{ coupon.title }}
-                    </p>
+                    </button>
                     <p class="truncate text-[10px] text-text-dim">
                       {{ coupon.description }}
                     </p>
@@ -485,8 +391,9 @@ onMounted(async () => {
           Notificaciones enviadas
         </h2>
         <button
+          v-if="isAdmin"
           class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
-          @click="pushModalOpen = true"
+          @click="navigateTo('/cms/notificaciones/nueva')"
         >
           <Plus class="h-3.5 w-3.5" />
           Nueva notificación
@@ -500,8 +407,10 @@ onMounted(async () => {
             >
               <th class="px-5 py-3 font-bold">Notificación</th>
               <th class="px-5 py-3 font-bold">Audiencia</th>
+              <th class="px-5 py-3 font-bold">Estado</th>
               <th class="px-5 py-3 font-bold">Envíos</th>
               <th class="px-5 py-3 text-right font-bold">Fecha</th>
+              <th v-if="isAdmin" class="px-5 py-3 text-right font-bold" />
             </tr>
           </thead>
           <tbody>
@@ -512,9 +421,12 @@ onMounted(async () => {
             >
               <td class="px-5 py-3">
                 <div class="flex items-center gap-1.5">
-                  <p class="text-xs font-bold text-text-primary">
+                  <button
+                    class="cursor-pointer text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
+                    @click="navigateTo(`/cms/notificaciones/${log.id}`)"
+                  >
                     {{ log.title }}
-                  </p>
+                  </button>
                   <span
                     v-if="log.kind === 'SPONSOR'"
                     class="rounded-full bg-accent/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-accent"
@@ -540,16 +452,61 @@ onMounted(async () => {
                 </span>
               </td>
               <td class="px-5 py-3">
+                <span class="flex items-center gap-1.5">
+                  <span
+                    class="h-1.5 w-1.5 rounded-full"
+                    :class="
+                      log.status === 'SENT'
+                        ? 'bg-emerald-400'
+                        : 'bg-amber-400'
+                    "
+                  />
+                  <span
+                    class="text-[10px] font-bold uppercase tracking-widest"
+                    :class="
+                      log.status === 'SENT'
+                        ? 'text-emerald-400'
+                        : 'text-amber-400'
+                    "
+                  >
+                    {{ log.status === 'SENT' ? 'Enviada' : 'Borrador' }}
+                  </span>
+                </span>
+                <p
+                  v-if="log.status === 'DRAFT' && log.scheduledAt"
+                  class="mt-0.5 font-mono text-[9px] text-text-dim"
+                >
+                  prog. {{ formatDate(log.scheduledAt) }}
+                </p>
+              </td>
+              <td class="px-5 py-3">
                 <span
+                  v-if="log.status === 'SENT'"
                   class="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-black text-accent"
                 >
                   {{ log.sent.toLocaleString('es-BO') }}
                 </span>
+                <span v-else class="text-[11px] text-text-dim">—</span>
               </td>
               <td
                 class="px-5 py-3 text-right font-mono text-[10px] text-text-dim"
               >
                 {{ formatDate(log.createdAt) }}
+              </td>
+              <td v-if="isAdmin" class="px-5 py-3 text-right">
+                <button
+                  type="button"
+                  class="inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black transition"
+                  :class="
+                    log.status === 'DRAFT'
+                      ? 'bg-accent text-base hover:opacity-90'
+                      : 'border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20'
+                  "
+                  @click="askSendPush(log)"
+                >
+                  <Send class="h-3 w-3" />
+                  {{ log.status === 'SENT' ? 'Reenviar' : 'Enviar' }}
+                </button>
               </td>
             </tr>
           </tbody>
@@ -561,12 +518,6 @@ onMounted(async () => {
           Sin notificaciones enviadas
         </p>
       </div>
-      <p
-        v-if="pushResult"
-        class="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-[11px] font-bold text-emerald-400"
-      >
-        {{ pushResult }}
-      </p>
     </section>
 
     <UModal
@@ -660,227 +611,6 @@ onMounted(async () => {
             label="Publicar banner"
             icon="i-lucide-image-up"
             @click="submitBanner"
-          />
-        </div>
-      </template>
-    </UModal>
-
-    <UModal
-      v-model:open="couponModalOpen"
-      title="Cupón para la app"
-      description="Se publica en Promociones según el nivel de membresía del socio."
-    >
-      <template #body>
-        <form class="space-y-3" @submit.prevent="submitCoupon()">
-          <input
-            v-model="couponTitle"
-            type="text"
-            placeholder="Título del cupón"
-            class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-          <input
-            v-model="couponDescription"
-            type="text"
-            placeholder="Descripción del beneficio"
-            class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-          <div class="grid grid-cols-2 gap-3">
-            <input
-              v-model="couponBadge"
-              type="text"
-              placeholder="Badge (ej. -25%)"
-              class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-            />
-            <input
-              v-model="couponCode"
-              type="text"
-              placeholder="Código (ej. CF-PRO25)"
-              class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 font-mono text-sm uppercase text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-            />
-          </div>
-          <div>
-            <p
-              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >
-              Niveles con acceso
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="level in LEVEL_OPTIONS"
-                :key="level"
-                type="button"
-                class="cursor-pointer rounded-full border px-3 py-1 text-[11px] font-bold transition"
-                :class="
-                  couponLevels.includes(level)
-                    ? 'border-accent bg-accent/15 text-accent'
-                    : 'border-stroke bg-base text-text-dim hover:text-text-muted'
-                "
-                @click="toggleLevel(level)"
-              >
-                {{ level }}
-              </button>
-            </div>
-          </div>
-          <USelectMenu
-            v-model="couponBranch"
-            :items="branchItems"
-            value-key="value"
-          />
-          <div>
-            <p
-              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >
-              Vista previa
-            </p>
-            <div
-              class="rounded-2xl border border-dashed border-accent/50 bg-accent/5 p-3"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <p class="truncate text-xs font-black text-text-primary">
-                  {{ couponTitle || 'Título del cupón' }}
-                </p>
-                <span
-                  class="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[9px] font-black text-accent"
-                >
-                  {{ couponBadge || 'NUEVO' }}
-                </span>
-              </div>
-              <p class="mt-0.5 text-[10px] text-text-dim">
-                {{ couponDescription || 'Descripción del beneficio' }}
-              </p>
-              <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                <span
-                  class="rounded-lg border border-stroke bg-surface px-2 py-0.5 font-mono text-[10px] font-black text-accent"
-                >
-                  {{ couponCode || 'CÓDIGO' }}
-                </span>
-                <span
-                  v-for="level in couponLevels"
-                  :key="level"
-                  class="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-bold text-text-muted"
-                >
-                  {{ level }}
-                </span>
-              </div>
-            </div>
-          </div>
-          <p v-if="couponError" class="text-[11px] font-bold text-red-400">
-            {{ couponError }}
-          </p>
-        </form>
-      </template>
-      <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton
-            label="Cancelar"
-            color="neutral"
-            variant="outline"
-            @click="couponModalOpen = false"
-          />
-          <UButton
-            label="Crear cupón"
-            icon="i-lucide-ticket-percent"
-            @click="submitCoupon"
-          />
-        </div>
-      </template>
-    </UModal>
-
-    <UModal
-      v-model:open="pushModalOpen"
-      title="Notificación push"
-      description="Envío masivo o segmentado vía Firebase Cloud Messaging."
-    >
-      <template #body>
-        <form class="space-y-3" @submit.prevent="submitPush()">
-          <input
-            v-model="pushTitle"
-            type="text"
-            placeholder="Título de la notificación"
-            class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-          <textarea
-            v-model="pushBody"
-            rows="3"
-            placeholder="Mensaje para los socios…"
-            class="w-full resize-none rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-          <div class="grid grid-cols-2 gap-3">
-            <USelectMenu
-              v-model="pushKind"
-              :items="pushKindItems"
-              value-key="value"
-            />
-            <USelectMenu
-              v-model="pushAudience"
-              :items="audienceItems"
-              value-key="value"
-            />
-          </div>
-          <USelectMenu
-            v-if="pushAudience === 'BRANCH'"
-            v-model="pushBranch"
-            :items="branchOnlyItems"
-            value-key="value"
-            placeholder="Selecciona sede…"
-          />
-          <p
-            v-if="pushKind === 'SPONSOR'"
-            class="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-[10px] font-bold text-text-muted"
-          >
-            Las notificaciones de aliados solo llegan a socios que activaron
-            "Promos de aliados" en su Perfil — el alcance se ajusta
-            automáticamente.
-          </p>
-          <div>
-            <p
-              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >
-              Vista previa
-            </p>
-            <div class="rounded-2xl border border-stroke bg-base p-3">
-              <div class="flex items-start gap-2.5">
-                <div
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent"
-                >
-                  <Dumbbell class="h-4 w-4 text-base" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center justify-between">
-                    <p
-                      class="text-[9px] font-bold uppercase tracking-widest text-text-dim"
-                    >
-                      Capital Fitness
-                    </p>
-                    <p class="text-[9px] text-text-dim">ahora</p>
-                  </div>
-                  <p class="mt-0.5 text-xs font-bold text-text-primary">
-                    {{ pushTitle || 'Título de la notificación' }}
-                  </p>
-                  <p class="text-[11px] text-text-muted">
-                    {{ pushBody || 'Mensaje para los socios…' }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <p v-if="pushError" class="text-[11px] font-bold text-red-400">
-            {{ pushError }}
-          </p>
-        </form>
-      </template>
-      <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton
-            label="Cancelar"
-            color="neutral"
-            variant="outline"
-            @click="pushModalOpen = false"
-          />
-          <UButton
-            label="Enviar notificación"
-            icon="i-lucide-send"
-            @click="submitPush"
           />
         </div>
       </template>

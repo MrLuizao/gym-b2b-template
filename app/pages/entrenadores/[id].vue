@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, Pencil, X } from '@lucide/vue';
+import { ArrowLeft, Check, Pencil, Power, X } from '@lucide/vue';
 
 import type { Branch, ClassSchedule, TrainerDetail } from '#shared/types';
 
 const route = useRoute();
+const router = useRouter();
 const { session, canEditInBranches, isAtMyBranch } = useAuth();
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 const canViewBranches = computed(() =>
@@ -11,6 +12,7 @@ const canViewBranches = computed(() =>
 );
 const detail = ref<TrainerDetail | null>(null);
 const branches = ref<Branch[]>([]);
+const allClasses = ref<ClassSchedule[]>([]);
 const pending = ref(true);
 const saving = ref(false);
 
@@ -20,13 +22,13 @@ const editForm = ref({
   specialty: '',
   shift: 'TARDE',
   branchIds: [] as string[],
+  classIds: [] as string[],
 });
 
-const shiftItems = [
-  { label: 'MAÑANA', value: 'MAÑANA' },
-  { label: 'TARDE', value: 'TARDE' },
-  { label: 'NOCHE', value: 'NOCHE' },
-];
+const shiftItems = ['MAÑANA', 'TARDE', 'NOCHE'].map((s) => ({
+  label: shiftLabel(s),
+  value: s,
+}));
 
 /// Admin edita cualquier coach; gerente solo los asignados a su sede.
 const canManageTrainer = computed(() =>
@@ -52,18 +54,36 @@ const classForm = ref({
 
 onMounted(async () => {
   try {
-    const [branchList, trainerDetail] = await Promise.all([
+    const [branchList, trainerDetail, classList] = await Promise.all([
       $fetch<Branch[]>('/api/branches'),
       $fetch<TrainerDetail>(`/api/trainers/${route.params.id}`),
+      $fetch<ClassSchedule[]>('/api/classes'),
     ]);
     branches.value = branchList;
     detail.value = trainerDetail;
+    allClasses.value = classList;
   } finally {
     pending.value = false;
   }
 });
 
 const trainer = computed(() => detail.value?.trainer ?? null);
+
+/// Clases que este rol puede asignar/quitar: admin todas; gerente solo las
+/// exclusivas de su sede (el coach es dato global de la clase). Las ya
+/// asignadas no editables quedan fuera de la lista pero se conservan.
+const assignableClasses = computed(() =>
+  allClasses.value.filter((c) =>
+    isAdmin.value ? true : canEditInBranches(c.branchIds),
+  ),
+);
+
+function toggleClassId(classId: string): void {
+  const ids = editForm.value.classIds;
+  const index = ids.indexOf(classId);
+  if (index === -1) ids.push(classId);
+  else ids.splice(index, 1);
+}
 
 const editingClass = computed(
   () =>
@@ -107,7 +127,9 @@ const trainerChanges = computed<string[]>(() => {
   if (editForm.value.specialty !== t.specialty)
     changes.push('Se actualizará la especialidad');
   if (editForm.value.shift !== t.shift)
-    changes.push(`Turno: ${t.shift} → ${editForm.value.shift}`);
+    changes.push(
+      `Turno: ${shiftLabel(t.shift)} → ${shiftLabel(editForm.value.shift)}`,
+    );
   const before = [...t.branchIds].sort().join(',');
   const after = [...editForm.value.branchIds].sort().join(',');
   if (before !== after) {
@@ -118,6 +140,19 @@ const trainerChanges = computed<string[]>(() => {
         : 'Quedará sin sedes asignadas',
     );
   }
+  const currentClassIds = new Set(detail.value!.classes.map((c) => c.id));
+  const assigned = editForm.value.classIds.filter(
+    (id) => !currentClassIds.has(id),
+  );
+  const removed = detail.value!.classes
+    .filter((c) => !editForm.value.classIds.includes(c.id))
+    .map((c) => c.name);
+  if (assigned.length)
+    changes.push(
+      `Se le asignarán: ${assigned.map((id) => allClasses.value.find((c) => c.id === id)?.name ?? id).join(', ')}`,
+    );
+  if (removed.length)
+    changes.push(`Se le quitarán: ${removed.join(', ')} — quedarán sin coach`);
   return changes;
 });
 
@@ -150,6 +185,17 @@ function branchName(branchId: string): string {
   return branches.value.find((b) => b.id === branchId)?.name ?? '—';
 }
 
+function shiftMeta(shift: string): { dot: string; text: string } {
+  switch (shift) {
+    case 'MAÑANA':
+      return { dot: 'bg-amber-400', text: 'text-amber-400' };
+    case 'NOCHE':
+      return { dot: 'bg-violet-400', text: 'text-violet-400' };
+    default:
+      return { dot: 'bg-accent', text: 'text-accent' };
+  }
+}
+
 function hhmm(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -178,6 +224,7 @@ function startEdit(): void {
     specialty: detail.value.trainer.specialty,
     shift: detail.value.trainer.shift,
     branchIds: [...detail.value.trainer.branchIds],
+    classIds: detail.value.classes.map((c) => c.id),
   };
   editing.value = true;
 }
@@ -186,14 +233,14 @@ async function saveTrainer(): Promise<void> {
   if (!detail.value || saving.value) return;
   saving.value = true;
   try {
-    const updated = await $fetch<{ isOnDuty: boolean } & Record<string, unknown>>(
-      `/api/trainers/${detail.value.trainer.id}/update`,
-      { method: 'POST', body: editForm.value },
+    await $fetch(`/api/trainers/${detail.value.trainer.id}/update`, {
+      method: 'POST',
+      body: editForm.value,
+    });
+    /// Recargar para reflejar también las clases reasignadas.
+    detail.value = await $fetch<TrainerDetail>(
+      `/api/trainers/${detail.value.trainer.id}`,
     );
-    detail.value = {
-      ...detail.value,
-      trainer: { ...detail.value.trainer, ...updated } as TrainerDetail['trainer'],
-    };
     editing.value = false;
   } finally {
     saving.value = false;
@@ -294,6 +341,15 @@ async function runToggleDuty(): Promise<void> {
   </div>
 
   <div v-else-if="detail" class="space-y-6">
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="router.back()"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
     <div class="flex items-center gap-4">
       <img
         :src="detail.trainer.photoUrl"
@@ -307,19 +363,34 @@ async function runToggleDuty(): Promise<void> {
         <p class="mt-1 text-[11px] text-text-dim">
           {{ detail.trainer.specialty }}
         </p>
+        <p class="mt-0.5 flex items-center gap-1.5">
+          <span
+            class="h-1.5 w-1.5 rounded-full"
+            :class="detail.trainer.isOnDuty ? 'bg-emerald-400' : 'bg-text-dim'"
+          />
+          <span
+            class="text-[10px] font-bold uppercase tracking-widest"
+            :class="
+              detail.trainer.isOnDuty ? 'text-emerald-400' : 'text-text-dim'
+            "
+          >
+            {{ detail.trainer.isOnDuty ? 'En turno' : 'Fuera de turno' }}
+          </span>
+        </p>
       </div>
-      <span
-        class="rounded-full border px-3 py-1 text-[11px] font-black"
+      <button
+        v-if="isAtMyBranch(detail.trainer.branchIds)"
+        class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-4 py-1.5 text-[11px] font-black transition"
         :class="
-          detail.trainer.shift === 'MAÑANA'
-            ? 'border-amber-400/30 bg-amber-400/10 text-amber-400'
-            : detail.trainer.shift === 'NOCHE'
-              ? 'border-violet-400/30 bg-violet-400/10 text-violet-400'
-              : 'border-accent/30 bg-accent/10 text-accent'
+          detail.trainer.isOnDuty
+            ? 'border-red-400/40 bg-red-400/10 text-red-400 hover:bg-red-400/20'
+            : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
         "
+        @click="dutyModalOpen = true"
       >
-        {{ detail.trainer.shift }}
-      </span>
+        <Power class="h-3.5 w-3.5" />
+        {{ detail.trainer.isOnDuty ? 'Finalizar turno' : 'Iniciar turno' }}
+      </button>
     </div>
 
     <section class="rounded-2xl border border-stroke bg-surface p-5">
@@ -354,6 +425,25 @@ async function runToggleDuty(): Promise<void> {
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
+            Turno
+          </p>
+          <p class="mt-1 flex items-center gap-1.5">
+            <span
+              class="h-1.5 w-1.5 rounded-full"
+              :class="shiftMeta(detail.trainer.shift).dot"
+            />
+            <span
+              class="text-sm font-black"
+              :class="shiftMeta(detail.trainer.shift).text"
+            >
+              {{ shiftLabel(detail.trainer.shift) }}
+            </span>
+          </p>
+        </div>
+        <div>
+          <p
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+          >
             Sedes
           </p>
           <div class="mt-1 flex flex-wrap gap-1.5">
@@ -379,34 +469,6 @@ async function runToggleDuty(): Promise<void> {
               —
             </span>
           </div>
-        </div>
-        <div>
-          <p
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-          >
-            En turno
-          </p>
-          <button
-            :disabled="!isAtMyBranch(detail.trainer.branchIds)"
-            class="relative mt-1 h-6 w-11 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60"
-            :class="
-              detail.trainer.isOnDuty
-                ? 'bg-accent'
-                : 'bg-base border border-stroke'
-            "
-            @click="
-              isAtMyBranch(detail.trainer.branchIds) && (dutyModalOpen = true)
-            "
-          >
-            <span
-              class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
-              :class="
-                detail.trainer.isOnDuty
-                  ? 'left-[22px] bg-base'
-                  : 'left-0.5 bg-white'
-              "
-            />
-          </button>
         </div>
       </div>
 
@@ -464,6 +526,54 @@ async function runToggleDuty(): Promise<void> {
               class="mt-1 w-full"
             />
           </label>
+          <div class="col-span-2 block">
+            <span
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Clases
+            </span>
+            <p class="mt-1 text-[10px] text-text-dim">
+              {{
+                isAdmin
+                  ? 'Asigna o quita clases — una clase quitada queda sin coach.'
+                  : 'Solo puedes asignar clases exclusivas de tu sede; las compartidas se conservan como están.'
+              }}
+            </p>
+            <div
+              v-if="assignableClasses.length === 0"
+              class="mt-2 rounded-xl border border-dashed border-stroke p-3 text-center text-[11px] font-semibold text-text-dim"
+            >
+              No hay clases disponibles para asignar.
+            </div>
+            <div v-else class="mt-2 grid grid-cols-2 gap-2">
+              <button
+                v-for="gymClass in assignableClasses"
+                :key="gymClass.id"
+                type="button"
+                class="cursor-pointer rounded-xl border px-3 py-2 text-left transition"
+                :class="
+                  editForm.classIds.includes(gymClass.id)
+                    ? 'border-accent bg-accent/10'
+                    : 'border-stroke bg-base hover:border-text-dim'
+                "
+                @click="toggleClassId(gymClass.id)"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <p class="truncate text-xs font-black text-text-primary">
+                    {{ gymClass.name }}
+                  </p>
+                  <span
+                    class="shrink-0 text-[9px] font-bold text-text-dim"
+                  >
+                    Coach: {{ gymClass.coach }}
+                  </span>
+                </div>
+                <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                  {{ gymClass.branchIds.map(branchName).join(', ') }}
+                </p>
+              </button>
+            </div>
+          </div>
         </div>
         <div class="flex justify-end gap-2 pt-1">
           <button
@@ -728,13 +838,6 @@ async function runToggleDuty(): Promise<void> {
       </template>
     </UModal>
 
-    <NuxtLink
-      to="/entrenadores"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Entrenadores
-    </NuxtLink>
   </div>
 
   <div

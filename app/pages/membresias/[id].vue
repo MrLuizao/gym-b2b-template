@@ -4,6 +4,10 @@ import { ArrowLeft, Check, Pencil, Plus, Trash2, X } from '@lucide/vue';
 import type { PlanDetail } from '#shared/types';
 
 const route = useRoute();
+const router = useRouter();
+const { session } = useAuth();
+/// Los planes y sus precios son datos globales — solo el admin los edita.
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
 const detail = ref<PlanDetail | null>(null);
 const pending = ref(true);
 const saving = ref(false);
@@ -201,6 +205,15 @@ async function deletePlan(): Promise<void> {
   </div>
 
   <div v-else-if="detail" class="space-y-6">
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="router.back()"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
     <div class="flex items-center gap-4">
       <div
         class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border text-xl font-black"
@@ -247,7 +260,7 @@ async function deletePlan(): Promise<void> {
           Información del plan
         </h2>
         <button
-          v-if="!editing"
+          v-if="isAdmin && !editing"
           class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
           @click="startEdit"
         >
@@ -456,6 +469,7 @@ async function deletePlan(): Promise<void> {
     </div>
 
     <button
+      v-if="isAdmin"
       class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-red-400/40 bg-red-400/10 text-xs font-black text-red-400 transition hover:bg-red-400/20"
       @click="confirmDelete"
     >
@@ -532,13 +546,6 @@ async function deletePlan(): Promise<void> {
       </template>
     </UModal>
 
-    <NuxtLink
-      to="/membresias"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Membresías
-    </NuxtLink>
   </div>
 
   <div

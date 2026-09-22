@@ -8,7 +8,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'Capital Fitness B2B',
+      title: 'RIR-HUB',
       htmlAttrs: { lang: 'es' },
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

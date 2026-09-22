@@ -10,6 +10,9 @@ import {
 import type { Branch, SponsorAd } from '#shared/types';
 
 const { ads, pending, load } = useCms();
+const { session } = useAuth();
+/// El inventario publicitario es comercial/global — solo el admin lo edita.
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
 const branches = ref<Branch[]>([]);
 
@@ -196,6 +199,7 @@ onMounted(async () => {
           </p>
         </div>
         <button
+          v-if="isAdmin"
           class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="navigateTo('/publicidad/nuevo')"
         >

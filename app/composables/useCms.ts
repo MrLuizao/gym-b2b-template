@@ -23,6 +23,7 @@ export interface PushDraft {
   audience: 'ALL' | 'BRANCH' | 'EXPIRED';
   branchId: string | null;
   kind: PushLog['kind'];
+  scheduledAt?: number | null;
 }
 
 export interface AdDraft {
@@ -82,13 +83,55 @@ export function useCms() {
     return coupon;
   }
 
-  async function sendPush(draft: PushDraft): Promise<PushLog> {
+  /// Crea la notificación como borrador — no envía nada todavía.
+  async function createPush(draft: PushDraft): Promise<PushLog> {
     const log = await $fetch<PushLog>('/api/cms/push', {
       method: 'POST',
       body: draft,
     });
     pushes.value.unshift(log);
     return log;
+  }
+
+  async function updateCoupon(
+    coupon: Coupon,
+    draft: Partial<CouponDraft>,
+  ): Promise<void> {
+    const updated = await $fetch<Coupon>(`/api/cms/coupons/${coupon.id}`, {
+      method: 'PUT',
+      body: draft,
+    });
+    Object.assign(coupon, updated);
+  }
+
+  async function deleteCoupon(coupon: Coupon): Promise<void> {
+    await $fetch(`/api/cms/coupons/${coupon.id}`, { method: 'DELETE' });
+    coupons.value = coupons.value.filter((item) => item.id !== coupon.id);
+  }
+
+  /// Edita un borrador de notificación (los enviados son de solo lectura).
+  async function updatePush(
+    log: PushLog,
+    draft: Partial<PushDraft>,
+  ): Promise<void> {
+    const updated = await $fetch<PushLog>(`/api/cms/push/${log.id}`, {
+      method: 'PUT',
+      body: draft,
+    });
+    Object.assign(log, updated);
+  }
+
+  async function deletePush(log: PushLog): Promise<void> {
+    await $fetch(`/api/cms/push/${log.id}`, { method: 'DELETE' });
+    pushes.value = pushes.value.filter((item) => item.id !== log.id);
+  }
+
+  /// Lanza el envío de un borrador ya guardado.
+  async function sendPush(log: PushLog): Promise<void> {
+    const sent = await $fetch<PushLog>(`/api/cms/push/${log.id}/send`, {
+      method: 'POST',
+    });
+    Object.assign(log, sent);
   }
 
   async function createAd(draft: AdDraft): Promise<SponsorAd> {
@@ -136,6 +179,11 @@ export function useCms() {
     load,
     createPromo,
     createCoupon,
+    updateCoupon,
+    deleteCoupon,
+    createPush,
+    updatePush,
+    deletePush,
     sendPush,
     createAd,
     updateAd,

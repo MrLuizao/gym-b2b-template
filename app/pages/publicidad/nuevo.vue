@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ImageUp } from '@lucide/vue';
 import type { Branch, SponsorAd } from '#shared/types';
 
 const { createAd } = useCms();
+const { session } = useAuth();
 
 const branches = ref<Branch[]>([]);
 const saving = ref(false);
@@ -147,6 +148,11 @@ async function publish(): Promise<void> {
 }
 
 onMounted(async () => {
+  /// El inventario publicitario es global — solo el admin crea anuncios.
+  if (session.value?.role !== 'ADMIN') {
+    await navigateTo('/publicidad');
+    return;
+  }
   try {
     branches.value = await $fetch<Branch[]>('/api/branches');
   } catch {

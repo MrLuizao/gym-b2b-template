@@ -34,10 +34,10 @@ async function submit(): Promise<void> {
         </div>
         <div>
           <h1 class="text-lg font-black tracking-tight text-text-primary">
-            CAPITAL FITNESS
+            RIR-HUB
           </h1>
           <p class="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-text-dim">
-            Panel B2B · Recepción
+            B2B & DMS
           </p>
         </div>
       </div>

@@ -1,9 +1,15 @@
 <script setup lang="ts">
+import { Plus } from '@lucide/vue';
+
 import type { Branch, Trainer } from '#shared/types';
 
 const { session, isAtMyBranch } = useAuth();
 const canViewBranches = computed(() =>
   canAccess(session.value?.role, '/sedes'),
+);
+/// Alta de coach: admin y gerente (la recepción no gestiona personal).
+const canCreateTrainer = computed(
+  () => session.value?.role === 'ADMIN' || session.value?.role === 'MANAGER',
 );
 
 const branches = ref<Branch[]>([]);
@@ -75,10 +81,20 @@ async function runToggleDuty(): Promise<void> {
 
 <template>
   <div class="space-y-6">
-    <p class="text-xs font-semibold text-text-dim">
-      Activa o desactiva el turno de cada entrenador — se refleja al instante en
-      la app móvil.
-    </p>
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-xs font-semibold text-text-dim">
+        Activa o desactiva el turno de cada entrenador — se refleja al instante
+        en la app móvil.
+      </p>
+      <button
+        v-if="canCreateTrainer"
+        class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
+        @click="navigateTo('/entrenadores/nuevo')"
+      >
+        <Plus class="h-3.5 w-3.5" />
+        Nuevo coach
+      </button>
+    </div>
 
     <div
       v-if="pending"
@@ -123,7 +139,7 @@ async function runToggleDuty(): Promise<void> {
                   : 'border-accent/30 bg-accent/10 text-accent'
             "
           >
-            {{ trainer.shift }}
+            {{ shiftLabel(trainer.shift) }}
           </span>
           <div class="flex max-w-[55%] flex-wrap justify-end gap-1">
             <button

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, Pencil, X } from '@lucide/vue';
+import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, Download, Pencil, X } from '@lucide/vue';
 
 import type { Branch, CheckInRecord, MemberDetail, MembershipPlan, PaymentRecord } from '#shared/types';
 
 const route = useRoute();
+const router = useRouter();
 const { session } = useAuth();
 const detail = ref<MemberDetail | null>(null);
 const branches = ref<Branch[]>([]);
@@ -32,6 +33,63 @@ const editForm = ref({
 const saveModalOpen = ref(false);
 const saveModalDescription = ref('');
 const saveModalEmpty = ref(false);
+
+const payModalOpen = ref(false);
+const paying = ref(false);
+const payForm = ref({ planId: '', amountBs: 0, method: 'Efectivo' });
+
+const planItems = computed(() =>
+  plans.value.map((p) => ({
+    label: `${p.name} — Bs ${p.priceBs}`,
+    value: p.id,
+  })),
+);
+
+const methodItems = ['Efectivo', 'Tarjeta', 'Transferencia'].map(
+  (m) => ({ label: m, value: m }),
+);
+
+function openPayModal(): void {
+  const current = plans.value.find(
+    (p) => p.name === detail.value?.member.membershipType,
+  );
+  payForm.value = {
+    planId: current?.id ?? plans.value[0]?.id ?? '',
+    amountBs: current?.priceBs ?? 0,
+    method: 'Efectivo',
+  };
+  payModalOpen.value = true;
+}
+
+watch(
+  () => payForm.value.planId,
+  (id) => {
+    const plan = plans.value.find((p) => p.id === id);
+    if (plan) payForm.value.amountBs = plan.priceBs;
+  },
+);
+
+/// El pago renueva la membresía (+30 días) y actualiza el plan del socio.
+async function submitPayment(): Promise<void> {
+  const m = detail.value?.member;
+  if (!m || paying.value) return;
+  paying.value = true;
+  try {
+    await $fetch('/api/payments', {
+      method: 'POST',
+      body: {
+        memberId: m.id,
+        planId: payForm.value.planId,
+        amountBs: payForm.value.amountBs,
+        method: payForm.value.method,
+      },
+    });
+    detail.value = await $fetch<MemberDetail>(`/api/members/${m.id}`);
+    payModalOpen.value = false;
+  } finally {
+    paying.value = false;
+  }
+}
 
 const PAGE_SIZE = 8;
 
@@ -113,18 +171,24 @@ function statusMeta(status: string) {
   switch (status) {
     case 'EXPIRING':
       return {
-        label: 'POR VENCER',
+        label: 'Por vencer',
         cls: 'border-amber-400/30 bg-amber-400/10 text-amber-400',
+        dot: 'bg-amber-400',
+        text: 'text-amber-400',
       };
     case 'EXPIRED':
       return {
-        label: 'VENCIDA',
+        label: 'Vencida',
         cls: 'border-red-400/30 bg-red-400/10 text-red-400',
+        dot: 'bg-red-400',
+        text: 'text-red-400',
       };
     default:
       return {
-        label: 'ACTIVA',
+        label: 'Activa',
         cls: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400',
+        dot: 'bg-emerald-400',
+        text: 'text-emerald-400',
       };
   }
 }
@@ -198,6 +262,19 @@ function exportCheckIns(): void {
     ]),
   ]);
 }
+
+const memberAge = computed(() => {
+  const raw = detail.value?.member.birthDate;
+  if (!raw) return null;
+  const birth = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < birth.getMonth() ||
+    (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate());
+  return beforeBirthday ? age - 1 : age;
+});
 
 function toDateInput(ts: number | null): string {
   return ts ? new Date(ts).toISOString().slice(0, 10) : '';
@@ -274,6 +351,15 @@ async function saveMember(): Promise<void> {
   </div>
 
   <div v-else-if="detail" class="space-y-6">
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="router.back()"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
     <section class="rounded-2xl border border-stroke bg-surface p-5">
       <div class="mt-4 flex items-center gap-4">
         <img
@@ -288,14 +374,28 @@ async function saveMember(): Promise<void> {
           <p class="font-mono text-[11px] text-text-dim">
             {{ detail.member.memberNumber }}
           </p>
+          <p class="mt-0.5 flex items-center gap-1.5">
+            <span
+              class="h-1.5 w-1.5 rounded-full"
+              :class="statusMeta(detail.member.adminStatus).dot"
+            />
+            <span
+              class="text-[10px] font-bold uppercase tracking-widest"
+              :class="statusMeta(detail.member.adminStatus).text"
+            >
+              Membresía {{ statusMeta(detail.member.adminStatus).label }}
+            </span>
+          </p>
         </div>
         <div class="flex items-center gap-2">
-          <span
-            class="rounded-full border px-3 py-1 text-[11px] font-bold"
-            :class="statusMeta(detail.member.adminStatus).cls"
+          <button
+            v-if="canEditMember && !editing"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-[10px] font-black text-base transition hover:opacity-90"
+            @click="openPayModal"
           >
-            {{ statusMeta(detail.member.adminStatus).label }}
-          </span>
+            <Banknote class="h-3 w-3" />
+            Registrar pago
+          </button>
           <button
             v-if="canEditMember && !editing"
             class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
@@ -330,6 +430,49 @@ async function saveMember(): Promise<void> {
           </p>
           <p class="mt-1 text-sm font-black text-text-primary">
             {{ formatDate(detail.member.membershipUntil) }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Identificación
+          </p>
+          <p class="mt-1 font-mono text-sm font-black text-text-primary">
+            {{ detail.member.idNumber ?? '—' }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Teléfono
+          </p>
+          <p class="mt-1 font-mono text-sm font-black text-text-primary">
+            {{ detail.member.phone ?? '—' }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Sexo / Edad
+          </p>
+          <p class="mt-1 text-sm font-black text-text-primary">
+            {{
+              [
+                detail.member.sex === 'M'
+                  ? 'Masculino'
+                  : detail.member.sex === 'F'
+                    ? 'Femenino'
+                    : detail.member.sex === 'O'
+                      ? 'Otro'
+                      : null,
+                memberAge !== null ? `${memberAge} años` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || '—'
+            }}
+          </p>
+          <p
+            v-if="detail.member.birthDate"
+            class="mt-0.5 font-mono text-[10px] text-text-dim"
+          >
+            {{ formatDate(Date.parse(detail.member.birthDate)) }}
           </p>
         </div>
       </div>
@@ -621,14 +764,6 @@ async function saveMember(): Promise<void> {
       </div>
     </section>
 
-    <NuxtLink
-      to="/socios"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Socios
-    </NuxtLink>
-
     <UModal
       v-model:open="saveModalOpen"
       title="Guardar cambios del socio"
@@ -648,6 +783,75 @@ async function saveMember(): Promise<void> {
             :disabled="saveModalEmpty"
             :loading="saving"
             @click="saveMember"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="payModalOpen"
+      title="Registrar pago"
+      description="El pago renueva la membresía del socio por 30 días y actualiza su plan."
+    >
+      <template #body>
+        <div class="space-y-3">
+          <label class="block">
+            <span
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Plan
+            </span>
+            <USelectMenu
+              v-model="payForm.planId"
+              :items="planItems"
+              value-key="value"
+              class="mt-1 w-full"
+            />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >
+                Monto (Bs)
+              </span>
+              <input
+                v-model.number="payForm.amountBs"
+                type="number"
+                min="1"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >
+                Método
+              </span>
+              <USelectMenu
+                v-model="payForm.method"
+                :items="methodItems"
+                value-key="value"
+                class="mt-1 w-full"
+              />
+            </label>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="payModalOpen = false"
+          />
+          <UButton
+            label="Registrar pago"
+            icon="i-lucide-banknote"
+            :disabled="!payForm.planId || payForm.amountBs < 1"
+            :loading="paying"
+            @click="submitPayment"
           />
         </div>
       </template>

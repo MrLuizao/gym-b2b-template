@@ -375,15 +375,23 @@ function submitBranch(): void {
                 </div>
               </td>
               <td class="px-5 py-3">
-                <span
-                  class="rounded-full border px-2.5 py-0.5 text-[10px] font-black"
-                  :class="
-                    branch.status === 'OPEN'
-                      ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
-                      : 'border-red-400/30 bg-red-400/10 text-red-400'
-                  "
-                >
-                  {{ branch.status === 'OPEN' ? 'ABIERTA' : 'CERRADA' }}
+                <span class="flex items-center gap-1.5">
+                  <span
+                    class="h-1.5 w-1.5 rounded-full"
+                    :class="
+                      branch.status === 'OPEN' ? 'bg-emerald-400' : 'bg-red-400'
+                    "
+                  />
+                  <span
+                    class="text-[10px] font-bold uppercase tracking-widest"
+                    :class="
+                      branch.status === 'OPEN'
+                        ? 'text-emerald-400'
+                        : 'text-red-400'
+                    "
+                  >
+                    {{ branch.status === 'OPEN' ? 'Abierta' : 'Cerrada' }}
+                  </span>
                 </span>
               </td>
               <td class="px-5 py-3 font-mono text-[11px] text-text-muted">

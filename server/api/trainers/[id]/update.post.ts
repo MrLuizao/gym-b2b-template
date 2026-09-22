@@ -15,7 +15,11 @@ export default defineEventHandler(async (event): Promise<Trainer> => {
   }
 
   const body = await readBody<
-    Partial<Trainer> & { addBranchId?: string; removeBranchId?: string }
+    Partial<Trainer> & {
+      addBranchId?: string;
+      removeBranchId?: string;
+      classIds?: string[];
+    }
   >(event);
 
   if (typeof body.name === 'string' && body.name.trim().length >= 3) {
@@ -54,6 +58,18 @@ export default defineEventHandler(async (event): Promise<Trainer> => {
   }
   if (typeof body.isOnDuty === 'boolean') {
     trainer.isOnDuty = body.isOnDuty;
+  }
+
+  /// Asignación de clases: las incluidas apuntan a este coach; las que
+  /// estaban con él y ya no vienen quedan "Sin asignar".
+  if (Array.isArray(body.classIds)) {
+    for (const gymClass of db.classes) {
+      if (body.classIds.includes(gymClass.id)) {
+        gymClass.coach = trainer.name;
+      } else if (gymClass.coach === trainer.name) {
+        gymClass.coach = 'Sin asignar';
+      }
+    }
   }
 
   return trainer;

@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Globe,
+  Plus,
   UserCheck,
   UserX,
 } from '@lucide/vue';
@@ -15,11 +16,16 @@ const canViewBranches = computed(() =>
   canAccess(session.value?.role, '/sedes'),
 );
 
+/// Alta de socio: los tres roles pueden inscribir (es trabajo de mostrador);
+/// admin elige sede, gerente/recepcionista quedan fijos en la suya.
+const canCreateMember = computed(() => !!session.value?.role);
+
 const members = ref<MemberAdmin[]>([]);
 const branches = ref<Branch[]>([]);
 const pending = ref(true);
 const search = ref('');
-const selectedBranch = ref('todas');
+/// Gerente/recepcionista arrancan filtrados a su sede (pueden cambiar el filtro).
+const selectedBranch = ref(session.value?.branchId ?? 'todas');
 const statusFilter = ref<'todos' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED' | 'multi'>(
   'todos',
 );
@@ -270,8 +276,17 @@ function formatDate(ts: number | null): string {
         class="w-full max-w-sm"
         size="lg"
       />
+      <button
+        v-if="canCreateMember"
+        class="ml-auto flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
+        @click="navigateTo('/socios/nuevo')"
+      >
+        <Plus class="h-3.5 w-3.5" />
+        Nuevo socio
+      </button>
       <span
-        class="ml-auto rounded-full border border-stroke bg-surface px-3 py-1 text-[11px] font-bold text-text-muted"
+        :class="canCreateMember ? '' : 'ml-auto'"
+        class="rounded-full border border-stroke bg-surface px-3 py-1 text-[11px] font-bold text-text-muted"
       >
         {{ filtered.length }} socios
       </span>

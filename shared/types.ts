@@ -44,6 +44,11 @@ export interface Trainer {
   id: string;
   branchIds: string[];
   name: string;
+  /// Partes del nombre capturadas al registrar.
+  firstName?: string | null;
+  middleName?: string | null;
+  paternalLastName?: string | null;
+  maternalLastName?: string | null;
   specialty: string;
   photoUrl: string;
   shift: 'MAÑANA' | 'TARDE' | 'NOCHE';
@@ -172,6 +177,15 @@ export interface Member {
   membershipType: string;
   memberNumber: string;
   membershipUntil: number | null;
+  /// Datos personales capturados al inscribir.
+  firstName?: string | null;
+  middleName?: string | null;
+  paternalLastName?: string | null;
+  maternalLastName?: string | null;
+  sex?: 'M' | 'F' | 'O' | null;
+  birthDate?: string | null;
+  phone?: string | null;
+  idNumber?: string | null;
 }
 
 export interface CheckInRecord {
@@ -275,6 +289,10 @@ export interface PushLog {
   audience: 'ALL' | 'BRANCH' | 'EXPIRED';
   branchId: string | null;
   kind: 'BRAND' | 'SPONSOR';
+  /// DRAFT = guardada, pendiente de envío; SENT = ya se lanzó.
+  status: 'DRAFT' | 'SENT';
+  /// Timestamp de envío programado — null = se lanza manualmente.
+  scheduledAt: number | null;
   sent: number;
   createdAt: number;
 }

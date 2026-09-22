@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, MapPin, Pencil, Plus, Trash2, UserPlus, X } from '@lucide/vue';
+import { ArrowLeft, Check, MapPin, Pencil, Plus, Power, Trash2, UserPlus, X } from '@lucide/vue';
 
 import type { Branch, BranchDetail, ClassSchedule, MemberAdmin, Trainer } from '#shared/types';
 
 const route = useRoute();
+const router = useRouter();
 const { session, canEditBranch } = useAuth();
 const detail = ref<BranchDetail | null>(null);
 const branches = ref<Branch[]>([]);
@@ -107,6 +108,35 @@ async function runSave(): Promise<void> {
   if (!saveModalAction.value) return;
   await saveModalAction.value();
   saveModalOpen.value = false;
+}
+
+/// Botón rápido de encendido/apagado de la sede — con confirmación porque
+/// cerrar bloquea los check-ins de los socios al instante.
+function confirmToggleStatus(): void {
+  const b = detail.value?.branch;
+  if (!b) return;
+  const closing = b.status === 'OPEN';
+  confirmSave(
+    closing ? `Cerrar sede ${b.name}` : `Abrir sede ${b.name}`,
+    [
+      closing
+        ? 'La sede se mostrará cerrada en la app y el scanner dejará de admitir check-ins'
+        : 'La sede se mostrará abierta en la app y volverá a admitir check-ins',
+    ],
+    async () => {
+      if (saving.value) return;
+      saving.value = true;
+      try {
+        const updated = await $fetch<Branch>(`/api/branches/${b.id}`, {
+          method: 'PUT',
+          body: { status: closing ? 'CLOSED' : 'OPEN' },
+        });
+        if (detail.value) detail.value.branch = updated;
+      } finally {
+        saving.value = false;
+      }
+    },
+  );
 }
 
 const branchChanges = computed<string[]>(() => {
@@ -528,6 +558,15 @@ async function unassignTrainer(): Promise<void> {
   </div>
 
   <div v-else-if="detail" class="space-y-6">
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="router.back()"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
     <div class="flex items-center gap-4">
       <img
         :src="detail.branch.imageUrl"
@@ -542,17 +581,40 @@ async function unassignTrainer(): Promise<void> {
           {{ detail.branch.address }} · {{ hhmm(detail.branch.openMinutes) }} a
           {{ hhmm(detail.branch.closeMinutes) }}
         </p>
+        <p class="mt-0.5 flex items-center gap-1.5">
+          <span
+            class="h-1.5 w-1.5 rounded-full"
+            :class="
+              detail.branch.status === 'OPEN'
+                ? 'bg-emerald-400'
+                : 'bg-red-400'
+            "
+          />
+          <span
+            class="text-[10px] font-bold uppercase tracking-widest"
+            :class="
+              detail.branch.status === 'OPEN'
+                ? 'text-emerald-400'
+                : 'text-red-400'
+            "
+          >
+            {{ detail.branch.status === 'OPEN' ? 'Abierta' : 'Cerrada' }}
+          </span>
+        </p>
       </div>
-      <span
-        class="rounded-full border px-3 py-1 text-[11px] font-black"
+      <button
+        v-if="canManageBranch"
+        class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-4 py-1.5 text-[11px] font-black transition"
         :class="
           detail.branch.status === 'OPEN'
-            ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
-            : 'border-red-400/30 bg-red-400/10 text-red-400'
+            ? 'border-red-400/40 bg-red-400/10 text-red-400 hover:bg-red-400/20'
+            : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
         "
+        @click="confirmToggleStatus"
       >
-        {{ detail.branch.status === 'OPEN' ? 'ABIERTA' : 'CERRADA' }}
-      </span>
+        <Power class="h-3.5 w-3.5" />
+        {{ detail.branch.status === 'OPEN' ? 'Cerrar sede' : 'Abrir sede' }}
+      </button>
     </div>
 
     <section class="rounded-2xl border border-stroke bg-surface p-5">
@@ -716,32 +778,6 @@ async function unassignTrainer(): Promise<void> {
             />
           </label>
         </div>
-        <div class="flex items-center justify-between">
-          <span class="text-[11px] font-bold text-text-muted">
-            Sede abierta al público
-          </span>
-          <button
-            class="relative h-6 w-11 cursor-pointer rounded-full transition"
-            :class="
-              editForm.status === 'OPEN'
-                ? 'bg-accent'
-                : 'bg-base border border-stroke'
-            "
-            @click="
-              editForm.status =
-                editForm.status === 'OPEN' ? 'CLOSED' : 'OPEN'
-            "
-          >
-            <span
-              class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
-              :class="
-                editForm.status === 'OPEN'
-                  ? 'left-[22px] bg-base'
-                  : 'left-0.5 bg-white'
-              "
-            />
-          </button>
-        </div>
         <div class="flex justify-end gap-2 pt-1">
           <button
             class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 text-[11px] font-black text-text-muted transition hover:text-text-primary"
@@ -768,37 +804,27 @@ async function unassignTrainer(): Promise<void> {
       </div>
     </section>
 
-    <div class="grid grid-cols-3 gap-4">
-      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
-        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-          Ocupación
-        </p>
-        <p class="mt-1 text-xl font-black text-text-primary">
-          {{ Math.round(detail.stats.occupancy * 100) }}%
-        </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
-        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-          Clases
-        </p>
-        <p class="mt-1 text-xl font-black text-text-primary">
-          {{ detail.stats.classes }}
-        </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
-        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-          En turno
-        </p>
-        <p class="mt-1 text-xl font-black text-text-primary">
-          {{ detail.stats.trainersOnDuty }}
-        </p>
-      </div>
-    </div>
-
     <section>
       <h2 class="mb-3 text-sm font-black uppercase tracking-widest text-text-muted">
         Entrenadores asignados
       </h2>
+      <div v-if="canManageBranch" class="my-4 flex items-center gap-3">
+        <USelectMenu
+          v-model="assignTrainerId"
+          :items="availableTrainerItems"
+          value-key="value"
+          placeholder="Asignar entrenador a esta sede…"
+          class="flex-1"
+        />
+        <button
+          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-40"
+          :disabled="!assignTrainerId"
+          @click="assignTrainer"
+        >
+          <UserPlus class="h-3.5 w-3.5" />
+          Asignar
+        </button>
+      </div>
       <div class="space-y-3">
         <div
           v-for="trainer in detail.trainers"
@@ -859,30 +885,31 @@ async function unassignTrainer(): Promise<void> {
       >
         Sin entrenadores asignados
       </p>
-
-      <div v-if="canManageBranch" class="mt-4 flex items-center gap-3">
-        <USelectMenu
-          v-model="assignTrainerId"
-          :items="availableTrainerItems"
-          value-key="value"
-          placeholder="Asignar entrenador a esta sede…"
-          class="flex-1"
-        />
-        <button
-          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-40"
-          :disabled="!assignTrainerId"
-          @click="assignTrainer"
-        >
-          <UserPlus class="h-3.5 w-3.5" />
-          Asignar
-        </button>
-      </div>
     </section>
 
     <section>
       <h2 class="mb-3 text-sm font-black uppercase tracking-widest text-text-muted">
         Clases y horarios
       </h2>
+
+      <div v-if="canManageBranch" class="my-4 flex items-center gap-3">
+        <USelectMenu
+          v-model="assignClassId"
+          :items="availableClassItems"
+          value-key="value"
+          placeholder="Asignar clase existente a esta sede…"
+          class="flex-1"
+        />
+        <button
+          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-40"
+          :disabled="!assignClassId"
+          @click="assignClass"
+        >
+          <Plus class="h-3.5 w-3.5" />
+          Asignar
+        </button>
+      </div>
+
       <div class="space-y-3">
         <div
           v-for="gymClass in detail.classes"
@@ -1029,23 +1056,6 @@ async function unassignTrainer(): Promise<void> {
         Sin clases en esta sede
       </p>
 
-      <div v-if="canManageBranch" class="mt-4 flex items-center gap-3">
-        <USelectMenu
-          v-model="assignClassId"
-          :items="availableClassItems"
-          value-key="value"
-          placeholder="Asignar clase existente a esta sede…"
-          class="flex-1"
-        />
-        <button
-          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-40"
-          :disabled="!assignClassId"
-          @click="assignClass"
-        >
-          <Plus class="h-3.5 w-3.5" />
-          Asignar
-        </button>
-      </div>
     </section>
 
     <UModal
@@ -1089,7 +1099,7 @@ async function unassignTrainer(): Promise<void> {
                 {{ selectedTrainer.specialty }}
               </p>
               <p class="mt-0.5 text-[11px] text-text-dim">
-                Turno {{ selectedTrainer.shift.toLowerCase() }}
+                Turno {{ shiftLabel(selectedTrainer.shift).toLowerCase() }}
               </p>
               <span
                 class="mt-1.5 inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-black"
@@ -1377,13 +1387,6 @@ async function unassignTrainer(): Promise<void> {
       </template>
     </UModal>
 
-    <NuxtLink
-      to="/sedes"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Sedes
-    </NuxtLink>
   </div>
 
   <div

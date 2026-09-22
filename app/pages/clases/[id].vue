@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ArrowLeft, Check, Pencil, Trash2, X } from '@lucide/vue';
 
-import type { Branch, ClassDetail, ClassSchedule, Trainer } from '#shared/types';
+import type { Branch, ClassDetail, ClassSchedule, Member, Trainer } from '#shared/types';
 
 const route = useRoute();
+const router = useRouter();
 const { session, canEditInBranches, isAtMyBranch } = useAuth();
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 const canViewBranches = computed(() =>
@@ -12,6 +13,7 @@ const canViewBranches = computed(() =>
 const detail = ref<ClassDetail | null>(null);
 const branches = ref<Branch[]>([]);
 const trainers = ref<Trainer[]>([]);
+const roster = ref<Member[]>([]);
 const pending = ref(true);
 const saving = ref(false);
 const editing = ref(false);
@@ -118,14 +120,17 @@ async function runSave(): Promise<void> {
 
 onMounted(async () => {
   try {
-    const [branchList, trainerList, classDetail] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<Trainer[]>('/api/trainers'),
-      $fetch<ClassDetail>(`/api/classes/${route.params.id}`),
-    ]);
+    const [branchList, trainerList, classDetail, rosterList] =
+      await Promise.all([
+        $fetch<Branch[]>('/api/branches'),
+        $fetch<Trainer[]>('/api/trainers'),
+        $fetch<ClassDetail>(`/api/classes/${route.params.id}`),
+        $fetch<Member[]>(`/api/classes/${route.params.id}/roster`),
+      ]);
     branches.value = branchList;
     trainers.value = trainerList;
     detail.value = classDetail;
+    roster.value = rosterList;
   } finally {
     pending.value = false;
   }
@@ -145,6 +150,27 @@ function toMinutes(time: string): number {
 function occupancy(): number {
   const c = detail.value?.gymClass;
   return c && c.capacity > 0 ? c.booked / c.capacity : 0;
+}
+
+/// Mismos umbrales que tenía el antiguo badge del header.
+function occupancyClass(): string {
+  const o = occupancy();
+  return o >= 1
+    ? 'text-red-400'
+    : o >= 0.8
+      ? 'text-amber-400'
+      : 'text-emerald-400';
+}
+
+function freeSpotsClass(): string {
+  const c = detail.value?.gymClass;
+  if (!c) return 'text-text-primary';
+  const free = c.capacity - c.booked;
+  return free <= 0
+    ? 'text-red-400'
+    : free <= Math.ceil(c.capacity * 0.2)
+      ? 'text-amber-400'
+      : 'text-emerald-400';
 }
 
 /// Valores de horario/sala que edita cada rol: admin toca los base;
@@ -230,6 +256,15 @@ async function deleteClass(): Promise<void> {
   </div>
 
   <div v-else-if="detail" class="space-y-6">
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="router.back()"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
     <div class="flex items-center gap-4">
       <div
         class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl border border-stroke bg-surface"
@@ -249,18 +284,6 @@ async function deleteClass(): Promise<void> {
           {{ detail.gymClass.coach }} · {{ detail.gymClass.room }}
         </p>
       </div>
-      <span
-        class="rounded-full border px-3 py-1 text-[11px] font-black"
-        :class="
-          occupancy() >= 1
-            ? 'border-red-400/30 bg-red-400/10 text-red-400'
-            : occupancy() >= 0.8
-              ? 'border-amber-400/30 bg-amber-400/10 text-amber-400'
-              : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
-        "
-      >
-        {{ Math.round(occupancy() * 100) }}% OCUPADA
-      </span>
     </div>
 
     <section class="rounded-2xl border border-stroke bg-surface p-5">
@@ -464,6 +487,39 @@ async function deleteClass(): Promise<void> {
       </div>
     </section>
 
+    <div class="grid grid-cols-3 gap-4">
+      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+          Ocupación
+        </p>
+        <p
+          class="mt-1 text-xl font-black"
+          :class="occupancyClass()"
+        >
+          {{ Math.round(occupancy() * 100) }}%
+        </p>
+      </div>
+      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+          Cupos libres
+        </p>
+        <p
+          class="mt-1 text-xl font-black"
+          :class="freeSpotsClass()"
+        >
+          {{ Math.max(0, detail.gymClass.capacity - detail.gymClass.booked) }}
+        </p>
+      </div>
+      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+          Duración
+        </p>
+        <p class="mt-1 text-xl font-black text-text-primary">
+          {{ detail.gymClass.endMinutes - detail.gymClass.startMinutes }} min
+        </p>
+      </div>
+    </div>
+
     <section v-if="detail.trainer">
       <h2 class="mb-3 text-sm font-black uppercase tracking-widest text-text-muted">
         Coach asignado
@@ -485,7 +541,8 @@ async function deleteClass(): Promise<void> {
             {{ detail.trainer.name }}
           </button>
           <p class="truncate text-[10px] text-text-dim">
-            {{ detail.trainer.specialty }} · {{ detail.trainer.shift }}
+            {{ detail.trainer.specialty }} ·
+            {{ shiftLabel(detail.trainer.shift) }}
           </p>
         </div>
         <span
@@ -501,32 +558,72 @@ async function deleteClass(): Promise<void> {
       </div>
     </section>
 
-    <div class="grid grid-cols-3 gap-4">
-      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
-        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-          Ocupación
-        </p>
-        <p class="mt-1 text-xl font-black text-text-primary">
-          {{ Math.round(occupancy() * 100) }}%
-        </p>
+    <section>
+      <h2 class="mb-3 text-sm font-black uppercase tracking-widest text-text-muted">
+        Inscritos
+        <span class="ml-1 text-text-dim">
+          ({{ roster.length }}/{{ detail.gymClass.capacity }})
+        </span>
+      </h2>
+      <div
+        v-if="roster.length"
+        class="overflow-hidden rounded-2xl border border-stroke bg-surface"
+      >
+        <table class="w-full text-left">
+          <thead>
+            <tr
+              class="border-b border-stroke text-[10px] uppercase tracking-widest text-text-dim"
+            >
+              <th class="px-5 py-3 font-bold">Socio</th>
+              <th class="px-5 py-3 font-bold">Nº socio</th>
+              <th class="px-5 py-3 font-bold">Plan</th>
+              <th class="px-5 py-3 font-bold">Sede</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="member in roster"
+              :key="member.id"
+              class="border-t border-stroke"
+            >
+              <td class="px-5 py-3">
+                <div class="flex items-center gap-3">
+                  <img
+                    :src="member.photoUrl"
+                    :alt="member.name"
+                    class="h-8 w-8 rounded-full border border-stroke object-cover"
+                  />
+                  <button
+                    class="cursor-pointer text-xs font-black text-text-primary transition hover:text-accent hover:underline"
+                    @click="navigateTo(`/socios/${member.id}`)"
+                  >
+                    {{ member.name }}
+                  </button>
+                </div>
+              </td>
+              <td class="px-5 py-3 font-mono text-[11px] text-text-muted">
+                {{ member.memberNumber }}
+              </td>
+              <td class="px-5 py-3 text-[11px] font-bold text-text-muted">
+                {{ member.membershipType }}
+              </td>
+              <td class="px-5 py-3 text-[11px] text-text-dim">
+                {{
+                  detail.branches.find((b) => b.id === member.branchId)
+                    ?.name ?? '—'
+                }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
-        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-          Cupos libres
-        </p>
-        <p class="mt-1 text-xl font-black text-text-primary">
-          {{ Math.max(0, detail.gymClass.capacity - detail.gymClass.booked) }}
-        </p>
-      </div>
-      <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
-        <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-          Duración
-        </p>
-        <p class="mt-1 text-xl font-black text-text-primary">
-          {{ detail.gymClass.endMinutes - detail.gymClass.startMinutes }} min
-        </p>
-      </div>
-    </div>
+      <p
+        v-else
+        class="rounded-2xl border border-stroke bg-surface py-6 text-center text-xs font-semibold text-text-dim"
+      >
+        Sin inscritos en esta clase
+      </p>
+    </section>
 
     <button
       v-if="canManageClass"
@@ -583,13 +680,6 @@ async function deleteClass(): Promise<void> {
       </template>
     </UModal>
 
-    <NuxtLink
-      to="/clases"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Clases
-    </NuxtLink>
   </div>
 
   <div

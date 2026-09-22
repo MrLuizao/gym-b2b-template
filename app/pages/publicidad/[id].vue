@@ -6,7 +6,9 @@ import {
   Eye,
   ImageUp,
   MousePointerClick,
+  Pause,
   Pencil,
+  Play,
   Trash2,
   X,
 } from '@lucide/vue';
@@ -14,7 +16,11 @@ import {
 import type { Branch, SponsorAd } from '#shared/types';
 
 const route = useRoute();
+const router = useRouter();
 const { updateAd, updateAdStatus, deleteAd } = useCms();
+const { session } = useAuth();
+/// El contenido publicitario es global — solo el admin lo modifica.
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
 const ad = ref<SponsorAd | null>(null);
 const branches = ref<Branch[]>([]);
@@ -319,6 +325,15 @@ async function removeAd(): Promise<void> {
   </div>
 
   <div v-else-if="ad" class="space-y-6">
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="router.back()"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
     <div class="flex items-center gap-4">
       <img
         :src="ad.imageUrl"
@@ -332,17 +347,40 @@ async function removeAd(): Promise<void> {
         <p class="mt-1 truncate text-[11px] text-text-dim">
           {{ ad.title }} · vigente hasta {{ formatFullDay(ad.endsAt) }}
         </p>
+        <p class="mt-0.5 flex items-center gap-1.5">
+          <span
+            class="h-1.5 w-1.5 rounded-full"
+            :class="
+              ad.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-text-dim'
+            "
+          />
+          <span
+            class="text-[10px] font-bold uppercase tracking-widest"
+            :class="
+              ad.status === 'ACTIVE'
+                ? 'text-emerald-400'
+                : 'text-text-dim'
+            "
+          >
+            {{ ad.status === 'ACTIVE' ? 'Activo' : 'Pausado' }}
+          </span>
+        </p>
       </div>
-      <span
-        class="rounded-full border px-3 py-1 text-[11px] font-black"
+      <button
+        v-if="isAdmin"
+        type="button"
+        class="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-4 text-[11px] font-black transition"
         :class="
           ad.status === 'ACTIVE'
-            ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
-            : 'border-stroke bg-base text-text-dim'
+            ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+            : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
         "
+        @click="statusModalOpen = true"
       >
-        {{ ad.status === 'ACTIVE' ? 'ACTIVO' : 'PAUSADO' }}
-      </span>
+        <Pause v-if="ad.status === 'ACTIVE'" class="h-3.5 w-3.5" />
+        <Play v-else class="h-3.5 w-3.5" />
+        {{ ad.status === 'ACTIVE' ? 'Pausar' : 'Activar' }}
+      </button>
     </div>
 
     <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -458,7 +496,7 @@ async function removeAd(): Promise<void> {
           Información del anuncio
         </h2>
         <button
-          v-if="!editing"
+          v-if="isAdmin && !editing"
           class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
           @click="startEdit"
         >
@@ -821,18 +859,7 @@ async function removeAd(): Promise<void> {
     </section>
 
     <button
-      class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border text-xs font-black transition"
-      :class="
-        ad.status === 'ACTIVE'
-          ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
-          : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
-      "
-      @click="statusModalOpen = true"
-    >
-      {{ ad.status === 'ACTIVE' ? 'Pausar anuncio' : 'Activar anuncio' }}
-    </button>
-
-    <button
+      v-if="isAdmin"
       class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-red-400/40 bg-red-400/10 text-xs font-black text-red-400 transition hover:bg-red-400/20"
       @click="deleteModalOpen = true"
     >
@@ -912,13 +939,6 @@ async function removeAd(): Promise<void> {
       </template>
     </UModal>
 
-    <NuxtLink
-      to="/publicidad"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Publicidad
-    </NuxtLink>
   </div>
 
   <div

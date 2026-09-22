@@ -23,17 +23,13 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
 };
 
 /// Prefijos de ruta permitidos por rol. '*' = acceso total.
+/// Prefijos de ruta permitidos por rol. '*' = acceso total.
+/// El gerente ve TODAS las secciones igual que el admin — la diferencia es
+/// de escritura: solo puede editar datos de su propia sucursal, y nunca
+/// precios de membresías ni contenido comercial global.
 export const ROLE_ROUTES: Record<StaffRole, string[]> = {
   ADMIN: ['*'],
-  MANAGER: [
-    '/',
-    '/recepcion',
-    '/sedes',
-    '/clases',
-    '/entrenadores',
-    '/socios',
-    '/reportes',
-  ],
+  MANAGER: ['*'],
   RECEPTIONIST: ['/', '/recepcion', '/socios', '/clases', '/entrenadores'],
 };
 

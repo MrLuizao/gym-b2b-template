@@ -19,7 +19,7 @@ const title = computed(() => {
 const reasonText = computed(() => {
   if (!props.result) return '';
   if (props.result.message) return props.result.message;
-  if (props.result.granted) return 'Bienvenido a Capital Fitness';
+  if (props.result.granted) return 'RIR-HUB';
   const labels: Record<string, string> = {
     MEMBER_NOT_FOUND: 'Socio no registrado',
     MEMBERSHIP_EXPIRED: 'Membresía Vencida - Favor de pasar a caja',

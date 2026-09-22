@@ -8,22 +8,36 @@ import type {
   PaymentsReport,
 } from '#shared/types';
 
+const { session } = useAuth();
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
+
 const branches = ref<Branch[]>([]);
 const pending = ref(true);
 const generating = ref(false);
 
 type ReportType = 'payments' | 'checkins' | 'ads';
 
-const reportTypes = [
-  { label: 'Pagos por rango de fechas', value: 'payments' },
-  { label: 'Check-ins por rango de fechas', value: 'checkins' },
-  { label: 'Publicidad de aliados', value: 'ads' },
-];
+/// El reporte de aliados es comercial: solo admin. El gerente reporta su sede.
+const reportTypes = computed(() => {
+  const all = [
+    { label: 'Pagos por rango de fechas', value: 'payments' as const },
+    { label: 'Check-ins por rango de fechas', value: 'checkins' as const },
+    { label: 'Publicidad de aliados', value: 'ads' as const },
+  ];
+  return isAdmin.value ? all : all.filter((t) => t.value !== 'ads');
+});
+
+/// El gerente solo genera reportes de su propia sede.
+const reportBranches = computed(() =>
+  isAdmin.value || !session.value?.branchId
+    ? branches.value
+    : branches.value.filter((b) => b.id === session.value?.branchId),
+);
 
 const reportType = ref<ReportType>('payments');
 const fromDate = ref('');
 const toDate = ref('');
-const selectedBranch = ref('todas');
+const selectedBranch = ref(session.value?.branchId ?? 'todas');
 const generated = ref(false);
 
 const paymentsReport = ref<PaymentsReport | null>(null);
@@ -260,6 +274,7 @@ function exportCsv(): void {
         </button>
         <span class="mx-1 h-4 w-px bg-stroke" />
         <button
+          v-if="isAdmin"
           class="cursor-pointer rounded-full border px-3 py-1 text-[10px] font-bold transition"
           :class="
             selectedBranch === 'todas'
@@ -271,7 +286,7 @@ function exportCsv(): void {
           Todas las sedes
         </button>
         <button
-          v-for="branch in branches"
+          v-for="branch in reportBranches"
           :key="branch.id"
           class="cursor-pointer rounded-full border px-3 py-1 text-[10px] font-bold transition"
           :class="

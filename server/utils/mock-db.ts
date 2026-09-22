@@ -272,6 +272,8 @@ function createMockDb(): MockDb {
         audience: 'ALL',
         branchId: null,
         kind: 'BRAND',
+        status: 'SENT',
+        scheduledAt: null,
         sent: 1248,
         createdAt: Date.now() - 43_200_000,
       },
@@ -619,7 +621,14 @@ const globalRef = globalThis as typeof globalThis & {
 
 export function useMockDb(): MockDb {
   globalRef.__gymMockDb ??= createMockDb();
-  return globalRef.__gymMockDb;
+  const db = globalRef.__gymMockDb;
+  /// Notificaciones creadas antes del flujo borrador→envío no tienen status:
+  /// con alcance registrado se consideran enviadas; sin él, borradores.
+  for (const p of db.pushes) {
+    p.status ??= p.sent > 0 ? 'SENT' : 'DRAFT';
+    p.scheduledAt ??= null;
+  }
+  return db;
 }
 
 export function signQrToken(memberId: string, issuedAt: number): string {
