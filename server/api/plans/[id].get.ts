@@ -20,9 +20,9 @@ export default defineEventHandler((event): PlanDetail => {
     stats: {
       members: db.members.filter((m) => m.membershipType === plan.name).length,
       payments: payments.length,
-      revenueBs: payments
+      revenue: payments
         .filter((p) => p.status === 'APPROVED')
-        .reduce((total, p) => total + p.amountBs, 0),
+        .reduce((total, p) => total + p.amount, 0),
     },
   };
 });

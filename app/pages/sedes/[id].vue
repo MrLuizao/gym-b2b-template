@@ -708,7 +708,7 @@ async function unassignTrainer(): Promise<void> {
               v-model="editForm.lat"
               type="text"
               inputmode="decimal"
-              placeholder="-16.504"
+              placeholder="19.2926"
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
             />
           </label>
@@ -720,7 +720,7 @@ async function unassignTrainer(): Promise<void> {
               v-model="editForm.lng"
               type="text"
               inputmode="decimal"
-              placeholder="-68.130"
+              placeholder="-99.6572"
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
             />
           </label>

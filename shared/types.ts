@@ -8,7 +8,7 @@ export interface MembershipPlan {
   id: string;
   name: string;
   level: MembershipLevel;
-  priceBs: number;
+  price: number;
   features: string[];
   highlight: boolean;
   allBranches: boolean;
@@ -20,7 +20,7 @@ export interface PlanDetail {
   stats: {
     members: number;
     payments: number;
-    revenueBs: number;
+    revenue: number;
   };
 }
 
@@ -100,7 +100,7 @@ export interface PaymentRecord {
   memberPhotoUrl?: string | null;
   branchId: string;
   plan: string;
-  amountBs: number;
+  amount: number;
   method: string;
   transactionId: string;
   status: 'APPROVED' | 'DECLINED';
@@ -113,9 +113,9 @@ export interface PaymentsReport {
     total: number;
     approved: number;
     declined: number;
-    amountApprovedBs: number;
-    amountDeclinedBs: number;
-    byPlan: { plan: string; count: number; amountBs: number }[];
+    amountApproved: number;
+    amountDeclined: number;
+    byPlan: { plan: string; count: number; amount: number }[];
   };
 }
 

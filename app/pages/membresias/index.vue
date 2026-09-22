@@ -23,7 +23,7 @@ onMounted(async () => {
 });
 
 const sortedPlans = computed(() =>
-  [...plans.value].sort((a, b) => a.priceBs - b.priceBs),
+  [...plans.value].sort((a, b) => a.price - b.price),
 );
 
 const filteredPlans = computed(() =>
@@ -37,7 +37,7 @@ function membersOnPlan(planName: string): number {
 }
 
 function planRevenue(plan: MembershipPlan): number {
-  return membersOnPlan(plan.name) * plan.priceBs;
+  return membersOnPlan(plan.name) * plan.price;
 }
 
 function levelStats(level: MembershipLevel | 'todos') {
@@ -85,7 +85,7 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
           {{ levelStats('todos').plans }}
         </p>
         <p class="text-[10px] font-semibold text-text-dim">
-          {{ levelStats('todos').members }} socios · Bs
+          {{ levelStats('todos').members }} socios · $
           {{ levelStats('todos').revenue }}/mes
         </p>
       </button>
@@ -108,7 +108,7 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
           {{ levelStats('CLASSIC').plans }} planes
         </p>
         <p class="text-[10px] font-semibold text-text-dim">
-          {{ levelStats('CLASSIC').members }} socios · Bs
+          {{ levelStats('CLASSIC').members }} socios · $
           {{ levelStats('CLASSIC').revenue }}/mes
         </p>
       </button>
@@ -131,7 +131,7 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
           {{ levelStats('PLUS').plans }} planes
         </p>
         <p class="text-[10px] font-semibold text-text-dim">
-          {{ levelStats('PLUS').members }} socios · Bs
+          {{ levelStats('PLUS').members }} socios · $
           {{ levelStats('PLUS').revenue }}/mes
         </p>
       </button>
@@ -154,7 +154,7 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
           {{ levelStats('BLACK').plans }} planes
         </p>
         <p class="text-[10px] font-semibold text-text-dim">
-          {{ levelStats('BLACK').members }} socios · Bs
+          {{ levelStats('BLACK').members }} socios · $
           {{ levelStats('BLACK').revenue }}/mes
         </p>
       </button>
@@ -214,7 +214,7 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
               </td>
               <td class="px-5 py-3">
                 <span class="text-sm font-black text-text-primary">
-                  Bs {{ plan.priceBs }}
+                  $ {{ plan.price }}
                 </span>
                 <span class="text-[10px] font-bold text-text-dim">/mes</span>
               </td>
@@ -234,7 +234,7 @@ function planColor(plan: MembershipPlan): 'primary' | 'info' | 'neutral' {
                 {{ membersOnPlan(plan.name) }}
               </td>
               <td class="px-5 py-3 text-sm font-black text-text-primary">
-                Bs {{ planRevenue(plan) }}
+                $ {{ planRevenue(plan) }}
               </td>
               <td class="px-5 py-3 text-right text-[11px] text-text-muted">
                 {{ plan.features.length }} beneficios

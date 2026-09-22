@@ -122,7 +122,7 @@ function planColor(plan: string): 'primary' | 'info' | 'neutral' {
 }
 
 function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -136,14 +136,14 @@ function exportCsv(): void {
   if (reportType.value === 'payments' && paymentsReport.value) {
     filename = 'reporte-pagos.csv';
     rows = [
-      ['Socio', 'Nº socio', 'Plan', 'Sede', 'Método', 'Monto (Bs)', 'Estado', 'Fecha'],
+      ['Socio', 'Nº socio', 'Plan', 'Sede', 'Método', 'Monto (MXN)', 'Estado', 'Fecha'],
       ...paymentsReport.value.payments.map((p) => [
         p.memberName,
         p.memberNumber ?? '',
         p.plan,
         branchName(p.branchId),
         p.method,
-        String(p.amountBs),
+        String(p.amount),
         p.status,
         new Date(p.createdAt).toISOString(),
       ]),
@@ -343,7 +343,7 @@ function exportCsv(): void {
             Recaudado
           </p>
           <p class="mt-1 text-xl font-black text-text-primary">
-            Bs {{ paymentsReport.stats.amountApprovedBs }}
+            $ {{ paymentsReport.stats.amountApproved }}
           </p>
         </div>
       </div>
@@ -368,7 +368,7 @@ function exportCsv(): void {
             />
             <div class="text-right">
               <p class="text-sm font-black text-text-primary">
-                Bs {{ row.amountBs }}
+                $ {{ row.amount }}
               </p>
               <p class="text-[10px] text-text-dim">{{ row.count }} pagos</p>
             </div>
@@ -451,7 +451,7 @@ function exportCsv(): void {
                   {{ payment.method }}
                 </td>
                 <td class="px-5 py-3 text-sm font-black text-text-primary">
-                  Bs {{ payment.amountBs }}
+                  $ {{ payment.amount }}
                 </td>
                 <td class="px-5 py-3">
                   <span
@@ -620,7 +620,7 @@ function exportCsv(): void {
             Impresiones
           </p>
           <p class="mt-1 text-xl font-black text-text-primary">
-            {{ adsReport.stats.impressions.toLocaleString('es-BO') }}
+            {{ adsReport.stats.impressions.toLocaleString('es-MX') }}
           </p>
         </div>
         <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
@@ -628,7 +628,7 @@ function exportCsv(): void {
             Taps
           </p>
           <p class="mt-1 text-xl font-black text-text-primary">
-            {{ adsReport.stats.taps.toLocaleString('es-BO') }}
+            {{ adsReport.stats.taps.toLocaleString('es-MX') }}
           </p>
         </div>
         <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
@@ -644,7 +644,7 @@ function exportCsv(): void {
             Audiencia promos
           </p>
           <p class="mt-1 text-xl font-black text-text-primary">
-            {{ adsReport.stats.optedInMembers.toLocaleString('es-BO') }}
+            {{ adsReport.stats.optedInMembers.toLocaleString('es-MX') }}
           </p>
           <p class="text-[9px] text-text-dim">socios con promos de aliados</p>
         </div>
@@ -705,7 +705,7 @@ function exportCsv(): void {
                   {{ ad.branchId ? branchName(ad.branchId) : 'Todas' }}
                 </td>
                 <td class="px-5 py-3 font-mono text-[10px] text-text-dim">
-                  {{ new Date(ad.endsAt).toLocaleDateString('es-BO') }}
+                  {{ new Date(ad.endsAt).toLocaleDateString('es-MX') }}
                 </td>
                 <td class="px-5 py-3">
                   <span
@@ -720,10 +720,10 @@ function exportCsv(): void {
                   </span>
                 </td>
                 <td class="px-5 py-3 text-[11px] font-bold text-text-primary">
-                  {{ ad.impressions.toLocaleString('es-BO') }}
+                  {{ ad.impressions.toLocaleString('es-MX') }}
                 </td>
                 <td class="px-5 py-3 text-[11px] font-bold text-text-primary">
-                  {{ ad.taps.toLocaleString('es-BO') }}
+                  {{ ad.taps.toLocaleString('es-MX') }}
                 </td>
                 <td class="px-5 py-3 text-right">
                   <span

@@ -54,7 +54,7 @@ const form = ref({
 
 const scheduledDate = shallowRef<DateValue | null>(null);
 const minScheduleDate = today(getLocalTimeZone());
-const scheduleFormatter = new DateFormatter('es-BO', { dateStyle: 'medium' });
+const scheduleFormatter = new DateFormatter('es-MX', { dateStyle: 'medium' });
 
 const scheduledAt = computed<number | null>(() => {
   const d = scheduledDate.value;
@@ -201,7 +201,7 @@ async function remove(): Promise<void> {
 }
 
 function formatFull(ts: number): string {
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
@@ -268,7 +268,7 @@ onMounted(async () => {
           {{ push.title }}
         </h1>
         <p class="mt-1 text-[11px] text-text-dim">
-          {{ isDraft ? 'Borrador — edítalo y lánzalo cuando quieras' : `Enviada el ${formatFull(push.createdAt)} a ${push.sent.toLocaleString('es-BO')} dispositivos` }}
+          {{ isDraft ? 'Borrador — edítalo y lánzalo cuando quieras' : `Enviada el ${formatFull(push.createdAt)} a ${push.sent.toLocaleString('es-MX')} dispositivos` }}
         </p>
         <p class="mt-0.5 flex items-center gap-1.5">
           <span

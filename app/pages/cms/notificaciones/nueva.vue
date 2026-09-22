@@ -41,7 +41,7 @@ const form = ref({
 /// Fecha programada (opcional) — UCalendar trabaja con CalendarDate.
 const scheduledDate = shallowRef<DateValue | null>(null);
 const minScheduleDate = today(getLocalTimeZone());
-const scheduleFormatter = new DateFormatter('es-BO', { dateStyle: 'medium' });
+const scheduleFormatter = new DateFormatter('es-MX', { dateStyle: 'medium' });
 
 /// Timestamp combinado fecha+hora; null = envío manual al lanzarla.
 const scheduledAt = computed<number | null>(() => {

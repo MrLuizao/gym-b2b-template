@@ -17,7 +17,7 @@ export default defineEventHandler(
       branchId?: string;
       planId?: string;
       method?: string;
-      amountBs?: number;
+      amount?: number;
       folio?: string;
     }>(event);
 
@@ -75,9 +75,9 @@ export default defineEventHandler(
     }
 
     const amount =
-      typeof body?.amountBs === 'number' && body.amountBs > 0
-        ? Math.round(body.amountBs)
-        : plan.priceBs;
+      typeof body?.amount === 'number' && body.amount > 0
+        ? Math.round(body.amount)
+        : plan.price;
 
     const nextNumber =
       Math.max(
@@ -116,7 +116,7 @@ export default defineEventHandler(
       memberName: member.name,
       branchId: member.branchId,
       plan: plan.name,
-      amountBs: amount,
+      amount: amount,
       method,
       transactionId: folio,
       status: 'APPROVED',

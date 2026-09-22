@@ -68,7 +68,7 @@ function branchName(id: string | null): string {
 }
 
 function formatDay(ts: number): string {
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'short',
   });
@@ -108,7 +108,7 @@ onMounted(async () => {
           {{ ads.length }}
         </p>
         <p class="text-[10px] font-semibold text-text-dim">
-          {{ totalImpressions.toLocaleString('es-BO') }} imp ·
+          {{ totalImpressions.toLocaleString('es-MX') }} imp ·
           {{ globalCtr }}% CTR
         </p>
       </button>
@@ -276,10 +276,10 @@ onMounted(async () => {
                 </span>
               </td>
               <td class="px-5 py-3 text-[11px] font-bold text-text-primary">
-                {{ ad.impressions.toLocaleString('es-BO') }}
+                {{ ad.impressions.toLocaleString('es-MX') }}
               </td>
               <td class="px-5 py-3 text-[11px] font-bold text-text-primary">
-                {{ ad.taps.toLocaleString('es-BO') }}
+                {{ ad.taps.toLocaleString('es-MX') }}
               </td>
               <td class="px-5 py-3 text-right">
                 <span

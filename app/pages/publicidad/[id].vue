@@ -70,14 +70,14 @@ function branchName(id: string | null): string {
 }
 
 function formatDay(ts: number): string {
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'short',
   });
 }
 
 function formatFullDay(ts: number): string {
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
@@ -387,7 +387,7 @@ async function removeAd(): Promise<void> {
       <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
         <Eye class="mx-auto h-4 w-4 text-text-dim" />
         <p class="mt-1 text-xl font-black text-text-primary">
-          {{ ad.impressions.toLocaleString('es-BO') }}
+          {{ ad.impressions.toLocaleString('es-MX') }}
         </p>
         <p class="text-[9px] font-bold uppercase tracking-widest text-text-dim">
           Impresiones
@@ -396,7 +396,7 @@ async function removeAd(): Promise<void> {
       <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
         <MousePointerClick class="mx-auto h-4 w-4 text-text-dim" />
         <p class="mt-1 text-xl font-black text-text-primary">
-          {{ ad.taps.toLocaleString('es-BO') }}
+          {{ ad.taps.toLocaleString('es-MX') }}
         </p>
         <p class="text-[9px] font-bold uppercase tracking-widest text-text-dim">
           Taps

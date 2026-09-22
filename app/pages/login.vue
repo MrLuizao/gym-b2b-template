@@ -5,7 +5,7 @@ definePageMeta({ layout: false });
 
 const { login } = useAuth();
 
-const email = ref('recepcion@capitalfitness.bo');
+const email = ref('recepcion@capitalfitness.mx');
 const password = ref('demo1234');
 const role = ref<StaffRole>('RECEPTIONIST');
 const errorMessage = ref<string | null>(null);

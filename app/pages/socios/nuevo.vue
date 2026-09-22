@@ -39,7 +39,7 @@ const form = ref({
   branchId: session.value?.branchId ?? '',
   planId: '',
   method: 'Efectivo',
-  amountBs: 0,
+  amount: 0,
   folio: '',
 });
 
@@ -53,7 +53,7 @@ const methodOptions = ['Efectivo', 'Tarjeta', 'Transferencia'];
 
 /// UCalendar trabaja con CalendarDate — el form guarda ISO 'YYYY-MM-DD'.
 const maxBirthDate = today(getLocalTimeZone());
-const dateFormatter = new DateFormatter('es-BO', { dateStyle: 'medium' });
+const dateFormatter = new DateFormatter('es-MX', { dateStyle: 'medium' });
 const birthDateValue = computed<DateValue | null>({
   get: () => {
     const [y, m, d] = (form.value.birthDate || '').split('-').map(Number);
@@ -91,7 +91,7 @@ const missingFields = computed(() => {
   if (!f.phone.trim()) missing.push('teléfono');
   if (!f.branchId) missing.push('sede');
   if (!f.planId) missing.push('plan');
-  if (f.amountBs <= 0) missing.push('monto');
+  if (f.amount <= 0) missing.push('monto');
   if (folioRequired.value && !f.folio.trim()) missing.push('folio de pago');
   return missing;
 });
@@ -109,7 +109,7 @@ const confirmDescription = computed(() => {
     .map((s) => s.trim())
     .filter(Boolean)
     .join(' ');
-  return `"${fullName}" quedará inscrito en ${branch?.name ?? 'la sede'} con plan ${plan?.name ?? ''} y primer pago de Bs ${f.amountBs} (${f.method}). Su membresía quedará activa por 30 días.`;
+  return `"${fullName}" quedará inscrito en ${branch?.name ?? 'la sede'} con plan ${plan?.name ?? ''} y primer pago de $ ${f.amount} (${f.method}). Su membresía quedará activa por 30 días.`;
 });
 
 const lockedBranchName = computed(
@@ -158,7 +158,7 @@ async function submit(): Promise<void> {
         branchId: f.branchId,
         planId: f.planId,
         method: f.method,
-        amountBs: f.amountBs,
+        amount: f.amount,
         folio: f.folio.trim(),
       },
     });
@@ -185,7 +185,7 @@ onMounted(async () => {
     }
     if (planList.length && !form.value.planId) {
       form.value.planId = planList[0]!.id;
-      form.value.amountBs = planList[0]!.priceBs;
+      form.value.amount = planList[0]!.price;
     }
   } catch {
     branches.value = [];
@@ -197,7 +197,7 @@ watch(
   () => form.value.planId,
   (id) => {
     const plan = plans.value.find((p) => p.id === id);
-    if (plan) form.value.amountBs = plan.priceBs;
+    if (plan) form.value.amount = plan.price;
   },
 );
 </script>
@@ -401,7 +401,7 @@ watch(
             </span>
           </div>
           <p class="mt-2 text-xl font-black text-accent">
-            Bs {{ plan.priceBs }}
+            $ {{ plan.price }}
             <span class="text-[10px] font-semibold text-text-dim">/mes</span>
           </p>
           <p
@@ -453,10 +453,10 @@ watch(
           <label class="block">
             <span
               class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-              >Monto (Bs) *</span
+              >Monto (MXN) *</span
             >
             <input
-              v-model.number="form.amountBs"
+              v-model.number="form.amount"
               type="number"
               min="1"
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm font-black text-text-primary outline-none focus:border-accent"

@@ -16,7 +16,7 @@ const editing = ref(false);
 const editForm = ref({
   name: '',
   level: 'CLASSIC',
-  priceBs: 0,
+  price: 0,
   allBranches: false,
   highlight: false,
   features: [] as string[],
@@ -67,7 +67,7 @@ function startEdit(): void {
   editForm.value = {
     name: p.name,
     level: p.level,
-    priceBs: p.priceBs,
+    price: p.price,
     allBranches: p.allBranches,
     highlight: p.highlight,
     features: [...p.features],
@@ -85,8 +85,8 @@ const planChanges = computed<string[]>(() => {
     );
   if (editForm.value.level !== p.level)
     changes.push(`Nivel: ${p.level} → ${editForm.value.level}`);
-  if (editForm.value.priceBs !== p.priceBs)
-    changes.push(`Precio: Bs ${p.priceBs} → Bs ${editForm.value.priceBs}`);
+  if (editForm.value.price !== p.price)
+    changes.push(`Precio: $ ${p.price} → $ ${editForm.value.price}`);
   if (editForm.value.allBranches !== p.allBranches)
     changes.push(
       editForm.value.allBranches
@@ -230,7 +230,7 @@ async function deletePlan(): Promise<void> {
           {{ detail.plan.name }}
         </h1>
         <p class="mt-1 text-[11px] text-text-dim">
-          Bs {{ detail.plan.priceBs }} /mes ·
+          $ {{ detail.plan.price }} /mes ·
           {{
             detail.plan.allBranches
               ? 'Acceso a todas las sedes'
@@ -276,7 +276,7 @@ async function deletePlan(): Promise<void> {
               Precio mensual
             </p>
             <p class="mt-1 text-sm font-black text-text-primary">
-              Bs {{ detail.plan.priceBs }}
+              $ {{ detail.plan.price }}
             </p>
           </div>
           <div>
@@ -334,10 +334,10 @@ async function deletePlan(): Promise<void> {
           </label>
           <label class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Precio (Bs/mes)
+              Precio (MXN/mes)
             </span>
             <input
-              v-model.number="editForm.priceBs"
+              v-model.number="editForm.price"
               type="number"
               min="0"
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
@@ -463,7 +463,7 @@ async function deletePlan(): Promise<void> {
           Ingresos
         </p>
         <p class="mt-1 text-xl font-black text-text-primary">
-          Bs {{ detail.stats.revenueBs }}
+          $ {{ detail.stats.revenue }}
         </p>
       </div>
     </div>

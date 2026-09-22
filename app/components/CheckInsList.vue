@@ -4,7 +4,7 @@ import type { CheckInRecord } from '#shared/types';
 defineProps<{ records: CheckInRecord[] }>();
 
 function timeOf(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString('es-BO', {
+  return new Date(timestamp).toLocaleTimeString('es-MX', {
     hour: '2-digit',
     minute: '2-digit',
   });

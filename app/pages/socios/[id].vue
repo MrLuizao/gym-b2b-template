@@ -36,11 +36,11 @@ const saveModalEmpty = ref(false);
 
 const payModalOpen = ref(false);
 const paying = ref(false);
-const payForm = ref({ planId: '', amountBs: 0, method: 'Efectivo' });
+const payForm = ref({ planId: '', amount: 0, method: 'Efectivo' });
 
 const planItems = computed(() =>
   plans.value.map((p) => ({
-    label: `${p.name} — Bs ${p.priceBs}`,
+    label: `${p.name} — $ ${p.price}`,
     value: p.id,
   })),
 );
@@ -55,7 +55,7 @@ function openPayModal(): void {
   );
   payForm.value = {
     planId: current?.id ?? plans.value[0]?.id ?? '',
-    amountBs: current?.priceBs ?? 0,
+    amount: current?.price ?? 0,
     method: 'Efectivo',
   };
   payModalOpen.value = true;
@@ -65,7 +65,7 @@ watch(
   () => payForm.value.planId,
   (id) => {
     const plan = plans.value.find((p) => p.id === id);
-    if (plan) payForm.value.amountBs = plan.priceBs;
+    if (plan) payForm.value.amount = plan.price;
   },
 );
 
@@ -80,7 +80,7 @@ async function submitPayment(): Promise<void> {
       body: {
         memberId: m.id,
         planId: payForm.value.planId,
-        amountBs: payForm.value.amountBs,
+        amount: payForm.value.amount,
         method: payForm.value.method,
       },
     });
@@ -206,7 +206,7 @@ function branchName(id: string): string {
 
 function formatDate(ts: number | null): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -214,7 +214,7 @@ function formatDate(ts: number | null): string {
 }
 
 function formatDateTime(ts: number): string {
-  return new Date(ts).toLocaleString('es-BO', {
+  return new Date(ts).toLocaleString('es-MX', {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -238,11 +238,11 @@ function downloadCsv(filename: string, rows: string[][]): void {
 function exportPayments(): void {
   if (!detail.value) return;
   downloadCsv(`pagos-${detail.value.member.memberNumber}.csv`, [
-    ['Plan', 'Método', 'Monto (Bs)', 'Estado', 'Transacción', 'Fecha'],
+    ['Plan', 'Método', 'Monto (MXN)', 'Estado', 'Transacción', 'Fecha'],
     ...filteredPayments.value.map((p: PaymentRecord) => [
       p.plan,
       p.method,
-      String(p.amountBs),
+      String(p.amount),
       p.status,
       p.transactionId,
       new Date(p.createdAt).toISOString(),
@@ -511,7 +511,7 @@ async function saveMember(): Promise<void> {
               class="mt-1 w-full cursor-pointer rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             >
               <option v-for="p in plans" :key="p.id" :value="p.name">
-                {{ p.name }} — Bs {{ p.priceBs }}
+                {{ p.name }} — $ {{ p.price }}
               </option>
             </select>
           </label>
@@ -604,7 +604,7 @@ async function saveMember(): Promise<void> {
                 {{ payment.method }}
               </td>
               <td class="px-5 py-3 text-sm font-black text-text-primary">
-                Bs {{ payment.amountBs }}
+                $ {{ payment.amount }}
               </td>
               <td class="px-5 py-3">
                 <span
@@ -813,10 +813,10 @@ async function saveMember(): Promise<void> {
               <span
                 class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
               >
-                Monto (Bs)
+                Monto (MXN)
               </span>
               <input
-                v-model.number="payForm.amountBs"
+                v-model.number="payForm.amount"
                 type="number"
                 min="1"
                 class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
@@ -849,7 +849,7 @@ async function saveMember(): Promise<void> {
           <UButton
             label="Registrar pago"
             icon="i-lucide-banknote"
-            :disabled="!payForm.planId || payForm.amountBs < 1"
+            :disabled="!payForm.planId || payForm.amount < 1"
             :loading="paying"
             @click="submitPayment"
           />

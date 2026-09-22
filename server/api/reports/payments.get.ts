@@ -29,11 +29,11 @@ export default defineEventHandler((event): PaymentsReport => {
   const approved = payments.filter((p) => p.status === 'APPROVED');
   const declined = payments.filter((p) => p.status === 'DECLINED');
 
-  const byPlanMap = new Map<string, { count: number; amountBs: number }>();
+  const byPlanMap = new Map<string, { count: number; amount: number }>();
   for (const p of approved) {
-    const entry = byPlanMap.get(p.plan) ?? { count: 0, amountBs: 0 };
+    const entry = byPlanMap.get(p.plan) ?? { count: 0, amount: 0 };
     entry.count += 1;
-    entry.amountBs += p.amountBs;
+    entry.amount += p.amount;
     byPlanMap.set(p.plan, entry);
   }
 
@@ -43,11 +43,11 @@ export default defineEventHandler((event): PaymentsReport => {
       total: payments.length,
       approved: approved.length,
       declined: declined.length,
-      amountApprovedBs: approved.reduce((t, p) => t + p.amountBs, 0),
-      amountDeclinedBs: declined.reduce((t, p) => t + p.amountBs, 0),
+      amountApproved: approved.reduce((t, p) => t + p.amount, 0),
+      amountDeclined: declined.reduce((t, p) => t + p.amount, 0),
       byPlan: [...byPlanMap.entries()]
-        .map(([plan, v]) => ({ plan, count: v.count, amountBs: v.amountBs }))
-        .sort((a, b) => b.amountBs - a.amountBs),
+        .map(([plan, v]) => ({ plan, count: v.count, amount: v.amount }))
+        .sort((a, b) => b.amount - a.amount),
     },
   };
 });

@@ -128,7 +128,7 @@ function planColor(level: MemberAdmin['membershipLevel']) {
 
 function formatDate(ts: number | null): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

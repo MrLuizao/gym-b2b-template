@@ -58,7 +58,7 @@ function branchName(id: string | null): string {
 }
 
 function formatDay(ts: number): string {
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'short',
   });

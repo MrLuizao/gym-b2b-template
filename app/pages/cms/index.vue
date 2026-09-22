@@ -103,7 +103,7 @@ function branchName(id: string | null): string {
 }
 
 function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString('es-BO', {
+  return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -206,7 +206,7 @@ onMounted(async () => {
           </p>
         </div>
         <p class="mt-2 text-xl font-black text-text-primary">
-          {{ totalReach.toLocaleString('es-BO') }}
+          {{ totalReach.toLocaleString('es-MX') }}
         </p>
       </div>
     </div>
@@ -484,7 +484,7 @@ onMounted(async () => {
                   v-if="log.status === 'SENT'"
                   class="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-black text-accent"
                 >
-                  {{ log.sent.toLocaleString('es-BO') }}
+                  {{ log.sent.toLocaleString('es-MX') }}
                 </span>
                 <span v-else class="text-[11px] text-text-dim">—</span>
               </td>

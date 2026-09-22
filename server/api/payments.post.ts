@@ -7,7 +7,7 @@ export default defineEventHandler(async (event): Promise<PaymentRecord> => {
   const body = await readBody<{
     memberId?: string;
     planId?: string;
-    amountBs?: number;
+    amount?: number;
     method?: string;
   }>(event);
 
@@ -22,9 +22,9 @@ export default defineEventHandler(async (event): Promise<PaymentRecord> => {
   }
 
   const amount =
-    typeof body?.amountBs === 'number' && body.amountBs > 0
-      ? Math.round(body.amountBs)
-      : plan.priceBs;
+    typeof body?.amount === 'number' && body.amount > 0
+      ? Math.round(body.amount)
+      : plan.price;
 
   const payment: PaymentRecord = {
     id: randomUUID(),
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event): Promise<PaymentRecord> => {
     memberName: member.name,
     branchId: member.branchId,
     plan: plan.name,
-    amountBs: amount,
+    amount: amount,
     method: body?.method?.trim() || 'Efectivo',
     transactionId: `TX-${Date.now()}`,
     status: 'APPROVED',

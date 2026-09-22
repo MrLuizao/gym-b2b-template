@@ -492,14 +492,14 @@ function submitBranch(): void {
               v-model="createForm.lat"
               type="text"
               inputmode="decimal"
-              placeholder="Latitud (ej. -16.504)"
+              placeholder="Latitud (ej. 19.2926)"
               class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
             />
             <input
               v-model="createForm.lng"
               type="text"
               inputmode="decimal"
-              placeholder="Longitud (ej. -68.130)"
+              placeholder="Longitud (ej. -99.6572)"
               class="w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
             />
           </div>

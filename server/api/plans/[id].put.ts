@@ -31,8 +31,8 @@ export default defineEventHandler(async (event): Promise<MembershipPlan> => {
   ) {
     plan.level = body.level as MembershipPlan['level'];
   }
-  if (typeof body.priceBs === 'number' && body.priceBs >= 0) {
-    plan.priceBs = Math.round(body.priceBs);
+  if (typeof body.price === 'number' && body.price >= 0) {
+    plan.price = Math.round(body.price);
   }
   if (Array.isArray(body.features)) {
     plan.features = body.features
