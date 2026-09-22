@@ -59,6 +59,14 @@ export interface TrainerDetail {
   };
 }
 
+/// Horario y sala de una clase en una sede concreta — cada sede puede
+/// configurar el suyo; sin override se usan los valores base de la clase.
+export interface ClassBranchTime {
+  startMinutes: number;
+  endMinutes: number;
+  room: string;
+}
+
 export interface ClassSchedule {
   id: string;
   branchIds: string[];
@@ -69,6 +77,8 @@ export interface ClassSchedule {
   endMinutes: number;
   capacity: number;
   booked: number;
+  /// Overrides por sede: branchId → horario/sala local.
+  branchTimes?: Record<string, ClassBranchTime>;
 }
 
 export interface ClassDetail {

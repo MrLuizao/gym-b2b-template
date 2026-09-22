@@ -3,6 +3,10 @@ import { Plus } from '@lucide/vue';
 
 import type { Branch, ClassSchedule, Trainer } from '#shared/types';
 
+const { session, canEditInBranches } = useAuth();
+/// Crear clases define datos globales (nombre, coach, capacidad): solo admin.
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
+
 const branches = ref<Branch[]>([]);
 const trainers = ref<Trainer[]>([]);
 const classes = ref<ClassSchedule[]>([]);
@@ -44,12 +48,19 @@ onMounted(async () => {
   }
 });
 
+/// El gerente solo puede crear clases en su propia sede.
 const branchItems = computed(() =>
-  branches.value.map((b) => ({ label: b.name, value: b.id })),
+  branches.value
+    .filter((b) => canEditInBranches([b.id]))
+    .map((b) => ({ label: b.name, value: b.id })),
 );
 
 const coachItems = computed(() =>
-  trainers.value.map((t) => ({ label: t.name, value: t.name })),
+  trainers.value
+    .filter((t) =>
+      t.branchIds.length === 0 || canEditInBranches(t.branchIds),
+    )
+    .map((t) => ({ label: t.name, value: t.name })),
 );
 
 const filtered = computed(() =>
@@ -208,6 +219,7 @@ function submitClass(): void {
           Clases programadas
         </h2>
         <button
+          v-if="isAdmin"
           class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="createModalOpen = true"
         >

@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { ArrowLeft, Check, Pencil, Trash2, X } from '@lucide/vue';
 
-import type { Branch, ClassDetail, Trainer } from '#shared/types';
+import type { Branch, ClassDetail, ClassSchedule, Trainer } from '#shared/types';
 
 const route = useRoute();
+const { session, canEditInBranches, isAtMyBranch } = useAuth();
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
+const canViewBranches = computed(() =>
+  canAccess(session.value?.role, '/sedes'),
+);
 const detail = ref<ClassDetail | null>(null);
 const branches = ref<Branch[]>([]);
 const trainers = ref<Trainer[]>([]);
@@ -22,8 +27,22 @@ const editForm = ref({
   booked: 0,
 });
 
+/// Admin edita cualquier clase; gerente puede ajustar horario/sala de su
+/// sede en cualquier clase que se imparta ahí, aunque sea compartida.
+const canEditSchedule = computed(() =>
+  detail.value ? isAtMyBranch(detail.value.gymClass.branchIds) : false,
+);
+
+/// Eliminar la clase (afecta a todas sus sedes) exige propiedad exclusiva.
+const canManageClass = computed(() =>
+  detail.value ? canEditInBranches(detail.value.gymClass.branchIds) : false,
+);
+
+/// El gerente solo puede asignar/quitar la clase en su propia sede.
 const branchItems = computed(() =>
-  branches.value.map((b) => ({ label: b.name, value: b.id })),
+  branches.value
+    .filter((b) => canEditInBranches([b.id]))
+    .map((b) => ({ label: b.name, value: b.id })),
 );
 
 const coachItems = computed(() =>
@@ -61,14 +80,15 @@ const classChanges = computed<string[]>(() => {
     changes.push('La clase quedará sin sede asignada');
   if (editForm.value.coach !== c.coach)
     changes.push(`Coach: ${c.coach} → ${editForm.value.coach}`);
-  if (editForm.value.room !== c.room)
-    changes.push(`Sala: ${c.room} → ${editForm.value.room}`);
+  const local = timeBaseline(c);
+  if (editForm.value.room !== local.room)
+    changes.push(`Sala: ${local.room} → ${editForm.value.room}`);
   if (
-    toMinutes(editForm.value.start) !== c.startMinutes ||
-    toMinutes(editForm.value.end) !== c.endMinutes
+    toMinutes(editForm.value.start) !== local.startMinutes ||
+    toMinutes(editForm.value.end) !== local.endMinutes
   )
     changes.push(
-      `Horario: ${hhmm(c.startMinutes)}–${hhmm(c.endMinutes)} → ${editForm.value.start}–${editForm.value.end}`,
+      `Horario: ${hhmm(local.startMinutes)}–${hhmm(local.endMinutes)} → ${editForm.value.start}–${editForm.value.end}`,
     );
   if (editForm.value.capacity !== c.capacity)
     changes.push(`Capacidad: ${c.capacity} → ${editForm.value.capacity}`);
@@ -127,16 +147,23 @@ function occupancy(): number {
   return c && c.capacity > 0 ? c.booked / c.capacity : 0;
 }
 
+/// Valores de horario/sala que edita cada rol: admin toca los base;
+/// gerente los de su propia sede (override local).
+function timeBaseline(c: ClassSchedule) {
+  return classTimeAt(c, isAdmin.value ? null : session.value?.branchId);
+}
+
 function startEdit(): void {
   const c = detail.value?.gymClass;
   if (!c) return;
+  const local = timeBaseline(c);
   editForm.value = {
     name: c.name,
     coach: c.coach,
     branchIds: [...c.branchIds],
-    room: c.room,
-    start: hhmm(c.startMinutes),
-    end: hhmm(c.endMinutes),
+    room: local.room,
+    start: hhmm(local.startMinutes),
+    end: hhmm(local.endMinutes),
     capacity: c.capacity,
     booked: c.booked,
   };
@@ -151,16 +178,26 @@ async function saveClass(): Promise<void> {
       `/api/classes/${detail.value.gymClass.id}`,
       {
         method: 'PUT',
-        body: {
-          name: editForm.value.name,
-          coach: editForm.value.coach,
-          branchIds: editForm.value.branchIds,
-          room: editForm.value.room,
-          startMinutes: toMinutes(editForm.value.start),
-          endMinutes: toMinutes(editForm.value.end),
-          capacity: editForm.value.capacity,
-          booked: editForm.value.booked,
-        },
+        body: isAdmin.value
+          ? {
+              name: editForm.value.name,
+              coach: editForm.value.coach,
+              branchIds: editForm.value.branchIds,
+              room: editForm.value.room,
+              startMinutes: toMinutes(editForm.value.start),
+              endMinutes: toMinutes(editForm.value.end),
+              capacity: editForm.value.capacity,
+              booked: editForm.value.booked,
+            }
+          : {
+              /// El gerente solo escribe el horario/sala de su propia sede.
+              branchTime: {
+                branchId: session.value?.branchId,
+                startMinutes: toMinutes(editForm.value.start),
+                endMinutes: toMinutes(editForm.value.end),
+                room: editForm.value.room,
+              },
+            },
       },
     );
     detail.value = await $fetch<ClassDetail>(`/api/classes/${updated.id}`);
@@ -232,7 +269,7 @@ async function deleteClass(): Promise<void> {
           Información de la clase
         </h2>
         <button
-          v-if="!editing"
+          v-if="!editing && canEditSchedule"
           class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
           @click="startEdit"
         >
@@ -251,8 +288,14 @@ async function deleteClass(): Promise<void> {
               v-for="b in detail.branches"
               :key="b.id"
               type="button"
-              class="cursor-pointer rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-bold text-text-muted transition hover:border-accent hover:text-accent"
-              @click="navigateTo(`/sedes/${b.id}`)"
+              :disabled="!canViewBranches"
+              class="rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-bold text-text-muted transition"
+              :class="
+                canViewBranches
+                  ? 'cursor-pointer hover:border-accent hover:text-accent'
+                  : 'cursor-default'
+              "
+              @click="canViewBranches && navigateTo(`/sedes/${b.id}`)"
             >
               {{ b.name }}
             </button>
@@ -277,16 +320,16 @@ async function deleteClass(): Promise<void> {
             Sala
           </p>
           <p class="mt-1 text-sm font-black text-text-primary">
-            {{ detail.gymClass.room }}
+            {{ timeBaseline(detail.gymClass).room }}
           </p>
         </div>
         <div>
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-            Horario
+            Horario{{ isAdmin ? '' : ' (mi sede)' }}
           </p>
           <p class="mt-1 text-sm font-black text-text-primary">
-            {{ hhmm(detail.gymClass.startMinutes) }} –
-            {{ hhmm(detail.gymClass.endMinutes) }}
+            {{ hhmm(timeBaseline(detail.gymClass).startMinutes) }} –
+            {{ hhmm(timeBaseline(detail.gymClass).endMinutes) }}
           </p>
         </div>
         <div>
@@ -308,8 +351,12 @@ async function deleteClass(): Promise<void> {
       </div>
 
       <div v-else class="mt-4 space-y-3">
+        <p v-if="!isAdmin" class="text-[11px] font-semibold text-text-dim">
+          Solo puedes ajustar el horario y la sala de tu sede — el resto de
+          datos los gestiona el admin global.
+        </p>
         <div class="grid grid-cols-2 gap-3">
-          <label class="block">
+          <label v-if="isAdmin" class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Nombre
             </span>
@@ -319,7 +366,7 @@ async function deleteClass(): Promise<void> {
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             />
           </label>
-          <label class="block">
+          <label v-if="isAdmin" class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Sedes
             </span>
@@ -332,7 +379,7 @@ async function deleteClass(): Promise<void> {
               class="mt-1 w-full"
             />
           </label>
-          <label class="col-span-2 block">
+          <label v-if="isAdmin" class="col-span-2 block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Coach (entrenadores de las sedes)
             </span>
@@ -346,7 +393,7 @@ async function deleteClass(): Promise<void> {
           </label>
           <label class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Sala
+              Sala{{ isAdmin ? '' : ' (mi sede)' }}
             </span>
             <input
               v-model="editForm.room"
@@ -354,7 +401,7 @@ async function deleteClass(): Promise<void> {
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             />
           </label>
-          <label class="block">
+          <label v-if="isAdmin" class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Capacidad
             </span>
@@ -367,7 +414,7 @@ async function deleteClass(): Promise<void> {
           </label>
           <label class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Inicio
+              Inicio{{ isAdmin ? '' : ' (mi sede)' }}
             </span>
             <input
               v-model="editForm.start"
@@ -377,7 +424,7 @@ async function deleteClass(): Promise<void> {
           </label>
           <label class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Fin
+              Fin{{ isAdmin ? '' : ' (mi sede)' }}
             </span>
             <input
               v-model="editForm.end"
@@ -385,7 +432,7 @@ async function deleteClass(): Promise<void> {
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             />
           </label>
-          <label class="block">
+          <label v-if="isAdmin" class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Inscritos
             </span>
@@ -482,6 +529,7 @@ async function deleteClass(): Promise<void> {
     </div>
 
     <button
+      v-if="canManageClass"
       class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-red-400/40 text-xs font-black text-red-400 transition hover:bg-red-400/10"
       @click="deleteModalOpen = true"
     >

@@ -3,7 +3,12 @@ import { Minus, Plus } from '@lucide/vue';
 
 import type { Branch } from '#shared/types';
 
-const props = defineProps<{ branch: Branch }>();
+const props = defineProps<{ branch: Branch; canAdjust?: boolean }>();
+
+const { session } = useAuth();
+const canViewBranch = computed(() =>
+  canAccess(session.value?.role, '/sedes'),
+);
 
 const emit = defineEmits<{ adjust: [delta: number] }>();
 
@@ -26,9 +31,19 @@ const barColor = computed(() => {
   <div class="rounded-2xl border border-stroke bg-surface p-5">
     <div class="flex items-start justify-between gap-3">
       <div>
-        <p class="text-sm font-black tracking-tight text-text-primary">
+        <button
+          type="button"
+          :disabled="!canViewBranch"
+          class="block text-left text-sm font-black tracking-tight transition"
+          :class="
+            canViewBranch
+              ? 'cursor-pointer text-accent hover:underline'
+              : 'cursor-default text-text-primary'
+          "
+          @click="canViewBranch && navigateTo(`/sedes/${branch.id}`)"
+        >
           {{ branch.name }}
-        </p>
+        </button>
         <p class="mt-0.5 text-[11px] font-medium text-text-dim">{{ branch.address }}</p>
       </div>
       <OccupancyBadge :ratio="ratio" />
@@ -47,7 +62,7 @@ const barColor = computed(() => {
       />
     </div>
 
-    <div class="mt-4 flex items-center gap-2">
+    <div v-if="canAdjust !== false" class="mt-4 flex items-center gap-2">
       <button
         class="flex h-8 w-8 items-center justify-center rounded-lg border border-stroke bg-white/5 text-text-muted transition hover:border-accent/50 hover:text-text-primary disabled:opacity-40"
         :disabled="branch.currentCapacity <= 0"

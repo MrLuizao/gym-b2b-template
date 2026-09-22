@@ -10,6 +10,11 @@ import {
 
 import type { Branch, MemberAdmin } from '#shared/types';
 
+const { session } = useAuth();
+const canViewBranches = computed(() =>
+  canAccess(session.value?.role, '/sedes'),
+);
+
 const members = ref<MemberAdmin[]>([]);
 const branches = ref<Branch[]>([]);
 const pending = ref(true);
@@ -321,8 +326,14 @@ function formatDate(ts: number | null): string {
             </td>
             <td class="px-5 py-3">
               <button
-                class="cursor-pointer rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-bold text-text-muted transition hover:border-accent hover:text-accent"
-                @click="navigateTo(`/sedes/${member.branchId}`)"
+                :disabled="!canViewBranches"
+                class="rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-bold text-text-muted transition"
+                :class="
+                  canViewBranches
+                    ? 'cursor-pointer hover:border-accent hover:text-accent'
+                    : 'cursor-default'
+                "
+                @click="canViewBranches && navigateTo(`/sedes/${member.branchId}`)"
               >
                 {{ branchName(member.branchId) }}
               </button>

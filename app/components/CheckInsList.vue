@@ -33,9 +33,13 @@ function timeOf(timestamp: number): string {
           :class="record.granted ? 'bg-emerald-400' : 'bg-red-400'"
         />
         <div class="min-w-0 flex-1">
-          <p class="truncate text-xs font-bold text-text-primary">
+          <button
+            type="button"
+            class="block max-w-full cursor-pointer truncate text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
+            @click="navigateTo(`/socios/${record.userId}`)"
+          >
             {{ record.memberName }}
-          </p>
+          </button>
           <p class="text-[10px] font-medium text-text-dim">
             {{ record.membershipType }} · {{ record.method.toUpperCase() }}
             <template v-if="!record.granted"> · {{ record.reason }}</template>

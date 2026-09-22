@@ -398,6 +398,7 @@ onMounted(async () => {
       </div>
     </section>
 
+    <!-- Sección de banners oculta — el feed de promociones ya no se muestra en la app.
     <section>
       <div class="mb-3 flex items-center justify-between">
         <h2
@@ -474,6 +475,7 @@ onMounted(async () => {
         </p>
       </div>
     </section>
+    -->
 
     <section>
       <div class="mb-3 flex items-center justify-between">

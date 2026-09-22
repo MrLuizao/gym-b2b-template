@@ -1,12 +1,37 @@
 <script setup lang="ts">
-import { ArrowLeft, ChevronLeft, ChevronRight, Download } from '@lucide/vue';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, Pencil, X } from '@lucide/vue';
 
-import type { Branch, CheckInRecord, MemberDetail, PaymentRecord } from '#shared/types';
+import type { Branch, CheckInRecord, MemberDetail, MembershipPlan, PaymentRecord } from '#shared/types';
 
 const route = useRoute();
+const { session } = useAuth();
 const detail = ref<MemberDetail | null>(null);
 const branches = ref<Branch[]>([]);
+const plans = ref<MembershipPlan[]>([]);
 const pending = ref(true);
+
+/// Admin edita cualquier socio; gerente solo los de su sede; recepcionista nunca.
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
+const canEditMember = computed(() => {
+  if (isAdmin.value) return true;
+  return (
+    session.value?.role === 'MANAGER' &&
+    detail.value?.member.branchId === session.value?.branchId
+  );
+});
+
+const editing = ref(false);
+const saving = ref(false);
+const editForm = ref({
+  name: '',
+  branchId: '',
+  membershipType: '',
+  membershipUntil: '',
+});
+
+const saveModalOpen = ref(false);
+const saveModalDescription = ref('');
+const saveModalEmpty = ref(false);
 
 const PAGE_SIZE = 8;
 
@@ -20,12 +45,14 @@ const ciPage = ref(1);
 
 onMounted(async () => {
   try {
-    const [memberDetail, branchList] = await Promise.all([
+    const [memberDetail, branchList, planList] = await Promise.all([
       $fetch<MemberDetail>(`/api/members/${route.params.id}`),
       $fetch<Branch[]>('/api/branches'),
+      $fetch<MembershipPlan[]>('/api/plans'),
     ]);
     detail.value = memberDetail;
     branches.value = branchList;
+    plans.value = planList;
   } finally {
     pending.value = false;
   }
@@ -171,6 +198,71 @@ function exportCheckIns(): void {
     ]),
   ]);
 }
+
+function toDateInput(ts: number | null): string {
+  return ts ? new Date(ts).toISOString().slice(0, 10) : '';
+}
+
+function startEdit(): void {
+  if (!detail.value) return;
+  const m = detail.value.member;
+  editForm.value = {
+    name: m.name,
+    branchId: m.branchId,
+    membershipType: m.membershipType,
+    membershipUntil: toDateInput(m.membershipUntil),
+  };
+  editing.value = true;
+}
+
+function confirmSaveMember(): void {
+  const m = detail.value?.member;
+  if (!m) return;
+  const changes: string[] = [];
+  if (editForm.value.name.trim() !== m.name)
+    changes.push(`Nombre: '${m.name}' → '${editForm.value.name.trim()}'`);
+  if (isAdmin.value && editForm.value.branchId !== m.branchId)
+    changes.push(
+      `Sede: ${branchName(m.branchId)} → ${branchName(editForm.value.branchId)}`,
+    );
+  if (editForm.value.membershipType !== m.membershipType)
+    changes.push(
+      `Plan: ${m.membershipType} → ${editForm.value.membershipType}`,
+    );
+  if (editForm.value.membershipUntil !== toDateInput(m.membershipUntil))
+    changes.push(
+      `Vigencia: ${formatDate(m.membershipUntil)} → ${editForm.value.membershipUntil || 'sin fecha'}`,
+    );
+  saveModalDescription.value = changes.length
+    ? `${changes.join('. ')}.`
+    : 'No se detectaron cambios respecto a los datos actuales.';
+  saveModalEmpty.value = changes.length === 0;
+  saveModalOpen.value = true;
+}
+
+async function saveMember(): Promise<void> {
+  const m = detail.value?.member;
+  if (!m || saving.value) return;
+  saving.value = true;
+  try {
+    await $fetch(`/api/members/${m.id}`, {
+      method: 'PUT',
+      body: {
+        name: editForm.value.name.trim(),
+        ...(isAdmin.value ? { branchId: editForm.value.branchId } : {}),
+        membershipType: editForm.value.membershipType,
+        membershipUntil: editForm.value.membershipUntil
+          ? new Date(`${editForm.value.membershipUntil}T23:59:59`).getTime()
+          : null,
+      },
+    });
+    detail.value = await $fetch<MemberDetail>(`/api/members/${m.id}`);
+    saveModalOpen.value = false;
+    editing.value = false;
+  } finally {
+    saving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -197,14 +289,25 @@ function exportCheckIns(): void {
             {{ detail.member.memberNumber }}
           </p>
         </div>
-        <span
-          class="rounded-full border px-3 py-1 text-[11px] font-bold"
-          :class="statusMeta(detail.member.adminStatus).cls"
-        >
-          {{ statusMeta(detail.member.adminStatus).label }}
-        </span>
+        <div class="flex items-center gap-2">
+          <span
+            class="rounded-full border px-3 py-1 text-[11px] font-bold"
+            :class="statusMeta(detail.member.adminStatus).cls"
+          >
+            {{ statusMeta(detail.member.adminStatus).label }}
+          </span>
+          <button
+            v-if="canEditMember && !editing"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
+            @click="startEdit"
+          >
+            <Pencil class="h-3 w-3" />
+            Editar
+          </button>
+        </div>
       </div>
-      <div class="mt-5 grid grid-cols-3 gap-4 border-t border-stroke pt-4">
+
+      <div v-if="!editing" class="mt-5 grid grid-cols-3 gap-4 border-t border-stroke pt-4">
         <div>
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
             Plan
@@ -228,6 +331,73 @@ function exportCheckIns(): void {
           <p class="mt-1 text-sm font-black text-text-primary">
             {{ formatDate(detail.member.membershipUntil) }}
           </p>
+        </div>
+      </div>
+
+      <div v-else class="mt-5 space-y-3 border-t border-stroke pt-4">
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Nombre
+            </span>
+            <input
+              v-model="editForm.name"
+              type="text"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            />
+          </label>
+          <label v-if="isAdmin" class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Sede
+            </span>
+            <select
+              v-model="editForm.branchId"
+              class="mt-1 w-full cursor-pointer rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            >
+              <option v-for="b in branches" :key="b.id" :value="b.id">
+                {{ b.name }}
+              </option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Plan
+            </span>
+            <select
+              v-model="editForm.membershipType"
+              class="mt-1 w-full cursor-pointer rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            >
+              <option v-for="p in plans" :key="p.id" :value="p.name">
+                {{ p.name }} — Bs {{ p.priceBs }}
+              </option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Vigencia hasta
+            </span>
+            <input
+              v-model="editForm.membershipUntil"
+              type="date"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            />
+          </label>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-4 py-1.5 text-[11px] font-black text-text-muted transition hover:text-text-primary"
+            @click="editing = false"
+          >
+            <X class="h-3.5 w-3.5" />
+            Cancelar
+          </button>
+          <button
+            class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-50"
+            @click="confirmSaveMember"
+          >
+            <Check class="h-3.5 w-3.5" />
+            Guardar
+          </button>
         </div>
       </div>
     </section>
@@ -458,6 +628,30 @@ function exportCheckIns(): void {
       <ArrowLeft class="h-4 w-4" />
       Volver a Socios
     </NuxtLink>
+
+    <UModal
+      v-model:open="saveModalOpen"
+      title="Guardar cambios del socio"
+      :description="saveModalDescription"
+    >
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="saveModalOpen = false"
+          />
+          <UButton
+            label="Guardar"
+            icon="i-lucide-check"
+            :disabled="saveModalEmpty"
+            :loading="saving"
+            @click="saveMember"
+          />
+        </div>
+      </template>
+    </UModal>
   </div>
 
   <div

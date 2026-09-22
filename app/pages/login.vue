@@ -7,6 +7,7 @@ const { login } = useAuth();
 
 const email = ref('recepcion@capitalfitness.bo');
 const password = ref('demo1234');
+const role = ref<StaffRole>('RECEPTIONIST');
 const errorMessage = ref<string | null>(null);
 const submitting = ref(false);
 
@@ -14,8 +15,8 @@ async function submit(): Promise<void> {
   errorMessage.value = null;
   submitting.value = true;
   try {
-    await login(email.value, password.value);
-    await navigateTo('/');
+    await login(email.value, password.value, role.value);
+    await navigateTo(homeFor(role.value));
   } catch (cause) {
     errorMessage.value = cause instanceof Error ? cause.message : 'No se pudo iniciar sesión';
   } finally {
@@ -71,6 +72,24 @@ async function submit(): Promise<void> {
             autocomplete="current-password"
             class="mt-1.5 w-full rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition focus:border-accent"
           />
+        </div>
+
+        <div>
+          <label
+            for="role"
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+          >
+            Perfil (demo)
+          </label>
+          <select
+            id="role"
+            v-model="role"
+            class="mt-1.5 w-full cursor-pointer rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition focus:border-accent"
+          >
+            <option value="ADMIN">Admin global</option>
+            <option value="MANAGER">Gerente de sede</option>
+            <option value="RECEPTIONIST">Recepcionista</option>
+          </select>
         </div>
 
         <p

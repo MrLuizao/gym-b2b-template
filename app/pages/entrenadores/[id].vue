@@ -4,6 +4,11 @@ import { ArrowLeft, Check, Pencil, X } from '@lucide/vue';
 import type { Branch, ClassSchedule, TrainerDetail } from '#shared/types';
 
 const route = useRoute();
+const { session, canEditInBranches, isAtMyBranch } = useAuth();
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
+const canViewBranches = computed(() =>
+  canAccess(session.value?.role, '/sedes'),
+);
 const detail = ref<TrainerDetail | null>(null);
 const branches = ref<Branch[]>([]);
 const pending = ref(true);
@@ -23,8 +28,16 @@ const shiftItems = [
   { label: 'NOCHE', value: 'NOCHE' },
 ];
 
+/// Admin edita cualquier coach; gerente solo los asignados a su sede.
+const canManageTrainer = computed(() =>
+  detail.value ? canEditInBranches(detail.value.trainer.branchIds) : false,
+);
+
+/// El gerente solo puede asignar/quitar el coach en su propia sede.
 const branchItems = computed(() =>
-  branches.value.map((b) => ({ label: b.name, value: b.id })),
+  branches.value
+    .filter((b) => canEditInBranches([b.id]))
+    .map((b) => ({ label: b.name, value: b.id })),
 );
 
 const editingClassId = ref<string | null>(null);
@@ -114,14 +127,15 @@ const classChanges = computed<string[]>(() => {
   const changes: string[] = [];
   if (classForm.value.name !== c.name)
     changes.push(`Nombre: '${c.name}' → '${classForm.value.name}'`);
-  if (classForm.value.room !== c.room)
-    changes.push(`Sala: ${c.room} → ${classForm.value.room}`);
+  const local = classBaseline(c);
+  if (classForm.value.room !== local.room)
+    changes.push(`Sala: ${local.room} → ${classForm.value.room}`);
   if (
-    toMinutes(classForm.value.start) !== c.startMinutes ||
-    toMinutes(classForm.value.end) !== c.endMinutes
+    toMinutes(classForm.value.start) !== local.startMinutes ||
+    toMinutes(classForm.value.end) !== local.endMinutes
   )
     changes.push(
-      `Horario: ${hhmm(c.startMinutes)}–${hhmm(c.endMinutes)} → ${classForm.value.start}–${classForm.value.end}`,
+      `Horario: ${hhmm(local.startMinutes)}–${hhmm(local.endMinutes)} → ${classForm.value.start}–${classForm.value.end}`,
     );
   if (classForm.value.capacity !== c.capacity)
     changes.push(`Capacidad: ${c.capacity} → ${classForm.value.capacity}`);
@@ -186,13 +200,20 @@ async function saveTrainer(): Promise<void> {
   }
 }
 
+/// Valores de horario/sala que edita cada rol: admin toca los base;
+/// gerente los de su propia sede (override local).
+function classBaseline(c: ClassSchedule) {
+  return classTimeAt(c, isAdmin.value ? null : session.value?.branchId);
+}
+
 function startEditClass(gymClass: ClassSchedule): void {
+  const local = classBaseline(gymClass);
   editingClassId.value = gymClass.id;
   classForm.value = {
     name: gymClass.name,
-    room: gymClass.room,
-    start: hhmm(gymClass.startMinutes),
-    end: hhmm(gymClass.endMinutes),
+    room: local.room,
+    start: hhmm(local.startMinutes),
+    end: hhmm(local.endMinutes),
     capacity: gymClass.capacity,
     booked: gymClass.booked,
   };
@@ -206,14 +227,24 @@ async function saveClass(): Promise<void> {
       `/api/classes/${editingClassId.value}`,
       {
         method: 'PUT',
-        body: {
-          name: classForm.value.name,
-          room: classForm.value.room,
-          startMinutes: toMinutes(classForm.value.start),
-          endMinutes: toMinutes(classForm.value.end),
-          capacity: classForm.value.capacity,
-          booked: classForm.value.booked,
-        },
+        body: isAdmin.value
+          ? {
+              name: classForm.value.name,
+              room: classForm.value.room,
+              startMinutes: toMinutes(classForm.value.start),
+              endMinutes: toMinutes(classForm.value.end),
+              capacity: classForm.value.capacity,
+              booked: classForm.value.booked,
+            }
+          : {
+              /// El gerente solo escribe el horario/sala de su propia sede.
+              branchTime: {
+                branchId: session.value?.branchId,
+                startMinutes: toMinutes(classForm.value.start),
+                endMinutes: toMinutes(classForm.value.end),
+                room: classForm.value.room,
+              },
+            },
       },
     );
     const index = detail.value.classes.findIndex((c) => c.id === updated.id);
@@ -299,7 +330,7 @@ async function runToggleDuty(): Promise<void> {
           Información
         </h2>
         <button
-          v-if="!editing"
+          v-if="!editing && canManageTrainer"
           class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
           @click="startEdit"
         >
@@ -330,8 +361,14 @@ async function runToggleDuty(): Promise<void> {
               v-for="bid in detail.trainer.branchIds"
               :key="bid"
               type="button"
-              class="cursor-pointer rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-bold text-text-muted transition hover:border-accent hover:text-accent"
-              @click="navigateTo(`/sedes/${bid}`)"
+              :disabled="!canViewBranches"
+              class="rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-bold text-text-muted transition"
+              :class="
+                canViewBranches
+                  ? 'cursor-pointer hover:border-accent hover:text-accent'
+                  : 'cursor-default'
+              "
+              @click="canViewBranches && navigateTo(`/sedes/${bid}`)"
             >
               {{ branchName(bid) }}
             </button>
@@ -350,13 +387,16 @@ async function runToggleDuty(): Promise<void> {
             En turno
           </p>
           <button
-            class="relative mt-1 h-6 w-11 rounded-full transition"
+            :disabled="!isAtMyBranch(detail.trainer.branchIds)"
+            class="relative mt-1 h-6 w-11 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60"
             :class="
               detail.trainer.isOnDuty
                 ? 'bg-accent'
                 : 'bg-base border border-stroke'
             "
-            @click="dutyModalOpen = true"
+            @click="
+              isAtMyBranch(detail.trainer.branchIds) && (dutyModalOpen = true)
+            "
           >
             <span
               class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
@@ -464,8 +504,11 @@ async function runToggleDuty(): Promise<void> {
           class="rounded-2xl border border-stroke bg-surface p-4"
         >
           <template v-if="editingClassId === gymClass.id">
+            <p v-if="!isAdmin" class="mb-2 text-[11px] font-semibold text-text-dim">
+              Solo puedes ajustar el horario y la sala de tu sede.
+            </p>
             <div class="grid grid-cols-2 gap-3">
-              <label class="block">
+              <label v-if="isAdmin" class="block">
                 <span
                   class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
                 >
@@ -481,7 +524,7 @@ async function runToggleDuty(): Promise<void> {
                 <span
                   class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
                 >
-                  Sala
+                  Sala{{ isAdmin ? '' : ' (mi sede)' }}
                 </span>
                 <input
                   v-model="classForm.room"
@@ -513,7 +556,7 @@ async function runToggleDuty(): Promise<void> {
                   class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                 />
               </label>
-              <label class="block">
+              <label v-if="isAdmin" class="block">
                 <span
                   class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
                 >
@@ -526,7 +569,7 @@ async function runToggleDuty(): Promise<void> {
                   class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                 />
               </label>
-              <label class="block">
+              <label v-if="isAdmin" class="block">
                 <span
                   class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
                 >
@@ -616,6 +659,7 @@ async function runToggleDuty(): Promise<void> {
                 </div>
               </div>
               <button
+                v-if="isAtMyBranch(gymClass.branchIds)"
                 class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-accent hover:text-accent"
                 title="Editar clase"
                 @click="startEditClass(gymClass)"

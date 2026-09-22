@@ -2,6 +2,13 @@
 import { Activity, Clock3, Flame, Users } from '@lucide/vue';
 
 const { data, pending, start, stop, adjust } = useDashboard();
+const { session } = useAuth();
+
+/// Admin puede ajustar cualquier sede; gerente/recepcionista solo la suya.
+function canAdjust(branchId: string): boolean {
+  const own = session.value?.branchId;
+  return !own || branchId === own;
+}
 
 onMounted(() => start());
 onBeforeUnmount(() => stop());
@@ -82,6 +89,7 @@ const branches = computed(() => data.value?.branches ?? []);
           v-for="branch in branches"
           :key="branch.id"
           :branch="branch"
+          :can-adjust="canAdjust(branch.id)"
           @adjust="(delta: number) => adjust(branch.id, delta)"
         />
       </div>

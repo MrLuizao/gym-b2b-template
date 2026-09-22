@@ -10,6 +10,9 @@ import {
 
 import type { Branch, ClassSchedule } from '#shared/types';
 
+const { session, canEditBranch } = useAuth();
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
+
 const branches = ref<Branch[]>([]);
 const classes = ref<ClassSchedule[]>([]);
 const pending = ref(true);
@@ -319,6 +322,7 @@ function submitBranch(): void {
           Sedes
         </h2>
         <button
+          v-if="isAdmin"
           class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
           @click="createModalOpen = true"
         >
@@ -414,16 +418,21 @@ function submitBranch(): void {
               </td>
               <td class="px-5 py-3 text-right">
                 <button
-                  class="relative inline-flex h-6 w-11 cursor-pointer rounded-full align-middle transition"
+                  :disabled="!canEditBranch(branch.id)"
+                  class="relative inline-flex h-6 w-11 rounded-full align-middle transition disabled:cursor-not-allowed disabled:opacity-50"
                   :class="
                     branch.status === 'OPEN'
                       ? 'bg-accent'
                       : 'bg-base border border-stroke'
                   "
                   :title="
-                    branch.status === 'OPEN' ? 'Cerrar sede' : 'Abrir sede'
+                    canEditBranch(branch.id)
+                      ? branch.status === 'OPEN'
+                        ? 'Cerrar sede'
+                        : 'Abrir sede'
+                      : 'Solo el admin o el gerente de esta sede'
                   "
-                  @click="toggleBranchStatus(branch)"
+                  @click="canEditBranch(branch.id) && toggleBranchStatus(branch)"
                 >
                   <span
                     class="absolute top-0.5 h-5 w-5 rounded-full transition-all"

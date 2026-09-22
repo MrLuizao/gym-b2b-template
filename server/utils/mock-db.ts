@@ -433,6 +433,13 @@ function createMockDb(): MockDb {
         endMinutes: 7 * 60,
         capacity: 24,
         booked: 19,
+        branchTimes: {
+          centro: {
+            startMinutes: 8 * 60 + 30,
+            endMinutes: 9 * 60 + 30,
+            room: 'Sala Cycle 2',
+          },
+        },
       },
       {
         id: 'cl2',
@@ -466,6 +473,13 @@ function createMockDb(): MockDb {
         endMinutes: 19 * 60,
         capacity: 26,
         booked: 26,
+        branchTimes: {
+          carranza: {
+            startMinutes: 19 * 60 + 30,
+            endMinutes: 20 * 60 + 30,
+            room: 'Sala Power 2',
+          },
+        },
       },
       {
         id: 'cl4b',

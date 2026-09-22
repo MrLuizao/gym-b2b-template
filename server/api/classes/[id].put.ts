@@ -1,4 +1,4 @@
-import type { ClassSchedule } from '#shared/types';
+import type { ClassBranchTime, ClassSchedule } from '#shared/types';
 import { useMockDb } from '../../utils/mock-db';
 
 export default defineEventHandler(async (event): Promise<ClassSchedule> => {
@@ -37,6 +37,37 @@ export default defineEventHandler(async (event): Promise<ClassSchedule> => {
   }
   if (typeof body.booked === 'number' && body.booked >= 0) {
     gymClass.booked = Math.min(body.booked, gymClass.capacity);
+  }
+
+  const branchTime = (
+    body as Partial<ClassSchedule> & {
+      branchTime?: { branchId?: string } & Partial<ClassBranchTime>;
+    }
+  ).branchTime;
+  if (
+    branchTime &&
+    typeof branchTime.branchId === 'string' &&
+    gymClass.branchIds.includes(branchTime.branchId) &&
+    typeof branchTime.startMinutes === 'number' &&
+    typeof branchTime.endMinutes === 'number' &&
+    typeof branchTime.room === 'string' &&
+    branchTime.room.trim()
+  ) {
+    gymClass.branchTimes = {
+      ...gymClass.branchTimes,
+      [branchTime.branchId]: {
+        startMinutes: Math.min(1439, Math.max(0, Math.round(branchTime.startMinutes))),
+        endMinutes: Math.min(1440, Math.max(1, Math.round(branchTime.endMinutes))),
+        room: branchTime.room.trim(),
+      },
+    };
+  }
+
+  /// Overrides de sedes que ya no imparten la clase se descartan.
+  if (gymClass.branchTimes) {
+    for (const key of Object.keys(gymClass.branchTimes)) {
+      if (!gymClass.branchIds.includes(key)) delete gymClass.branchTimes[key];
+    }
   }
 
   return gymClass;

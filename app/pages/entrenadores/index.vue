@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { Branch, Trainer } from '#shared/types';
 
+const { session, isAtMyBranch } = useAuth();
+const canViewBranches = computed(() =>
+  canAccess(session.value?.role, '/sedes'),
+);
+
 const branches = ref<Branch[]>([]);
 const trainers = ref<Trainer[]>([]);
 const pending = ref(true);
@@ -125,8 +130,14 @@ async function runToggleDuty(): Promise<void> {
               v-for="bid in trainer.branchIds"
               :key="bid"
               type="button"
-              class="cursor-pointer rounded-full border border-stroke bg-base px-2 py-0.5 text-[9px] font-bold text-text-dim transition hover:border-accent hover:text-accent"
-              @click="navigateTo(`/sedes/${bid}`)"
+              :disabled="!canViewBranches"
+              class="rounded-full border border-stroke bg-base px-2 py-0.5 text-[9px] font-bold text-text-dim transition"
+              :class="
+                canViewBranches
+                  ? 'cursor-pointer hover:border-accent hover:text-accent'
+                  : 'cursor-default'
+              "
+              @click="canViewBranches && navigateTo(`/sedes/${bid}`)"
             >
               {{ branchName(bid) }}
             </button>
@@ -138,7 +149,8 @@ async function runToggleDuty(): Promise<void> {
         >
           <span class="text-[11px] font-bold text-text-muted">En turno</span>
           <button
-            class="relative h-6 w-11 rounded-full transition"
+            :disabled="!isAtMyBranch(trainer.branchIds)"
+            class="relative h-6 w-11 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60"
             :class="
               trainer.isOnDuty ? 'bg-accent' : 'bg-base border border-stroke'
             "
@@ -147,7 +159,10 @@ async function runToggleDuty(): Promise<void> {
                 ? 'Marcar como fuera de turno'
                 : 'Marcar en turno'
             "
-            @click="confirmToggleDuty(trainer)"
+            @click="
+              isAtMyBranch(trainer.branchIds) &&
+              confirmToggleDuty(trainer)
+            "
           >
             <span
               class="absolute top-0.5 h-5 w-5 rounded-full transition-all"

@@ -14,44 +14,114 @@ import {
   ScanLine,
   Users,
 } from '@lucide/vue';
+import type { Component } from 'vue';
+import type { StaffRole } from '~/composables/useAuth';
 
 const route = useRoute();
 const { session, logout } = useAuth();
 
 const logoutConfirmOpen = ref(false);
 
-const navGroups = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: Component;
+  roles: StaffRole[];
+};
+
+const navGroups: { label: string | null; items: NavItem[] }[] = [
   {
     label: null,
     items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/recepcion', label: 'Recepción', icon: ScanLine },
+      {
+        to: '/',
+        label: 'Dashboard',
+        icon: LayoutDashboard,
+        roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
+      },
+      {
+        to: '/recepcion',
+        label: 'Recepción',
+        icon: ScanLine,
+        roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
+      },
     ],
   },
   {
     label: 'Operación',
     items: [
-      { to: '/sedes', label: 'Sedes', icon: MapPin },
-      { to: '/clases', label: 'Clases', icon: CalendarDays },
-      { to: '/entrenadores', label: 'Entrenadores', icon: Medal },
+      {
+        to: '/sedes',
+        label: 'Sedes',
+        icon: MapPin,
+        roles: ['ADMIN', 'MANAGER'],
+      },
+      {
+        to: '/clases',
+        label: 'Clases',
+        icon: CalendarDays,
+        roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
+      },
+      {
+        to: '/entrenadores',
+        label: 'Entrenadores',
+        icon: Medal,
+        roles: ['ADMIN', 'MANAGER'],
+      },
     ],
   },
   {
     label: 'Miembros',
     items: [
-      { to: '/socios', label: 'Socios', icon: Users },
-      { to: '/membresias', label: 'Membresías', icon: CreditCard },
+      {
+        to: '/socios',
+        label: 'Socios',
+        icon: Users,
+        roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
+      },
+      {
+        to: '/membresias',
+        label: 'Membresías',
+        icon: CreditCard,
+        roles: ['ADMIN'],
+      },
     ],
   },
   {
     label: 'Comercial',
     items: [
-      { to: '/publicidad', label: 'Publicidad', icon: Handshake },
-      { to: '/cms', label: 'CMS & Push', icon: Megaphone },
-      { to: '/reportes', label: 'Reportes', icon: BarChart3 },
+      {
+        to: '/publicidad',
+        label: 'Publicidad',
+        icon: Handshake,
+        roles: ['ADMIN'],
+      },
+      {
+        to: '/cms',
+        label: 'CMS & Push',
+        icon: Megaphone,
+        roles: ['ADMIN'],
+      },
+      {
+        to: '/reportes',
+        label: 'Reportes',
+        icon: BarChart3,
+        roles: ['ADMIN', 'MANAGER'],
+      },
     ],
   },
 ];
+
+const visibleGroups = computed(() =>
+  navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        item.roles.includes(session.value?.role ?? 'RECEPTIONIST'),
+      ),
+    }))
+    .filter((group) => group.items.length > 0),
+);
 
 const navItems = navGroups.flatMap((group) => group.items);
 
@@ -83,7 +153,7 @@ const pageTitle = computed(() => {
       </div>
 
       <nav class="flex-1 space-y-5 overflow-y-auto px-3 py-5">
-        <div v-for="group in navGroups" :key="group.label ?? 'main'">
+        <div v-for="group in visibleGroups" :key="group.label ?? 'main'">
           <p
             v-if="group.label"
             class="mb-1.5 px-3 text-[9px] font-black uppercase tracking-[0.2em] text-text-dim"
@@ -142,7 +212,8 @@ const pageTitle = computed(() => {
           <span
             class="hidden rounded-full border border-stroke bg-base px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-text-muted sm:inline-block"
           >
-            Sede: Select
+            {{ ROLE_LABELS[session?.role ?? 'RECEPTIONIST']
+            }}{{ session?.branchName ? ` · ${session.branchName}` : '' }}
           </span>
           <button
             class="relative rounded-full border border-stroke bg-white/5 p-2 text-text-muted transition hover:text-text-primary"

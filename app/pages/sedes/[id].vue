@@ -4,11 +4,21 @@ import { ArrowLeft, Check, MapPin, Pencil, Plus, Trash2, UserPlus, X } from '@lu
 import type { Branch, BranchDetail, ClassSchedule, MemberAdmin, Trainer } from '#shared/types';
 
 const route = useRoute();
+const { session, canEditBranch } = useAuth();
 const detail = ref<BranchDetail | null>(null);
 const branches = ref<Branch[]>([]);
 const pending = ref(true);
 const saving = ref(false);
 const editing = ref(false);
+
+/// Admin gestiona cualquier sede; gerente solo la suya.
+const canManageBranch = computed(() =>
+  detail.value ? canEditBranch(detail.value.branch.id) : false,
+);
+
+/// Solo el admin toca datos globales de la clase (nombre, coach, capacidad);
+/// el gerente solo configura horario y sala de su sede.
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
 const editForm = ref({
   name: '',
@@ -142,18 +152,19 @@ const classChanges = computed<string[]>(() => {
   const c = editingClass.value;
   if (!c) return [];
   const changes: string[] = [];
+  const local = classTime(c);
   if (classForm.value.name !== c.name)
     changes.push(`Nombre: '${c.name}' → '${classForm.value.name}'`);
   if (classForm.value.coach !== c.coach)
     changes.push(`Coach: ${c.coach} → ${classForm.value.coach}`);
-  if (classForm.value.room !== c.room)
-    changes.push(`Sala: ${c.room} → ${classForm.value.room}`);
+  if (classForm.value.room !== local.room)
+    changes.push(`Sala: ${local.room} → ${classForm.value.room}`);
   if (
-    toMinutes(classForm.value.start) !== c.startMinutes ||
-    toMinutes(classForm.value.end) !== c.endMinutes
+    toMinutes(classForm.value.start) !== local.startMinutes ||
+    toMinutes(classForm.value.end) !== local.endMinutes
   )
     changes.push(
-      `Horario: ${hhmm(c.startMinutes)}–${hhmm(c.endMinutes)} → ${classForm.value.start}–${classForm.value.end}`,
+      `Horario: ${hhmm(local.startMinutes)}–${hhmm(local.endMinutes)} → ${classForm.value.start}–${classForm.value.end}`,
     );
   if (classForm.value.capacity !== c.capacity)
     changes.push(`Capacidad: ${c.capacity} → ${classForm.value.capacity}`);
@@ -252,14 +263,20 @@ async function saveBranch(): Promise<void> {
   }
 }
 
+/// Horario/sala efectivos de una clase en ESTA sede.
+function classTime(gymClass: ClassSchedule) {
+  return classTimeAt(gymClass, detail.value?.branch.id);
+}
+
 function startEditClass(gymClass: ClassSchedule): void {
+  const local = classTime(gymClass);
   editingClassId.value = gymClass.id;
   classForm.value = {
     name: gymClass.name,
     coach: gymClass.coach,
-    room: gymClass.room,
-    start: hhmm(gymClass.startMinutes),
-    end: hhmm(gymClass.endMinutes),
+    room: local.room,
+    start: hhmm(local.startMinutes),
+    end: hhmm(local.endMinutes),
     capacity: gymClass.capacity,
     booked: gymClass.booked,
   };
@@ -274,13 +291,22 @@ async function saveClass(): Promise<void> {
       {
         method: 'PUT',
         body: {
-          name: classForm.value.name,
-          coach: classForm.value.coach,
-          room: classForm.value.room,
-          startMinutes: toMinutes(classForm.value.start),
-          endMinutes: toMinutes(classForm.value.end),
-          capacity: classForm.value.capacity,
-          booked: classForm.value.booked,
+          /// Horario/sala siempre se guardan como override de esta sede.
+          branchTime: {
+            branchId: detail.value.branch.id,
+            startMinutes: toMinutes(classForm.value.start),
+            endMinutes: toMinutes(classForm.value.end),
+            room: classForm.value.room,
+          },
+          /// Datos globales solo los puede cambiar el admin.
+          ...(isAdmin.value
+            ? {
+                name: classForm.value.name,
+                coach: classForm.value.coach,
+                capacity: classForm.value.capacity,
+                booked: classForm.value.booked,
+              }
+            : {}),
         },
       },
     );
@@ -305,7 +331,8 @@ function openClassDetail(gymClass: ClassSchedule): void {
 }
 
 function classDuration(gymClass: ClassSchedule): string {
-  return `${gymClass.endMinutes - gymClass.startMinutes} min`;
+  const local = classTime(gymClass);
+  return `${local.endMinutes - local.startMinutes} min`;
 }
 
 function classFill(gymClass: ClassSchedule): number {
@@ -534,7 +561,7 @@ async function unassignTrainer(): Promise<void> {
           Información de la sede
         </h2>
         <button
-          v-if="!editing"
+          v-if="!editing && canManageBranch"
           class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
           @click="startEdit"
         >
@@ -817,6 +844,7 @@ async function unassignTrainer(): Promise<void> {
             {{ trainer.isOnDuty ? 'EN TURNO' : 'FUERA' }}
           </span>
           <button
+            v-if="canManageBranch"
             class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-red-400 hover:text-red-400"
             title="Quitar de esta sede"
             @click="confirmRemoveTrainer(trainer)"
@@ -832,7 +860,7 @@ async function unassignTrainer(): Promise<void> {
         Sin entrenadores asignados
       </p>
 
-      <div class="mt-4 flex items-center gap-3">
+      <div v-if="canManageBranch" class="mt-4 flex items-center gap-3">
         <USelectMenu
           v-model="assignTrainerId"
           :items="availableTrainerItems"
@@ -866,7 +894,7 @@ async function unassignTrainer(): Promise<void> {
             class="space-y-3"
           >
             <div class="grid grid-cols-2 gap-3">
-              <label class="block">
+              <label v-if="isAdmin" class="block">
                 <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Nombre</span>
                 <input
                   v-model="classForm.name"
@@ -874,7 +902,7 @@ async function unassignTrainer(): Promise<void> {
                   class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                 />
               </label>
-              <label class="block">
+              <label v-if="isAdmin" class="block">
                 <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Coach</span>
                 <USelectMenu
                   v-model="classForm.coach"
@@ -884,14 +912,14 @@ async function unassignTrainer(): Promise<void> {
                 />
               </label>
               <label class="block">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Sala</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Sala (esta sede)</span>
                 <input
                   v-model="classForm.room"
                   type="text"
                   class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
                 />
               </label>
-              <label class="block">
+              <label v-if="isAdmin" class="block">
                 <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Capacidad</span>
                 <input
                   v-model.number="classForm.capacity"
@@ -901,7 +929,7 @@ async function unassignTrainer(): Promise<void> {
                 />
               </label>
               <label class="block">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Inicio</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Inicio (esta sede)</span>
                 <input
                   v-model="classForm.start"
                   type="time"
@@ -909,7 +937,7 @@ async function unassignTrainer(): Promise<void> {
                 />
               </label>
               <label class="block">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Fin</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Fin (esta sede)</span>
                 <input
                   v-model="classForm.end"
                   type="time"
@@ -953,10 +981,10 @@ async function unassignTrainer(): Promise<void> {
                 class="shrink-0 rounded-xl border border-stroke bg-base px-2.5 py-1.5 text-center"
               >
                 <p class="font-mono text-[11px] font-black text-accent">
-                  {{ hhmm(gymClass.startMinutes) }}
+                  {{ hhmm(classTime(gymClass).startMinutes) }}
                 </p>
                 <p class="font-mono text-[9px] text-text-dim">
-                  {{ hhmm(gymClass.endMinutes) }}
+                  {{ hhmm(classTime(gymClass).endMinutes) }}
                 </p>
               </div>
               <div class="min-w-0">
@@ -966,7 +994,7 @@ async function unassignTrainer(): Promise<void> {
                   {{ gymClass.name }}
                 </p>
                 <p class="truncate text-[10px] text-text-dim">
-                  {{ gymClass.coach }} · {{ gymClass.room }} ·
+                  {{ gymClass.coach }} · {{ classTime(gymClass).room }} ·
                   {{ classDuration(gymClass) }}
                 </p>
               </div>
@@ -975,6 +1003,7 @@ async function unassignTrainer(): Promise<void> {
               {{ gymClass.booked }}/{{ gymClass.capacity }} cupos
             </span>
             <button
+              v-if="canManageBranch"
               class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-accent hover:text-accent"
               title="Editar clase"
               @click.stop="startEditClass(gymClass)"
@@ -982,6 +1011,7 @@ async function unassignTrainer(): Promise<void> {
               <Pencil class="h-3 w-3" />
             </button>
             <button
+              v-if="canManageBranch"
               class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-stroke text-red-400 transition hover:border-red-400"
               title="Quitar de esta sede"
               @click.stop="confirmRemoveClass(gymClass)"
@@ -999,7 +1029,7 @@ async function unassignTrainer(): Promise<void> {
         Sin clases en esta sede
       </p>
 
-      <div class="mt-4 flex items-center gap-3">
+      <div v-if="canManageBranch" class="mt-4 flex items-center gap-3">
         <USelectMenu
           v-model="assignClassId"
           :items="availableClassItems"
@@ -1135,6 +1165,7 @@ async function unassignTrainer(): Promise<void> {
             "
           />
           <UButton
+            v-if="canManageBranch"
             label="Quitar de la sede"
             color="error"
             variant="soft"
@@ -1183,8 +1214,8 @@ async function unassignTrainer(): Promise<void> {
                 Horario
               </p>
               <p class="mt-1 text-sm font-black text-text-primary">
-                {{ hhmm(selectedClass.startMinutes) }} –
-                {{ hhmm(selectedClass.endMinutes) }}
+                {{ hhmm(classTime(selectedClass).startMinutes) }} –
+                {{ hhmm(classTime(selectedClass).endMinutes) }}
                 <span class="text-[10px] font-semibold text-text-dim">
                   ({{ classDuration(selectedClass) }})
                 </span>
@@ -1207,7 +1238,7 @@ async function unassignTrainer(): Promise<void> {
                 Sala
               </p>
               <p class="mt-1 text-sm font-black text-text-primary">
-                {{ selectedClass.room }}
+                {{ classTime(selectedClass).room }}
               </p>
             </div>
             <div>
@@ -1282,6 +1313,7 @@ async function unassignTrainer(): Promise<void> {
             "
           />
           <UButton
+            v-if="canManageBranch"
             label="Editar clase"
             icon="i-lucide-pencil"
             @click="editSelectedClass"
