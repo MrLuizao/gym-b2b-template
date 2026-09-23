@@ -111,10 +111,19 @@ service cloud.firestore {
       // Firestore rechaza la query completa (las reglas no filtran).
       allow list: if isStaff();
 
+      // self-create (registro social en la app): solo campos de perfil —
+      // membresía, número de socio, QR y punteros de check-in quedan
+      // reservados a staff/Admin SDK.
       allow create: if isAdmin()
         || ((isManager() || isReceptionist())
             && request.resource.data.branch_id == staffBranch())
-        || request.auth.uid == uid;
+        || (signedIn() && request.auth.uid == uid
+            && !request.resource.data.keys().hasAny(
+                 ['membership_status', 'membership_plan_id',
+                  'membership_until', 'member_number', 'qr_code',
+                  'stripe_customer_id', 'last_checkin_at',
+                  'active_checkin_id', 'active_checkin_branch',
+                  'active_checkin_at']));
 
       // membership_*, member_number, qr_code, stripe_customer_id,
       // last_checkin_at: jamás escritos por clientes → solo functions.
@@ -132,7 +141,7 @@ service cloud.firestore {
                  .affectedKeys()
                  .hasOnly(['photo_url', 'phone', 'first_name', 'middle_name',
                            'paternal_last_name', 'maternal_last_name',
-                           'sex', 'birth_date']));
+                           'sex', 'birth_date', 'branch_id']));
 
       allow delete: if isAdmin();
 
