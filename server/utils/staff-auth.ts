@@ -44,6 +44,24 @@ export async function requireStaff(event: H3Event): Promise<StaffContext> {
   };
 }
 
+/// Verifica el Bearer token de Firebase Auth — cualquier usuario válido
+/// (socio de la app), sin requerir doc en /staff.
+export async function requireUser(
+  event: H3Event,
+): Promise<{ uid: string; email: string }> {
+  const header = getHeader(event, 'authorization') ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) {
+    throw createError({ statusCode: 401, message: 'Token requerido' });
+  }
+  try {
+    const decoded = await useAdmin().auth.verifyIdToken(token);
+    return { uid: decoded.uid, email: decoded.email ?? '' };
+  } catch {
+    throw createError({ statusCode: 401, message: 'Token inválido' });
+  }
+}
+
 export function requireAdmin(staff: StaffContext) {
   if (staff.role !== 'ADMIN') {
     throw createError({ statusCode: 403, message: 'Solo admin global' });

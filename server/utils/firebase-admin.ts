@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 
 /// Admin SDK — el servidor Nuxt ES el backend (bypasea security rules).
 /// Credenciales: env FIREBASE_SERVICE_ACCOUNT (JSON) o service-account.json
@@ -20,5 +21,10 @@ export function useAdmin() {
   const app =
     getApps()[0] ??
     initializeApp({ credential: cert(loadServiceAccount()) });
-  return { app, db: getFirestore(app), auth: getAuth(app) };
+  return {
+    app,
+    db: getFirestore(app),
+    auth: getAuth(app),
+    messaging: getMessaging(app),
+  };
 }

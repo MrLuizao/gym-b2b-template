@@ -19,6 +19,7 @@
     "firebase-admin": "^12.7.0",
     "html5-qrcode": "^2.3.8",
     "nuxt": "^4.5.2",
+    "stripe": "^22.6.2",
     "tailwindcss": "^4.3.3",
     "vue": "^3.5.0",
     "vue-router": "4.5"
