@@ -31,7 +31,7 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
 export const ROLE_ROUTES: Record<StaffRole, string[]> = {
   ADMIN: ['*'],
   MANAGER: ['*'],
-  RECEPTIONIST: ['/', '/recepcion', '/socios', '/clases', '/entrenadores'],
+  RECEPTIONIST: ['/', '/recepcion', '/socios', '/clases', '/entrenadores', '/membresias'],
 };
 
 export const ROLE_HOME: Record<StaffRole, string> = {
