@@ -83,7 +83,8 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
         to: '/membresias',
         label: 'Membresías',
         icon: CreditCard,
-        roles: ['ADMIN', 'MANAGER'],
+        // Recepción ve el catálogo (read-only) para cotizar altas.
+        roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
       },
     ],
   },
