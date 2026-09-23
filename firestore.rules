@@ -38,6 +38,15 @@ service cloud.firestore {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
+    /// ¿El doc /users/{memberDocId} pertenece al auth actual? — por id
+    /// directo o por auth_uid (socios dados de alta en recepción que
+    /// reclamaron su número desde la app).
+    function isSelfDoc(memberDocId) {
+      return signedIn()
+        && (request.auth.uid == memberDocId
+            || get(/databases/$(database)/documents/users/$(memberDocId))
+                 .data.auth_uid == request.auth.uid);
+    }
 
     // ═══════════════ CONFIG DE MARCA ═══════════════
 
@@ -102,30 +111,26 @@ service cloud.firestore {
 
     // ═══════════════ SOCIOS ═══════════════
 
+    // El socio se ubica por doc id (seed) o por auth_uid (reclamo en app).
+    function isSelf() {
+      return signedIn()
+        && (request.auth.uid == uid
+            || resource.data.auth_uid == request.auth.uid);
+    }
+
     match /users/{uid} {
-      // self-get sin exigir que el doc exista — la app necesita saber
-      // si ya hay perfil para mandar a "completar registro".
-      allow get: if (signedIn() && request.auth.uid == uid)
-        || isAdmin()
+      allow get: if isSelf() || isAdmin()
         || ((isManager() || isReceptionist())
             && resource.data.branch_id == staffBranch());
-      // list: la query DEBE filtrar branch_id == su sede; sin ese filtro
-      // Firestore rechaza la query completa (las reglas no filtran).
-      allow list: if isStaff();
+      // list: staff lista por sede; el socio solo puede traerse el doc
+      // cuyo auth_uid es el suyo (el where auth_uid==uid lo garantiza).
+      allow list: if isStaff()
+        || (signedIn() && resource.data.auth_uid == request.auth.uid);
 
-      // self-create (registro social en la app): solo campos de perfil —
-      // membresía, número de socio, QR y punteros de check-in quedan
-      // reservados a staff/Admin SDK.
+      // Alta solo en recepción (B2B) — la app no crea docs de socio.
       allow create: if isAdmin()
         || ((isManager() || isReceptionist())
-            && request.resource.data.branch_id == staffBranch())
-        || (signedIn() && request.auth.uid == uid
-            && !request.resource.data.keys().hasAny(
-                 ['membership_status', 'membership_plan_id',
-                  'membership_until', 'member_number', 'qr_code',
-                  'stripe_customer_id', 'last_checkin_at',
-                  'active_checkin_id', 'active_checkin_branch',
-                  'active_checkin_at']));
+            && request.resource.data.branch_id == staffBranch());
 
       // membership_*, member_number, qr_code, stripe_customer_id,
       // last_checkin_at: jamás escritos por clientes → solo functions.
@@ -138,7 +143,7 @@ service cloud.firestore {
                  .hasAny(['membership_status', 'membership_plan_id',
                           'membership_until', 'member_number', 'qr_code',
                           'stripe_customer_id', 'last_checkin_at']))
-        || (isMember() && request.auth.uid == uid
+        || (isSelf()
             && request.resource.data.diff(resource.data)
                  .affectedKeys()
                  .hasOnly(['photo_url', 'phone', 'first_name', 'middle_name',
@@ -148,8 +153,10 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /coupons/{couponId} {
-        allow read: if (isMember() && request.auth.uid == uid) || isStaff();
-        allow create, update: if isMember() && request.auth.uid == uid;
+        // El doc padre puede estar bajo auth_uid (reclamo) — por eso
+        // va por get() y no por resource.
+        allow read: if isSelfDoc(uid) || isStaff();
+        allow create, update: if isSelfDoc(uid);
         allow delete: if isAdmin();
       }
     }
