@@ -1,5 +1,3 @@
-import { httpsCallable } from 'firebase/functions';
-
 import type { CheckInRecord, CheckInResult } from '#shared/types';
 
 const REASON_LABELS: Record<string, string> = {
@@ -33,7 +31,6 @@ function parseScan(raw: string): ParsedScan {
 }
 
 export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
-  const firebase = useFirebase();
   const recent = ref<CheckInRecord[]>([]);
   const lastResult = ref<CheckInResult | null>(null);
   const submitting = ref(false);
@@ -65,26 +62,12 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
     }
   }
 
+  /// Todo pasa por el REST /api/checkin — resuelve por member_number
+  /// (lector USB, número tecleado o QR de la app) y verifica la firma
+  /// en modo QR. La rama de callable esperaba QR firmados heredados y
+  /// rechazaba el número plano antes de llegar al backend.
   async function dispatch(code: string): Promise<CheckInResult> {
     const parsed = parseScan(code);
-
-    if (firebase.enabled && firebase.functions) {
-      if (parsed.mode !== 'signed') {
-        return { granted: false, reason: 'QR_INVALID' };
-      }
-      const checkIn = httpsCallable<
-        { userId: string; branchId: string },
-        CheckInResult
-      >(firebase.functions, 'onCheckIn');
-      try {
-        const response = await checkIn({ userId: parsed.uid, branchId: toValue(branchId) });
-        return response.data;
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : 'QR_INVALID';
-        return { granted: false, reason: message };
-      }
-    }
-
     const branch = toValue(branchId);
     return $api<CheckInResult>('/api/checkin', {
       method: 'POST',
