@@ -119,16 +119,25 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow get: if isSelf() || isAdmin()
+      // Propio doc por id — allow aparte: en un doc inexistente
+      // `resource` es null y cualquier acceso a resource.data rompe la
+      // evaluación completa, así que este check nunca debe mezclarse
+      // con condiciones que lean resource.
+      allow get: if signedIn() && request.auth.uid == uid;
+      // Doc reclamado vía auth_uid, o staff con scope de su sede.
+      allow get: if (signedIn()
+            && resource.data.auth_uid == request.auth.uid)
+        || isAdmin()
         || ((isManager() || isReceptionist())
             && resource.data.branch_id == staffBranch());
       // list: staff lista por sede; el socio puede escuchar su propio
       // doc — por id directo (seed: users/{authUid}) o por auth_uid
       // (reclamo: where auth_uid==uid lo garantiza). Un listener de
       // documento se evalúa contra `list`, no `get`.
-      allow list: if isStaff()
-        || (signedIn() && request.auth.uid == uid)
-        || (signedIn() && resource.data.auth_uid == request.auth.uid);
+      allow list: if isStaff();
+      allow list: if signedIn() && request.auth.uid == uid;
+      allow list: if signedIn()
+        && resource.data.auth_uid == request.auth.uid;
 
       // Alta solo en recepción (B2B) — la app no crea docs de socio.
       allow create: if isAdmin()
