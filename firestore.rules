@@ -207,6 +207,17 @@ service cloud.firestore {
                  .hasOnly([staffBranch()]));
     }
 
+    // ═══════════════ RESERVAS DE CLASE ═══════════════
+    // Escritura solo backend (/api/classes/:id/book) — el contador
+    // classes.booked se mantiene ahí. El socio lee solo sus reservas;
+    // staff las lista todas.
+
+    match /bookings/{id} {
+      allow read: if isStaff()
+        || (signedIn() && resource.data.auth_uid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
     // ═══════════════ CHECK-INS (efímeros, TTL) ═══════════════
     // Escritura solo functions. Lectura: staff de la sede.
     // El socio no los lee — su última visita vive en users.last_checkin_at.

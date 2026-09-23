@@ -8,33 +8,35 @@ export default defineEventHandler(
     await requireStaff(event);
     const id = getRouterParam(event, 'id') ?? '';
 
-    const snap = await db().collection('classes').doc(id).get();
-    if (!snap.exists) {
-      throw createError({ statusCode: 404, statusMessage: 'Clase no encontrada' });
-    }
-    const gymClass = snap.data() ?? {};
-    const branchIds = (gymClass.branch_ids as string[]) ?? [];
-    const booked = Number(gymClass.booked ?? 0);
-    if (branchIds.length === 0 || booked === 0) return [];
+    /// Reservas confirmadas — el filtro de status va en código para no
+    /// exigir un índice compuesto extra (class_id + status).
+    const bookings = await db()
+      .collection('bookings')
+      .where('class_id', '==', id)
+      .get();
+    const userIds = [
+      ...new Set(
+        bookings.docs
+          .filter((b) => b.data().status === 'confirmed')
+          .map((b) => b.data().user_id as string)
+          .filter(Boolean),
+      ),
+    ];
+    if (userIds.length === 0) return [];
 
-    /// Sin modelo de reservas aún: muestra socios activos de las sedes
-    /// donde se imparte, hasta cubrir el cupo reservado (igual que el mock).
-    const [plans, snap2] = await Promise.all([
+    const [plans, memberDocs] = await Promise.all([
       allPlans(),
-      db()
-        .collection('users')
-        .where('branch_id', 'in', branchIds.slice(0, 10))
-        .where('membership_status', '==', 'ACTIVE')
-        .limit(booked)
-        .get(),
+      Promise.all(userIds.map((uid) => db().collection('users').doc(uid).get())),
     ]);
-    return snap2.docs.map((d) => {
-      const m = toMember(d);
-      return {
-        ...m,
-        membershipType:
-          plans.find((p) => p.id === m.membershipPlanId)?.name ?? 'Sin plan',
-      };
-    });
+    return memberDocs
+      .filter((d) => d.exists)
+      .map((d) => {
+        const m = toMember(d);
+        return {
+          ...m,
+          membershipType:
+            plans.find((p) => p.id === m.membershipPlanId)?.name ?? 'Sin plan',
+        };
+      });
   },
 );
