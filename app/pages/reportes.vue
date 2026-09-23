@@ -44,6 +44,21 @@ const paymentsReport = ref<PaymentsReport | null>(null);
 const checkInsReport = ref<CheckInsReport | null>(null);
 const adsReport = ref<AdsReportResponse | null>(null);
 
+/// Las cards "Recaudado por plan" filtran la tabla de detalle de pagos.
+const paymentPlanFilter = ref('todos');
+
+const filteredPayments = computed(() => {
+  const report = paymentsReport.value;
+  if (!report) return [];
+  if (paymentPlanFilter.value === 'todos') return report.payments;
+  return report.payments.filter((p) => p.plan === paymentPlanFilter.value);
+});
+
+function togglePaymentPlan(plan: string): void {
+  paymentPlanFilter.value =
+    paymentPlanFilter.value === plan ? 'todos' : plan;
+}
+
 onMounted(async () => {
   try {
     branches.value = await $fetch<Branch[]>('/api/branches');
@@ -69,6 +84,17 @@ function applyPreset(days: number): void {
   toDate.value = toInputDate(end);
 }
 
+/// El chip queda marcado solo si el rango actual coincide exactamente con el preset.
+const activePreset = computed<number | null>(() => {
+  if (toDate.value !== toInputDate(new Date())) return null;
+  for (const days of [0, 7, 30]) {
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    if (fromDate.value === toInputDate(start)) return days;
+  }
+  return null;
+});
+
 function rangeMs(): { from: number; to: number } {
   const from = fromDate.value ? new Date(`${fromDate.value}T00:00:00`).getTime() : 0;
   const to = toDate.value ? new Date(`${toDate.value}T23:59:59`).getTime() : Date.now();
@@ -78,6 +104,7 @@ function rangeMs(): { from: number; to: number } {
 async function generate(): Promise<void> {
   if (generating.value) return;
   generating.value = true;
+  paymentPlanFilter.value = 'todos';
   const { from, to } = rangeMs();
   const qs = `from=${from}&to=${to}&branchId=${selectedBranch.value}`;
   try {
@@ -137,7 +164,7 @@ function exportCsv(): void {
     filename = 'reporte-pagos.csv';
     rows = [
       ['Socio', 'Nº socio', 'Plan', 'Sede', 'Método', 'Monto (MXN)', 'Estado', 'Fecha'],
-      ...paymentsReport.value.payments.map((p) => [
+      ...filteredPayments.value.map((p) => [
         p.memberName,
         p.memberNumber ?? '',
         p.plan,
@@ -267,7 +294,12 @@ function exportCsv(): void {
             { label: '30 días', days: 30 },
           ]"
           :key="preset.days"
-          class="cursor-pointer rounded-full border border-stroke bg-base px-3 py-1 text-[10px] font-bold text-text-muted transition hover:border-accent hover:text-accent"
+          class="cursor-pointer rounded-full border px-3 py-1 text-[10px] font-bold transition"
+          :class="
+            activePreset === preset.days
+              ? 'border-sky-400 bg-sky-400/15 text-sky-400'
+              : 'border-stroke bg-base text-text-muted hover:border-sky-400/60 hover:text-sky-400'
+          "
           @click="applyPreset(preset.days)"
         >
           {{ preset.label }}
@@ -355,10 +387,17 @@ function exportCsv(): void {
           Recaudado por plan
         </h2>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div
+          <button
             v-for="row in paymentsReport.stats.byPlan"
             :key="row.plan"
-            class="flex items-center justify-between rounded-2xl border border-stroke bg-surface px-4 py-3"
+            type="button"
+            class="flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 transition"
+            :class="
+              paymentPlanFilter === row.plan
+                ? 'border-accent bg-accent/10'
+                : 'border-stroke bg-surface hover:border-accent/50'
+            "
+            @click="togglePaymentPlan(row.plan)"
           >
             <UBadge
               :color="planColor(row.plan)"
@@ -372,8 +411,15 @@ function exportCsv(): void {
               </p>
               <p class="text-[10px] text-text-dim">{{ row.count }} pagos</p>
             </div>
-          </div>
+          </button>
         </div>
+        <p
+          v-if="paymentPlanFilter !== 'todos'"
+          class="mt-2 text-[10px] font-semibold text-text-dim"
+        >
+          Filtrando por {{ paymentPlanFilter }} — toca la card de nuevo para ver
+          todos.
+        </p>
       </section>
 
       <section>
@@ -408,7 +454,7 @@ function exportCsv(): void {
             </thead>
             <tbody>
               <tr
-                v-for="payment in paymentsReport.payments"
+                v-for="payment in filteredPayments"
                 :key="payment.id"
                 class="border-t border-stroke"
               >
@@ -472,10 +518,14 @@ function exportCsv(): void {
             </tbody>
           </table>
           <p
-            v-if="paymentsReport.payments.length === 0"
+            v-if="filteredPayments.length === 0"
             class="py-8 text-center text-xs font-semibold text-text-dim"
           >
-            Sin pagos en el rango seleccionado
+            {{
+              paymentPlanFilter === 'todos'
+                ? 'Sin pagos en el rango seleccionado'
+                : `Sin pagos del plan ${paymentPlanFilter}`
+            }}
           </p>
         </div>
       </section>
@@ -516,26 +566,6 @@ function exportCsv(): void {
           </p>
         </div>
       </div>
-
-      <section v-if="checkInsReport.stats.byBranch.length">
-        <h2
-          class="mb-3 text-sm font-black uppercase tracking-widest text-text-muted"
-        >
-          Check-ins por sede
-        </h2>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div
-            v-for="row in checkInsReport.stats.byBranch"
-            :key="row.branchId"
-            class="flex items-center justify-between rounded-2xl border border-stroke bg-surface px-4 py-3"
-          >
-            <span class="text-xs font-bold text-text-primary">
-              {{ branchName(row.branchId) }}
-            </span>
-            <span class="text-sm font-black text-accent">{{ row.count }}</span>
-          </div>
-        </div>
-      </section>
 
       <section>
         <div class="mb-3 flex items-center justify-between">

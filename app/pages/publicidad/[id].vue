@@ -2,14 +2,18 @@
 import {
   Activity,
   ArrowLeft,
+  BatteryFull,
   Check,
+  Dumbbell,
   Eye,
   ImageUp,
   MousePointerClick,
   Pause,
   Pencil,
   Play,
+  Signal,
   Trash2,
+  Wifi,
   X,
 } from '@lucide/vue';
 
@@ -366,24 +370,36 @@ async function removeAd(): Promise<void> {
           </span>
         </p>
       </div>
-      <button
-        v-if="isAdmin"
-        type="button"
-        class="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-4 text-[11px] font-black transition"
-        :class="
-          ad.status === 'ACTIVE'
-            ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
-            : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
-        "
-        @click="statusModalOpen = true"
-      >
-        <Pause v-if="ad.status === 'ACTIVE'" class="h-3.5 w-3.5" />
-        <Play v-else class="h-3.5 w-3.5" />
-        {{ ad.status === 'ACTIVE' ? 'Pausar' : 'Activar' }}
-      </button>
+      <div v-if="isAdmin" class="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-4 text-[11px] font-black transition"
+          :class="
+            ad.status === 'ACTIVE'
+              ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+              : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
+          "
+          @click="statusModalOpen = true"
+        >
+          <Pause v-if="ad.status === 'ACTIVE'" class="h-3.5 w-3.5" />
+          <Play v-else class="h-3.5 w-3.5" />
+          {{ ad.status === 'ACTIVE' ? 'Pausar' : 'Activar' }}
+        </button>
+        <button
+          type="button"
+          class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-red-400/40 bg-red-400/10 px-4 text-[11px] font-black text-red-400 transition hover:bg-red-400/20"
+          @click="deleteModalOpen = true"
+        >
+          <Trash2 class="h-3.5 w-3.5" />
+          Eliminar
+        </button>
+      </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div class="grid gap-6 lg:grid-cols-[3fr_2fr]">
+      <div class="space-y-6">
+
+    <div v-if="!editing" class="grid grid-cols-2 gap-4 md:grid-cols-4">
       <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
         <Eye class="mx-auto h-4 w-4 text-text-dim" />
         <p class="mt-1 text-xl font-black text-text-primary">
@@ -421,74 +437,6 @@ async function removeAd(): Promise<void> {
         </p>
       </div>
     </div>
-
-    <section>
-      <h2
-        class="mb-3 text-sm font-black uppercase tracking-widest text-text-muted"
-      >
-        Así se ve en el Home de la app
-      </h2>
-      <div
-        class="relative max-w-md overflow-hidden rounded-2xl border border-stroke bg-surface"
-      >
-        <div class="relative h-40">
-          <img
-            v-if="preview.imageUrl"
-            :src="preview.imageUrl"
-            :alt="preview.title"
-            class="h-full w-full object-cover"
-          />
-          <div
-            v-else
-            class="flex h-full w-full items-center justify-center bg-base"
-          >
-            <ImageUp class="h-5 w-5 text-text-dim" />
-          </div>
-          <div
-            class="absolute inset-0 bg-gradient-to-b from-black/20 to-transparent"
-          />
-          <div
-            class="absolute inset-x-0 bottom-0 backdrop-blur-md"
-            :style="{ backgroundColor: `${preview.brandColor}9e` }"
-          >
-            <div
-              class="flex items-center justify-between gap-2 px-3 py-2.5"
-            >
-              <div class="min-w-0">
-                <p
-                  class="text-[8px] font-black uppercase tracking-[0.14em]"
-                  :style="{ color: `${onAlly}bf` }"
-                >
-                  {{ preview.advertiser }}
-                </p>
-                <p
-                  class="truncate text-xs font-black"
-                  :style="{ color: onAlly }"
-                >
-                  {{ preview.title }}
-                </p>
-                <p
-                  class="truncate text-[10px] font-semibold"
-                  :style="{ color: `${onAlly}bf` }"
-                >
-                  {{ preview.subtitle }}
-                </p>
-              </div>
-              <span
-                class="shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black"
-                :style="{
-                  color: onAlly,
-                  borderColor: `${onAlly}8c`,
-                  backgroundColor: `${onAlly}29`,
-                }"
-              >
-                {{ preview.ctaLabel }}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <section class="rounded-2xl border border-stroke bg-surface p-5">
       <div class="flex items-center justify-between">
@@ -838,34 +786,142 @@ async function removeAd(): Promise<void> {
           </p>
           <PhotosPicker v-model="editForm.photos" />
         </div>
-        <div class="flex justify-end gap-2 pt-1">
-          <button
-            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 text-[11px] font-black text-text-muted transition hover:text-text-primary"
-            @click="editing = false"
-          >
-            <X class="h-3.5 w-3.5" />
-            Cancelar
-          </button>
-          <button
-            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-50"
-            :disabled="saving"
-            @click="confirmSave"
-          >
-            <Check class="h-3.5 w-3.5" />
-            {{ saving ? 'Guardando…' : 'Guardar' }}
-          </button>
-        </div>
       </div>
     </section>
+      </div>
 
-    <button
-      v-if="isAdmin"
-      class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-red-400/40 bg-red-400/10 text-xs font-black text-red-400 transition hover:bg-red-400/20"
-      @click="deleteModalOpen = true"
-    >
-      <Trash2 class="h-4 w-4" />
-      Eliminar anuncio
-    </button>
+      <div class="flex flex-col space-y-4">
+        <section
+          class="flex flex-1 flex-col rounded-2xl border border-stroke bg-surface p-5"
+        >
+          <h2
+            class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+          >
+            <span class="h-4 w-1 rounded-full bg-accent" />
+            Así se ve en el Home
+          </h2>
+
+          <div class="mt-4 flex flex-1 items-center justify-center">
+            <div
+              class="w-full max-w-[260px] rounded-[2.4rem] border-4 border-stroke bg-black p-1.5 shadow-2xl"
+            >
+              <div
+                class="relative flex h-[420px] flex-col overflow-hidden rounded-[1.9rem] bg-base"
+              >
+                <div
+                  class="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black"
+                />
+                <div
+                  class="flex items-center justify-between px-6 pt-3 text-[9px] font-bold text-text-primary"
+                >
+                  <span>9:41</span>
+                  <span class="flex items-center gap-1 text-text-primary">
+                    <Signal class="h-2.5 w-2.5" />
+                    <Wifi class="h-2.5 w-2.5" />
+                    <BatteryFull class="h-3 w-3" />
+                  </span>
+                </div>
+                <div class="flex flex-1 flex-col px-3 pt-8">
+                  <div class="flex items-center gap-1.5 px-1">
+                    <div
+                      class="flex h-5 w-5 items-center justify-center rounded-md bg-accent"
+                    >
+                      <Dumbbell class="h-3 w-3 text-base" />
+                    </div>
+                    <p
+                      class="text-[9px] font-black uppercase tracking-widest text-text-primary"
+                    >
+                      RIR-HUB
+                    </p>
+                  </div>
+                  <p
+                    class="mt-3 px-1 text-[8px] font-bold uppercase tracking-widest text-text-dim"
+                  >
+                    Aliados
+                  </p>
+                  <div
+                    class="relative mt-1.5 overflow-hidden rounded-2xl border border-stroke"
+                  >
+                    <div class="relative h-32">
+                      <img
+                        v-if="preview.imageUrl"
+                        :src="preview.imageUrl"
+                        :alt="preview.title"
+                        class="h-full w-full object-cover"
+                      />
+                      <div
+                        v-else
+                        class="flex h-full w-full items-center justify-center bg-surface"
+                      >
+                        <ImageUp class="h-5 w-5 text-text-dim" />
+                      </div>
+                      <div
+                        class="absolute inset-x-0 bottom-0 backdrop-blur-md"
+                        :style="{ backgroundColor: `${preview.brandColor}9e` }"
+                      >
+                        <div
+                          class="flex items-center justify-between gap-2 px-2.5 py-2"
+                        >
+                          <div class="min-w-0">
+                            <p
+                              class="text-[7px] font-black uppercase tracking-[0.14em]"
+                              :style="{ color: `${onAlly}bf` }"
+                            >
+                              {{ preview.advertiser }}
+                            </p>
+                            <p
+                              class="truncate text-[10px] font-black"
+                              :style="{ color: onAlly }"
+                            >
+                              {{ preview.title }}
+                            </p>
+                            <p
+                              class="truncate text-[8px] font-semibold"
+                              :style="{ color: `${onAlly}bf` }"
+                            >
+                              {{ preview.subtitle }}
+                            </p>
+                          </div>
+                          <span
+                            class="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black"
+                            :style="{
+                              color: onAlly,
+                              borderColor: `${onAlly}8c`,
+                              backgroundColor: `${onAlly}29`,
+                            }"
+                          >
+                            {{ preview.ctaLabel }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mx-auto mb-2 h-1 w-24 rounded-full bg-text-dim/60" />
+              </div>
+            </div>
+          </div>
+
+          <template v-if="editing">
+            <button
+              class="mt-4 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
+              :disabled="saving"
+              @click="confirmSave"
+            >
+              <Check class="h-4 w-4" />
+              {{ saving ? 'Guardando…' : 'Guardar cambios' }}
+            </button>
+            <button
+              class="mt-2 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-stroke text-[11px] font-black text-text-muted transition hover:text-text-primary"
+              @click="editing = false"
+            >
+              <X class="h-3.5 w-3.5" />
+              Cancelar
+            </button>
+          </template>
+        </section>
+      </div>
+    </div>
 
     <UModal
       v-model:open="saveModalOpen"
