@@ -122,9 +122,12 @@ service cloud.firestore {
       allow get: if isSelf() || isAdmin()
         || ((isManager() || isReceptionist())
             && resource.data.branch_id == staffBranch());
-      // list: staff lista por sede; el socio solo puede traerse el doc
-      // cuyo auth_uid es el suyo (el where auth_uid==uid lo garantiza).
+      // list: staff lista por sede; el socio puede escuchar su propio
+      // doc — por id directo (seed: users/{authUid}) o por auth_uid
+      // (reclamo: where auth_uid==uid lo garantiza). Un listener de
+      // documento se evalúa contra `list`, no `get`.
       allow list: if isStaff()
+        || (signedIn() && request.auth.uid == uid)
         || (signedIn() && resource.data.auth_uid == request.auth.uid);
 
       // Alta solo en recepción (B2B) — la app no crea docs de socio.
