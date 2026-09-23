@@ -1,50 +1,41 @@
 import type { MembershipPlan } from '#shared/types';
-import { useMockDb } from '../../utils/mock-db';
 
-const LEVELS = ['CLASSIC', 'PLUS', 'BLACK'] as const;
+import { db, toPlan } from '../../utils/db';
+import { requireAdmin, requireStaff } from '../../utils/staff-auth';
 
 export default defineEventHandler(async (event): Promise<MembershipPlan> => {
-  const id = getRouterParam(event, 'id');
-  const db = useMockDb();
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const id = getRouterParam(event, 'id') ?? '';
 
-  const plan = db.plans.find((p) => p.id === id);
-  if (!plan) {
+  const ref = db().collection('plans').doc(id);
+  if (!(await ref.get()).exists) {
     throw createError({ statusCode: 404, statusMessage: 'Plan no encontrado' });
   }
 
-  const body = await readBody<Partial<MembershipPlan>>(event);
+  const body = await readBody<Partial<MembershipPlan> & { active?: boolean }>(
+    event,
+  );
+  const update: Record<string, unknown> = {};
 
   if (typeof body.name === 'string' && body.name.trim().length >= 3) {
-    const oldName = plan.name;
-    plan.name = body.name.trim();
-    // mantener sincronizados socios y pagos que referencian el plan por nombre
-    for (const member of db.members) {
-      if (member.membershipType === oldName) member.membershipType = plan.name;
-    }
-    for (const payment of db.payments) {
-      if (payment.plan === oldName) payment.plan = plan.name;
-    }
-  }
-  if (
-    typeof body.level === 'string' &&
-    (LEVELS as readonly string[]).includes(body.level)
-  ) {
-    plan.level = body.level as MembershipPlan['level'];
+    update.name = body.name.trim();
   }
   if (typeof body.price === 'number' && body.price >= 0) {
-    plan.price = Math.round(body.price);
+    update.price = Math.round(body.price);
   }
   if (Array.isArray(body.features)) {
-    plan.features = body.features
+    update.features = body.features
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 0)
       .map((f) => f.trim());
   }
-  if (typeof body.highlight === 'boolean') {
-    plan.highlight = body.highlight;
-  }
+  if (typeof body.highlight === 'boolean') update.highlight = body.highlight;
   if (typeof body.allBranches === 'boolean') {
-    plan.allBranches = body.allBranches;
+    update.all_branches = body.allBranches;
   }
+  if (typeof body.active === 'boolean') update.active = body.active;
 
-  return plan;
+  if (Object.keys(update).length > 0) await ref.update(update);
+  /// Las referencias son por id — renombrar no toca socios ni pagos.
+  return toPlan(await ref.get());
 });

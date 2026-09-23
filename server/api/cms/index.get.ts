@@ -1,12 +1,23 @@
 import type { CmsResponse } from '#shared/types';
-import { useMockDb } from '../../utils/mock-db';
 
-export default defineEventHandler((): CmsResponse => {
-  const db = useMockDb();
+import { db, toCoupon, toPromo, toPushLog, toSponsorAd } from '../../utils/db';
+import { requireStaff } from '../../utils/staff-auth';
+
+export default defineEventHandler(async (event): Promise<CmsResponse> => {
+  await requireStaff(event);
+  const [promotionsSnap, pushesSnap, adsSnap] = await Promise.all([
+    db().collection('promotions').orderBy('created_at', 'desc').get(),
+    db().collection('pushLogs').orderBy('created_at', 'desc').get(),
+    db().collection('sponsorAds').orderBy('created_at', 'desc').get(),
+  ]);
   return {
-    promos: [...db.promos].sort((a, b) => b.createdAt - a.createdAt),
-    coupons: [...db.coupons].sort((a, b) => b.createdAt - a.createdAt),
-    pushes: db.pushes,
-    ads: [...db.ads].sort((a, b) => b.createdAt - a.createdAt),
+    promos: promotionsSnap.docs
+      .filter((d) => d.get('type') === 'banner')
+      .map(toPromo),
+    coupons: promotionsSnap.docs
+      .filter((d) => d.get('type') === 'coupon')
+      .map(toCoupon),
+    pushes: pushesSnap.docs.map(toPushLog),
+    ads: adsSnap.docs.map(toSponsorAd),
   };
 });

@@ -15,18 +15,11 @@ const editing = ref(false);
 
 const editForm = ref({
   name: '',
-  level: 'CLASSIC',
   price: 0,
   allBranches: false,
   highlight: false,
   features: [] as string[],
 });
-
-const levelItems = [
-  { label: 'CLASSIC', value: 'CLASSIC' },
-  { label: 'PLUS', value: 'PLUS' },
-  { label: 'BLACK', value: 'BLACK' },
-];
 
 const saveModalOpen = ref(false);
 const saveModalDescription = ref('');
@@ -51,14 +44,7 @@ onMounted(async () => {
 });
 
 async function load(): Promise<void> {
-  detail.value = await $fetch<PlanDetail>(`/api/plans/${route.params.id}`);
-}
-
-function levelBadgeCls(level: string): string {
-  if (level === 'BLACK') return 'border-accent/40 bg-accent/10 text-accent';
-  if (level === 'PLUS')
-    return 'border-sky-400/30 bg-sky-400/10 text-sky-400';
-  return 'border-stroke bg-base text-text-muted';
+  detail.value = await $api<PlanDetail>(`/api/plans/${route.params.id}`);
 }
 
 function startEdit(): void {
@@ -66,7 +52,6 @@ function startEdit(): void {
   if (!p) return;
   editForm.value = {
     name: p.name,
-    level: p.level,
     price: p.price,
     allBranches: p.allBranches,
     highlight: p.highlight,
@@ -83,8 +68,6 @@ const planChanges = computed<string[]>(() => {
     changes.push(
       `Nombre: '${p.name}' → '${editForm.value.name}' — socios y pagos con este plan se actualizarán`,
     );
-  if (editForm.value.level !== p.level)
-    changes.push(`Nivel: ${p.level} → ${editForm.value.level}`);
   if (editForm.value.price !== p.price)
     changes.push(`Precio: $ ${p.price} → $ ${editForm.value.price}`);
   if (editForm.value.allBranches !== p.allBranches)
@@ -123,7 +106,7 @@ async function savePlan(): Promise<void> {
   if (!detail.value || saving.value) return;
   saving.value = true;
   try {
-    await $fetch<PlanDetail['plan']>(
+    await $api<PlanDetail['plan']>(
       `/api/plans/${detail.value.plan.id}`,
       {
         method: 'PUT',
@@ -187,7 +170,7 @@ async function deletePlan(): Promise<void> {
   if (!detail.value || deleting.value) return;
   deleting.value = true;
   try {
-    await $fetch(`/api/plans/${detail.value.plan.id}`, { method: 'DELETE' });
+    await $api(`/api/plans/${detail.value.plan.id}`, { method: 'DELETE' });
     deleteModalOpen.value = false;
     await navigateTo('/membresias');
   } finally {
@@ -223,7 +206,7 @@ async function deletePlan(): Promise<void> {
             : 'border-stroke bg-surface text-text-muted'
         "
       >
-        {{ detail.plan.level.charAt(0) }}
+        {{ detail.plan.name.charAt(0) }}
       </div>
       <div class="min-w-0 flex-1">
         <h1 class="truncate text-xl font-black text-text-primary">
@@ -239,12 +222,6 @@ async function deletePlan(): Promise<void> {
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <span
-          class="rounded-full border px-3 py-1 text-[11px] font-black"
-          :class="levelBadgeCls(detail.plan.level)"
-        >
-          {{ detail.plan.level }}
-        </span>
         <span
           v-if="detail.plan.highlight"
           class="rounded-full bg-accent/15 px-2.5 py-1 text-[10px] font-black text-accent"
@@ -319,17 +296,6 @@ async function deletePlan(): Promise<void> {
               v-model="editForm.name"
               type="text"
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            />
-          </label>
-          <label class="block">
-            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Nivel
-            </span>
-            <USelectMenu
-              v-model="editForm.level"
-              :items="levelItems"
-              value-key="value"
-              class="mt-1 w-full"
             />
           </label>
           <label class="block">

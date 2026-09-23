@@ -1,12 +1,13 @@
-import { useMockDb } from '../../../utils/mock-db';
+import { db } from '../../../utils/db';
+import { requireAdmin, requireStaff } from '../../../utils/staff-auth';
 
-export default defineEventHandler((event): { ok: true } => {
-  const db = useMockDb();
-  const id = getRouterParam(event, 'id');
-  const index = db.ads.findIndex((item) => item.id === id);
-  if (index === -1) {
+export default defineEventHandler(async (event): Promise<{ ok: true }> => {
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const ref = db().collection('sponsorAds').doc(getRouterParam(event, 'id') ?? '');
+  if (!(await ref.get()).exists) {
     throw createError({ statusCode: 404, statusMessage: 'Anuncio no encontrado' });
   }
-  db.ads.splice(index, 1);
+  await ref.delete();
   return { ok: true };
 });

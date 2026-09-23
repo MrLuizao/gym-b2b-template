@@ -37,7 +37,7 @@ const editForm = ref({
 const editingClassId = ref<string | null>(null);
 const classForm = ref({
   name: '',
-  coach: '',
+  coachId: '',
   room: '',
   start: '06:00',
   end: '07:00',
@@ -63,9 +63,17 @@ const availableTrainerItems = computed(() =>
 const coachItems = computed(() =>
   (detail.value?.trainers ?? []).map((t) => ({
     label: t.name,
-    value: t.name,
+    value: t.id,
   })),
 );
+
+function coachName(coachId: string): string {
+  return (
+    detail.value?.trainers.find((t) => t.id === coachId)?.name ??
+    editingClass.value?.coach ??
+    '—'
+  );
+}
 
 const editingClass = computed(
   () =>
@@ -127,7 +135,7 @@ function confirmToggleStatus(): void {
       if (saving.value) return;
       saving.value = true;
       try {
-        const updated = await $fetch<Branch>(`/api/branches/${b.id}`, {
+        const updated = await $api<Branch>(`/api/branches/${b.id}`, {
           method: 'PUT',
           body: { status: closing ? 'CLOSED' : 'OPEN' },
         });
@@ -185,8 +193,8 @@ const classChanges = computed<string[]>(() => {
   const local = classTime(c);
   if (classForm.value.name !== c.name)
     changes.push(`Nombre: '${c.name}' → '${classForm.value.name}'`);
-  if (classForm.value.coach !== c.coach)
-    changes.push(`Coach: ${c.coach} → ${classForm.value.coach}`);
+  if (classForm.value.coachId !== c.coachId)
+    changes.push(`Coach: ${c.coach} → ${coachName(classForm.value.coachId)}`);
   if (classForm.value.room !== local.room)
     changes.push(`Sala: ${local.room} → ${classForm.value.room}`);
   if (
@@ -208,9 +216,9 @@ const classChanges = computed<string[]>(() => {
 onMounted(async () => {
   try {
     const [branchList, classList, memberList] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<ClassSchedule[]>('/api/classes'),
-      $fetch<MemberAdmin[]>('/api/members'),
+      $api<Branch[]>('/api/branches'),
+      $api<ClassSchedule[]>('/api/classes'),
+      $api<MemberAdmin[]>('/api/members'),
       load(),
     ]);
     branches.value = branchList;
@@ -222,7 +230,7 @@ onMounted(async () => {
 });
 
 async function load(): Promise<void> {
-  detail.value = await $fetch<BranchDetail>(`/api/branches/${route.params.id}`);
+  detail.value = await $api<BranchDetail>(`/api/branches/${route.params.id}`);
 }
 
 function branchName(branchId: string): string {
@@ -273,7 +281,7 @@ async function saveBranch(): Promise<void> {
   if (!detail.value || saving.value) return;
   saving.value = true;
   try {
-    const updated = await $fetch<Branch>(
+    const updated = await $api<Branch>(
       `/api/branches/${detail.value.branch.id}`,
       {
         method: 'PUT',
@@ -303,7 +311,7 @@ function startEditClass(gymClass: ClassSchedule): void {
   editingClassId.value = gymClass.id;
   classForm.value = {
     name: gymClass.name,
-    coach: gymClass.coach,
+    coachId: gymClass.coachId,
     room: local.room,
     start: hhmm(local.startMinutes),
     end: hhmm(local.endMinutes),
@@ -316,7 +324,7 @@ async function saveClass(): Promise<void> {
   if (!detail.value || !editingClassId.value || saving.value) return;
   saving.value = true;
   try {
-    const updated = await $fetch<ClassSchedule>(
+    const updated = await $api<ClassSchedule>(
       `/api/classes/${editingClassId.value}`,
       {
         method: 'PUT',
@@ -332,7 +340,7 @@ async function saveClass(): Promise<void> {
           ...(isAdmin.value
             ? {
                 name: classForm.value.name,
-                coach: classForm.value.coach,
+                coachId: classForm.value.coachId,
                 capacity: classForm.value.capacity,
                 booked: classForm.value.booked,
               }
@@ -396,7 +404,7 @@ const selectedTrainerBranches = computed(() =>
 const selectedTrainerClasses = computed(
   () =>
     detail.value?.classes.filter(
-      (c) => c.coach === selectedTrainer.value?.name,
+      (c) => c.coachId === selectedTrainer.value?.id,
     ) ?? [],
 );
 
@@ -428,7 +436,7 @@ async function removeClass(): Promise<void> {
   removingClass.value = true;
   try {
     const branchId = detail.value.branch.id;
-    await $fetch<ClassSchedule>(`/api/classes/${classToRemove.value.id}`, {
+    await $api<ClassSchedule>(`/api/classes/${classToRemove.value.id}`, {
       method: 'PUT',
       body: {
         branchIds: classToRemove.value.branchIds.filter(
@@ -453,7 +461,7 @@ async function assignClass(): Promise<void> {
   if (!detail.value || !assignClassId.value) return;
   const gymClass = allClasses.value.find((c) => c.id === assignClassId.value);
   if (!gymClass) return;
-  const updated = await $fetch<ClassSchedule>(`/api/classes/${gymClass.id}`, {
+  const updated = await $api<ClassSchedule>(`/api/classes/${gymClass.id}`, {
     method: 'PUT',
     body: { branchIds: [...gymClass.branchIds, detail.value.branch.id] },
   });
@@ -495,7 +503,7 @@ async function deleteBranch(): Promise<void> {
   if (!detail.value || deleting.value) return;
   deleting.value = true;
   try {
-    await $fetch(`/api/branches/${detail.value.branch.id}`, {
+    await $api(`/api/branches/${detail.value.branch.id}`, {
       method: 'DELETE',
     });
     deleteModalOpen.value = false;
@@ -507,7 +515,7 @@ async function deleteBranch(): Promise<void> {
 
 async function assignTrainer(): Promise<void> {
   if (!detail.value || !assignTrainerId.value) return;
-  await $fetch(`/api/trainers/${assignTrainerId.value}/update`, {
+  await $api(`/api/trainers/${assignTrainerId.value}/update`, {
     method: 'POST',
     body: { addBranchId: detail.value.branch.id },
   });
@@ -536,7 +544,7 @@ async function unassignTrainer(): Promise<void> {
   if (!detail.value || !trainerToRemove.value || removing.value) return;
   removing.value = true;
   try {
-    await $fetch(`/api/trainers/${trainerToRemove.value.id}/update`, {
+    await $api(`/api/trainers/${trainerToRemove.value.id}/update`, {
       method: 'POST',
       body: { removeBranchId: detail.value.branch.id },
     });
@@ -932,7 +940,7 @@ async function unassignTrainer(): Promise<void> {
               <label v-if="isAdmin" class="block">
                 <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">Coach</span>
                 <USelectMenu
-                  v-model="classForm.coach"
+                  v-model="classForm.coachId"
                   :items="coachItems"
                   value-key="value"
                   class="mt-1 w-full"

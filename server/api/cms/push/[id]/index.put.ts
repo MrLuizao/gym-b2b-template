@@ -1,16 +1,20 @@
+import { Timestamp } from 'firebase-admin/firestore';
+
 import type { PushLog } from '#shared/types';
-import { useMockDb } from '../../../../utils/mock-db';
+
+import { db, toPushLog } from '../../../../utils/db';
+import { requireAdmin, requireStaff } from '../../../../utils/staff-auth';
 
 export default defineEventHandler(async (event): Promise<PushLog> => {
-  const db = useMockDb();
-  const id = getRouterParam(event, 'id');
-  const log = db.pushes.find((item) => item.id === id);
-  if (!log) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Notificación no encontrada',
-    });
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const id = getRouterParam(event, 'id') ?? '';
+
+  const ref = db().collection('pushLogs').doc(id);
+  if (!(await ref.get()).exists) {
+    throw createError({ statusCode: 404, statusMessage: 'Notificación no encontrada' });
   }
+
   const body = await readBody<{
     title?: string;
     body?: string;
@@ -20,27 +24,21 @@ export default defineEventHandler(async (event): Promise<PushLog> => {
     scheduledAt?: number | null;
   }>(event);
 
-  if (body?.title !== undefined && body.title.trim()) {
-    log.title = body.title.trim().slice(0, 80);
-  }
-  if (body?.body !== undefined && body.body.trim()) {
-    log.body = body.body.trim().slice(0, 240);
-  }
+  const update: Record<string, unknown> = {};
+  if (body?.title !== undefined && body.title.trim()) update.title = body.title.trim().slice(0, 80);
+  if (body?.body !== undefined && body.body.trim()) update.body = body.body.trim().slice(0, 240);
   if (body?.audience !== undefined) {
-    log.audience = ['ALL', 'BRANCH', 'EXPIRED'].includes(body.audience)
-      ? body.audience
-      : 'ALL';
+    update.audience = ['ALL', 'BRANCH', 'EXPIRED'].includes(body.audience) ? body.audience : 'ALL';
   }
-  if (body?.branchId !== undefined) log.branchId = body.branchId || null;
-  if (body?.kind !== undefined) {
-    log.kind = body.kind === 'SPONSOR' ? 'SPONSOR' : 'BRAND';
-  }
+  if (body?.branchId !== undefined) update.branch_id = body.branchId || null;
+  if (body?.kind !== undefined) update.kind = body.kind === 'SPONSOR' ? 'SPONSOR' : 'BRAND';
   if (body?.scheduledAt !== undefined) {
-    log.scheduledAt =
+    update.scheduled_at =
       typeof body.scheduledAt === 'number' && body.scheduledAt > 0
-        ? body.scheduledAt
+        ? Timestamp.fromMillis(body.scheduledAt)
         : null;
   }
 
-  return log;
+  if (Object.keys(update).length > 0) await ref.update(update);
+  return toPushLog(await ref.get());
 });

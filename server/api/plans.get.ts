@@ -1,7 +1,9 @@
 import type { MembershipPlan } from '#shared/types';
-import { useMockDb } from '../utils/mock-db';
 
-export default defineEventHandler((): MembershipPlan[] => {
-  const db = useMockDb();
-  return [...db.plans].sort((a, b) => a.price - b.price);
+import { allPlans } from '../utils/db';
+import { requireStaff } from '../utils/staff-auth';
+
+export default defineEventHandler(async (event): Promise<MembershipPlan[]> => {
+  await requireStaff(event);
+  return (await allPlans()).sort((a, b) => a.price - b.price);
 });

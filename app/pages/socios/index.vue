@@ -35,8 +35,8 @@ const pageSize = 8;
 onMounted(async () => {
   try {
     const [memberList, branchList] = await Promise.all([
-      $fetch<MemberAdmin[]>('/api/members'),
-      $fetch<Branch[]>('/api/branches'),
+      $api<MemberAdmin[]>('/api/members'),
+      $api<Branch[]>('/api/branches'),
     ]);
     members.value = memberList;
     branches.value = branchList;
@@ -120,9 +120,10 @@ function statusMeta(status: MemberAdmin['adminStatus']) {
   }
 }
 
-function planColor(level: MemberAdmin['membershipLevel']) {
-  if (level === 'BLACK') return 'primary' as const;
-  if (level === 'PLUS') return 'info' as const;
+function planColor(plan: string) {
+  const normalized = plan.toLowerCase();
+  if (normalized.includes('black')) return 'primary' as const;
+  if (normalized.includes('plus')) return 'info' as const;
   return 'neutral' as const;
 }
 
@@ -333,7 +334,7 @@ function formatDate(ts: number | null): string {
             </td>
             <td class="px-5 py-3">
               <UBadge
-                :color="planColor(member.membershipLevel)"
+                :color="planColor(member.membershipType)"
                 variant="subtle"
                 size="sm"
                 :label="member.membershipType"

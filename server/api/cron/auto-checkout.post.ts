@@ -1,34 +1,62 @@
-import { useMockDb } from '../../utils/mock-db';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+
+import { db } from '../../utils/db';
 
 const IDLE_LIMIT_MINUTES = 90;
+const CRON_SECRET = process.env.CRON_SECRET ?? '';
 
-export default defineEventHandler((event) => {
-  const db = useMockDb();
-  const cutoff = Date.now() - IDLE_LIMIT_MINUTES * 60_000;
-
-  const stale = db.checkIns.filter(
-    (c) => c.granted && !c.checkedOut && c.checkInAt < cutoff,
-  );
-
-  const releasedByBranch = new Map<string, number>();
-  for (const record of stale) {
-    record.checkedOut = true;
-    record.checkedOutAt = Date.now();
-    releasedByBranch.set(
-      record.branchId,
-      (releasedByBranch.get(record.branchId) ?? 0) + 1,
-    );
+/// Libera check-ins >90 min sin salida. Pensado para cron externo
+/// (cron-job.org → POST con Authorization: Bearer CRON_SECRET).
+/// En dev también lo puede llamar staff autenticado.
+export default defineEventHandler(async (event) => {
+  const header = getHeader(event, 'authorization') ?? '';
+  if (CRON_SECRET && header === `Bearer ${CRON_SECRET}`) {
+    // cron externo autorizado
+  } else {
+    const { requireStaff } = await import('../../utils/staff-auth');
+    await requireStaff(event);
   }
 
-  for (const [branchId, count] of releasedByBranch) {
-    const branch = db.branches.find((b) => b.id === branchId);
-    if (branch) {
-      branch.currentCapacity = Math.max(0, branch.currentCapacity - count);
+  const cutoff = Timestamp.fromMillis(Date.now() - IDLE_LIMIT_MINUTES * 60_000);
+  const stale = await db()
+    .collection('checkins')
+    .where('checked_out', '==', false)
+    .where('check_in_at', '<', cutoff)
+    .get();
+
+  if (stale.empty) {
+    return { released: 0, minutesIdle: IDLE_LIMIT_MINUTES, byBranch: {} };
+  }
+
+  const releasedByBranch = new Map<string, number>();
+  const batch = db().batch();
+  for (const doc of stale.docs) {
+    batch.update(doc.ref, {
+      checked_out: true,
+      checked_out_at: FieldValue.serverTimestamp(),
+      release_reason: 'auto_checkout_cron',
+    });
+    const branchId = String(doc.get('branch_id') ?? '');
+    releasedByBranch.set(branchId, (releasedByBranch.get(branchId) ?? 0) + 1);
+    const userId = doc.get('user_id');
+    if (typeof userId === 'string') {
+      batch.update(db().collection('users').doc(userId), {
+        active_checkin_id: null,
+        active_checkin_branch: null,
+      });
     }
+  }
+  await batch.commit();
+
+  for (const [branchId, count] of releasedByBranch) {
+    await db()
+      .collection('branches')
+      .doc(branchId)
+      .update({ current_capacity: FieldValue.increment(-count) });
   }
 
   return {
-    released: stale.length,
+    released: stale.size,
     minutesIdle: IDLE_LIMIT_MINUTES,
     byBranch: Object.fromEntries(releasedByBranch),
   };

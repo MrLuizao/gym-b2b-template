@@ -13,7 +13,7 @@ const canViewBranches = computed(() =>
 const detail = ref<ClassDetail | null>(null);
 const branches = ref<Branch[]>([]);
 const trainers = ref<Trainer[]>([]);
-const roster = ref<Member[]>([]);
+const roster = ref<(Member & { membershipType: string })[]>([]);
 const pending = ref(true);
 const saving = ref(false);
 const editing = ref(false);
@@ -52,8 +52,17 @@ const coachItems = computed(() =>
     .filter((t) =>
       t.branchIds.some((b) => editForm.value.branchIds.includes(b)),
     )
-    .map((t) => ({ label: `${t.name} — ${t.specialty}`, value: t.name })),
+    .map((t) => ({ label: `${t.name} — ${t.specialty}`, value: t.id })),
 );
+
+/// Nombre del coach para display — se resuelve desde el catálogo por id.
+function coachName(coachId: string): string {
+  return (
+    trainers.value.find((t) => t.id === coachId)?.name ??
+    detail.value?.gymClass.coach ??
+    '—'
+  );
+}
 
 const deleteModalOpen = ref(false);
 const deleting = ref(false);
@@ -80,8 +89,8 @@ const classChanges = computed<string[]>(() => {
     changes.push(`Dejará de impartirse en: ${removedBranches.join(', ')}`);
   if (editForm.value.branchIds.length === 0)
     changes.push('La clase quedará sin sede asignada');
-  if (editForm.value.coach !== c.coach)
-    changes.push(`Coach: ${c.coach} → ${editForm.value.coach}`);
+  if (editForm.value.coach !== c.coachId)
+    changes.push(`Coach: ${c.coach} → ${coachName(editForm.value.coach)}`);
   const local = timeBaseline(c);
   if (editForm.value.room !== local.room)
     changes.push(`Sala: ${local.room} → ${editForm.value.room}`);
@@ -122,10 +131,12 @@ onMounted(async () => {
   try {
     const [branchList, trainerList, classDetail, rosterList] =
       await Promise.all([
-        $fetch<Branch[]>('/api/branches'),
-        $fetch<Trainer[]>('/api/trainers'),
-        $fetch<ClassDetail>(`/api/classes/${route.params.id}`),
-        $fetch<Member[]>(`/api/classes/${route.params.id}/roster`),
+        $api<Branch[]>('/api/branches'),
+        $api<Trainer[]>('/api/trainers'),
+        $api<ClassDetail>(`/api/classes/${route.params.id}`),
+        $api<(Member & { membershipType: string })[]>(
+          `/api/classes/${route.params.id}/roster`,
+        ),
       ]);
     branches.value = branchList;
     trainers.value = trainerList;
@@ -185,7 +196,7 @@ function startEdit(): void {
   const local = timeBaseline(c);
   editForm.value = {
     name: c.name,
-    coach: c.coach,
+    coach: c.coachId,
     branchIds: [...c.branchIds],
     room: local.room,
     start: hhmm(local.startMinutes),
@@ -200,14 +211,14 @@ async function saveClass(): Promise<void> {
   if (!detail.value || saving.value) return;
   saving.value = true;
   try {
-    const updated = await $fetch<ClassDetail['gymClass']>(
+    const updated = await $api<ClassDetail['gymClass']>(
       `/api/classes/${detail.value.gymClass.id}`,
       {
         method: 'PUT',
         body: isAdmin.value
           ? {
               name: editForm.value.name,
-              coach: editForm.value.coach,
+              coachId: editForm.value.coach,
               branchIds: editForm.value.branchIds,
               room: editForm.value.room,
               startMinutes: toMinutes(editForm.value.start),
@@ -226,7 +237,7 @@ async function saveClass(): Promise<void> {
             },
       },
     );
-    detail.value = await $fetch<ClassDetail>(`/api/classes/${updated.id}`);
+    detail.value = await $api<ClassDetail>(`/api/classes/${updated.id}`);
     editing.value = false;
   } finally {
     saving.value = false;
@@ -237,7 +248,7 @@ async function deleteClass(): Promise<void> {
   if (!detail.value || deleting.value) return;
   deleting.value = true;
   try {
-    await $fetch(`/api/classes/${detail.value.gymClass.id}`, {
+    await $api(`/api/classes/${detail.value.gymClass.id}`, {
       method: 'DELETE',
     });
     await navigateTo('/clases');

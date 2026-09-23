@@ -1,25 +1,31 @@
 import type { ClassSchedule } from '#shared/types';
-import { randomUUID } from 'node:crypto';
 
-import { useMockDb } from '../../../utils/mock-db';
+import { db, toClass } from '../../../utils/db';
+import { requireAdmin, requireStaff } from '../../../utils/staff-auth';
 
 export default defineEventHandler(async (event): Promise<ClassSchedule> => {
-  const branchId = getRouterParam(event, 'id');
-  const db = useMockDb();
-  const branch = db.branches.find((b) => b.id === branchId);
-  if (!branch) {
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const branchId = getRouterParam(event, 'id') ?? '';
+
+  const branchSnap = await db().collection('branches').doc(branchId).get();
+  if (!branchSnap.exists) {
     throw createError({ statusCode: 404, statusMessage: 'Sede no encontrada' });
   }
 
   const body = await readBody<Partial<ClassSchedule>>(event);
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const coach = typeof body.coach === 'string' ? body.coach.trim() : '';
-  if (name.length < 3 || !coach) {
+  const trainerSnap = await db()
+    .collection('trainers')
+    .doc(body.coachId ?? '')
+    .get();
+  if (name.length < 3 || !trainerSnap.exists) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Nombre y coach son obligatorios',
     });
   }
+  const trainer = trainerSnap.data() ?? {};
 
   const capacity =
     typeof body.capacity === 'number' && body.capacity >= 1
@@ -34,20 +40,21 @@ export default defineEventHandler(async (event): Promise<ClassSchedule> => {
       ? Math.min(1440, Math.max(1, Math.round(body.endMinutes)))
       : startMinutes + 60;
 
-  const gymClass: ClassSchedule = {
-    id: randomUUID(),
-    branchIds: [branchId as string],
+  const ref = db().collection('classes').doc();
+  await ref.set({
+    branch_ids: [branchId],
     name,
-    coach,
-    room: typeof body.room === 'string' && body.room.trim() ? body.room.trim() : 'Sala 1',
-    startMinutes,
-    endMinutes: Math.max(endMinutes, startMinutes + 15),
+    coach_id: trainerSnap.id,
+    coach: (trainer.name as string) ?? '',
+    room:
+      typeof body.room === 'string' && body.room.trim()
+        ? body.room.trim()
+        : 'Sala 1',
+    start_minutes: startMinutes,
+    end_minutes: Math.max(endMinutes, startMinutes + 15),
     capacity,
-    booked:
-      typeof body.booked === 'number' && body.booked >= 0
-        ? Math.min(Math.round(body.booked), capacity)
-        : 0,
-  };
-  db.classes.push(gymClass);
-  return gymClass;
+    booked: 0,
+    branch_times: {},
+  });
+  return toClass(await ref.get());
 });

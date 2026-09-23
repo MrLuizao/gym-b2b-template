@@ -1,13 +1,10 @@
 export type MembershipStatus = 'ACTIVE' | 'EXPIRED';
 
-export type MembershipLevel = 'CLASSIC' | 'PLUS' | 'BLACK';
-
 export type MemberAdminStatus = 'ACTIVE' | 'EXPIRING' | 'EXPIRED';
 
 export interface MembershipPlan {
   id: string;
   name: string;
-  level: MembershipLevel;
   price: number;
   features: string[];
   highlight: boolean;
@@ -25,7 +22,8 @@ export interface PlanDetail {
 }
 
 export interface MemberAdmin extends Member {
-  membershipLevel: MembershipLevel;
+  /// Nombre del plan resuelto desde membershipPlanId — solo para display.
+  membershipType: string;
   adminStatus: MemberAdminStatus;
   allBranchesAccess: boolean;
 }
@@ -76,6 +74,9 @@ export interface ClassSchedule {
   id: string;
   branchIds: string[];
   name: string;
+  /// Referencia canónica al coach (Trainer.id); '' = sin asignar.
+  coachId: string;
+  /// Nombre del coach — etiqueta denormalizada solo para display.
   coach: string;
   room: string;
   startMinutes: number;
@@ -99,6 +100,9 @@ export interface PaymentRecord {
   memberNumber?: string | null;
   memberPhotoUrl?: string | null;
   branchId: string;
+  /// Referencia canónica al plan cobrado (MembershipPlan.id).
+  planId: string;
+  /// Nombre del plan al momento del cobro — etiqueta histórica para display.
   plan: string;
   amount: number;
   method: string;
@@ -115,7 +119,7 @@ export interface PaymentsReport {
     declined: number;
     amountApproved: number;
     amountDeclined: number;
-    byPlan: { plan: string; count: number; amount: number }[];
+    byPlan: { planId: string; plan: string; count: number; amount: number }[];
   };
 }
 
@@ -136,7 +140,8 @@ export interface Coupon {
   description: string;
   badge: string;
   code: string;
-  levels: (MembershipLevel | 'ALL')[];
+  /// Ids de planes a los que aplica el cupón; 'ALL' = todos los socios.
+  planIds: string[];
   branchId: string | null;
   createdAt: number;
 }
@@ -174,7 +179,8 @@ export interface Member {
   name: string;
   photoUrl: string;
   membershipStatus: MembershipStatus;
-  membershipType: string;
+  /// Referencia canónica al plan (MembershipPlan.id) — nunca el nombre.
+  membershipPlanId: string;
   memberNumber: string;
   membershipUntil: number | null;
   /// Datos personales capturados al inscribir.
@@ -236,7 +242,8 @@ export interface CheckInResult {
   alert?: CheckInAlert;
   message?: string;
   reason?: string;
-  member?: Member;
+  /// member + membershipType: nombre del plan resuelto solo para display.
+  member?: Member & { membershipType?: string };
   record?: CheckInRecord;
 }
 

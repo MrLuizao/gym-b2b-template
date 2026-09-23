@@ -1,15 +1,16 @@
 import type { PushLog } from '#shared/types';
-import { useMockDb } from '../../../../utils/mock-db';
 
-export default defineEventHandler((event): PushLog => {
-  const db = useMockDb();
-  const id = getRouterParam(event, 'id');
-  const log = db.pushes.find((item) => item.id === id);
-  if (!log) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Notificación no encontrada',
-    });
+import { db, toPushLog } from '../../../../utils/db';
+import { requireStaff } from '../../../../utils/staff-auth';
+
+export default defineEventHandler(async (event): Promise<PushLog> => {
+  await requireStaff(event);
+  const snap = await db()
+    .collection('pushLogs')
+    .doc(getRouterParam(event, 'id') ?? '')
+    .get();
+  if (!snap.exists) {
+    throw createError({ statusCode: 404, statusMessage: 'Notificación no encontrada' });
   }
-  return log;
+  return toPushLog(snap);
 });

@@ -1,28 +1,31 @@
 import type { TrainerDetail } from '#shared/types';
-import { useMockDb } from '../../utils/mock-db';
 
-export default defineEventHandler((event): TrainerDetail => {
-  const id = getRouterParam(event, 'id');
-  const db = useMockDb();
+import { db, toClass, toTrainer } from '../../utils/db';
+import { requireStaff } from '../../utils/staff-auth';
 
-  const trainer = db.trainers.find((t) => t.id === id);
-  if (!trainer) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Entrenador no encontrado',
-    });
+export default defineEventHandler(async (event): Promise<TrainerDetail> => {
+  await requireStaff(event);
+  const id = getRouterParam(event, 'id') ?? '';
+
+  const snap = await db().collection('trainers').doc(id).get();
+  if (!snap.exists) {
+    throw createError({ statusCode: 404, statusMessage: 'Entrenador no encontrado' });
   }
 
-  const classes = db.classes
-    .filter((c) => c.coach === trainer.name)
+  const classesSnap = await db()
+    .collection('classes')
+    .where('coach_id', '==', id)
+    .get();
+  const classes = classesSnap.docs
+    .map(toClass)
     .sort((a, b) => a.startMinutes - b.startMinutes);
 
   return {
-    trainer,
+    trainer: toTrainer(snap),
     classes,
     stats: {
       classes: classes.length,
-      students: classes.reduce((total, c) => total + c.booked, 0),
+      students: classes.reduce((t, c) => t + c.booked, 0),
     },
   };
 });

@@ -30,7 +30,7 @@ async function onDetect(code: string): Promise<void> {
 }
 
 onMounted(async () => {
-  branches.value = await $fetch<Branch[]>('/api/branches');
+  branches.value = await $api<Branch[]>('/api/branches');
   if (!activeBranchId.value) {
     activeBranchId.value = branches.value[0]?.id ?? '';
   }

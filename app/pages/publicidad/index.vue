@@ -77,7 +77,7 @@ function formatDay(ts: number): string {
 onMounted(async () => {
   await load();
   try {
-    branches.value = await $fetch<Branch[]>('/api/branches');
+    branches.value = await $api<Branch[]>('/api/branches');
   } catch {
     branches.value = [];
   }

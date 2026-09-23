@@ -214,8 +214,8 @@ onMounted(async () => {
   const id = route.params.id as string;
   try {
     const [p, b] = await Promise.all([
-      $fetch<PushLog>(`/api/cms/push/${id}`),
-      $fetch<Branch[]>('/api/branches'),
+      $api<PushLog>(`/api/cms/push/${id}`),
+      $api<Branch[]>('/api/branches'),
     ]);
     push.value = p;
     branches.value = b;

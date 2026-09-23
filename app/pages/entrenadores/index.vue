@@ -19,8 +19,8 @@ const pending = ref(true);
 onMounted(async () => {
   try {
     const [branchList, trainerList] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<Trainer[]>('/api/trainers'),
+      $api<Branch[]>('/api/branches'),
+      $api<Trainer[]>('/api/trainers'),
     ]);
     branches.value = branchList;
     trainers.value = trainerList;
@@ -66,7 +66,7 @@ async function runToggleDuty(): Promise<void> {
   if (!t || togglingDuty.value) return;
   togglingDuty.value = true;
   try {
-    const updated = await $fetch<Trainer>(`/api/trainers/${t.id}/duty`, {
+    const updated = await $api<Trainer>(`/api/trainers/${t.id}/duty`, {
       method: 'POST',
     });
     const index = trainers.value.findIndex((x) => x.id === t.id);

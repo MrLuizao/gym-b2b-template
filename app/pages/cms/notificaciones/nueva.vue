@@ -150,7 +150,7 @@ onMounted(async () => {
     return;
   }
   try {
-    branches.value = await $fetch<Branch[]>('/api/branches');
+    branches.value = await $api<Branch[]>('/api/branches');
   } catch {
     branches.value = [];
   }

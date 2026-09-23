@@ -1,12 +1,14 @@
 import type { Trainer } from '#shared/types';
-import { useMockDb } from '../utils/mock-db';
 
-export default defineEventHandler((event): Trainer[] => {
-  const db = useMockDb();
+import { db, toTrainer } from '../utils/db';
+import { requireStaff } from '../utils/staff-auth';
+
+export default defineEventHandler(async (event): Promise<Trainer[]> => {
+  await requireStaff(event);
   const query = getQuery(event);
   const branchId = typeof query.branchId === 'string' ? query.branchId : null;
-  const list = branchId
-    ? db.trainers.filter((t) => t.branchIds.includes(branchId))
-    : db.trainers;
-  return list;
+  const ref = db().collection('trainers') as FirebaseFirestore.Query;
+  const scoped = branchId ? ref.where('branch_ids', 'array-contains', branchId) : ref;
+  const snap = await scoped.get();
+  return snap.docs.map(toTrainer);
 });

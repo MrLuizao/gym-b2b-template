@@ -1,12 +1,15 @@
-import { useMockDb } from '../../utils/mock-db';
+import { db } from '../../utils/db';
+import { requireAdmin, requireStaff } from '../../utils/staff-auth';
 
 export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, 'id');
-  const db = useMockDb();
-  const index = db.classes.findIndex((c) => c.id === id);
-  if (index === -1) {
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const id = getRouterParam(event, 'id') ?? '';
+
+  const ref = db().collection('classes').doc(id);
+  if (!(await ref.get()).exists) {
     throw createError({ statusCode: 404, statusMessage: 'Clase no encontrada' });
   }
-  db.classes.splice(index, 1);
+  await ref.delete();
   return { ok: true };
 });

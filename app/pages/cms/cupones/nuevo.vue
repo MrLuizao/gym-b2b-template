@@ -8,7 +8,7 @@ import {
   Wifi,
 } from '@lucide/vue';
 
-import type { Branch, MembershipLevel } from '#shared/types';
+import type { Branch, MembershipPlan } from '#shared/types';
 
 const router = useRouter();
 const { session } = useAuth();
@@ -17,18 +17,17 @@ const isAdmin = computed(() => session.value?.role === 'ADMIN');
 const { createCoupon } = useCms();
 
 const branches = ref<Branch[]>([]);
+const plans = ref<MembershipPlan[]>([]);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const confirmModalOpen = ref(false);
-
-const LEVEL_OPTIONS: MembershipLevel[] = ['CLASSIC', 'PLUS', 'BLACK'];
 
 const form = ref({
   title: '',
   description: '',
   badge: '-25%',
   code: '',
-  levels: [...LEVEL_OPTIONS] as MembershipLevel[],
+  planIds: ['ALL'] as string[],
   branchId: 'todas',
 });
 
@@ -37,11 +36,21 @@ const branchItems = computed(() => [
   ...branches.value.map((b) => ({ label: b.name, value: b.id })),
 ]);
 
-function toggleLevel(level: MembershipLevel): void {
-  const levels = form.value.levels;
-  const index = levels.indexOf(level);
-  if (index === -1) levels.push(level);
-  else levels.splice(index, 1);
+function planLabel(planId: string): string {
+  if (planId === 'ALL') return 'Todos los socios';
+  return plans.value.find((p) => p.id === planId)?.name ?? planId;
+}
+
+function togglePlan(planId: string): void {
+  if (planId === 'ALL') {
+    form.value.planIds = ['ALL'];
+    return;
+  }
+  const list = form.value.planIds.filter((p) => p !== 'ALL');
+  const index = list.indexOf(planId);
+  if (index === -1) list.push(planId);
+  else list.splice(index, 1);
+  form.value.planIds = list;
 }
 
 function branchName(id: string | null): string {
@@ -54,13 +63,16 @@ const missingFields = computed(() => {
   const missing: string[] = [];
   if (!f.title.trim()) missing.push('título');
   if (!f.code.trim()) missing.push('código');
-  if (f.levels.length === 0) missing.push('nivel de membresía');
+  if (f.planIds.length === 0) missing.push('planes con acceso');
   return missing;
 });
 
 const confirmDescription = computed(() => {
   const f = form.value;
-  return `Se creará el cupón "${f.title.trim()}" (${f.code.trim().toUpperCase()}) para niveles ${f.levels.join(', ')} · ${branchName(f.branchId)}. Aparecerá en Promociones de la app.`;
+  const audience = f.planIds.includes('ALL')
+    ? 'todos los socios'
+    : `socios con ${f.planIds.map(planLabel).join(', ')}`;
+  return `Se creará el cupón "${f.title.trim()}" (${f.code.trim().toUpperCase()}) para ${audience} · ${branchName(f.branchId)}. Aparecerá en Promociones de la app.`;
 });
 
 function askSubmit(): void {
@@ -82,7 +94,7 @@ async function submit(): Promise<void> {
       description: f.description.trim(),
       badge: f.badge.trim() || 'NUEVO',
       code: f.code.trim().toUpperCase(),
-      levels: f.levels,
+      planIds: f.planIds,
       branchId: f.branchId === 'todas' ? null : f.branchId,
     });
     confirmModalOpen.value = false;
@@ -101,9 +113,15 @@ onMounted(async () => {
     return;
   }
   try {
-    branches.value = await $fetch<Branch[]>('/api/branches');
+    const [branchList, planList] = await Promise.all([
+      $api<Branch[]>('/api/branches'),
+      $api<MembershipPlan[]>('/api/plans'),
+    ]);
+    branches.value = branchList;
+    plans.value = planList;
   } catch {
     branches.value = [];
+    plans.value = [];
   }
 });
 </script>
@@ -122,7 +140,7 @@ onMounted(async () => {
     <div>
       <h1 class="text-xl font-black text-text-primary">Nuevo cupón</h1>
       <p class="mt-1 text-[11px] text-text-dim">
-        Se publica en Promociones de la app según el nivel de membresía del
+        Se publica en Promociones de la app según el plan de membresía del
         socio.
       </p>
     </div>
@@ -199,22 +217,34 @@ onMounted(async () => {
         <div class="block">
           <span
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Niveles con acceso *</span
+            >Planes con acceso *</span
           >
           <div class="mt-1 flex flex-wrap gap-2">
             <button
-              v-for="level in LEVEL_OPTIONS"
-              :key="level"
               type="button"
               class="cursor-pointer rounded-full border px-4 py-1.5 text-xs font-bold transition"
               :class="
-                form.levels.includes(level)
+                form.planIds.includes('ALL')
                   ? 'border-accent bg-accent/15 text-accent'
                   : 'border-stroke bg-base text-text-dim hover:text-text-muted'
               "
-              @click="toggleLevel(level)"
+              @click="togglePlan('ALL')"
             >
-              {{ level }}
+              Todos los socios
+            </button>
+            <button
+              v-for="plan in plans"
+              :key="plan.id"
+              type="button"
+              class="cursor-pointer rounded-full border px-4 py-1.5 text-xs font-bold transition"
+              :class="
+                form.planIds.includes(plan.id)
+                  ? 'border-accent bg-accent/15 text-accent'
+                  : 'border-stroke bg-base text-text-dim hover:text-text-muted'
+              "
+              @click="togglePlan(plan.id)"
+            >
+              {{ plan.name }}
             </button>
           </div>
         </div>
@@ -315,11 +345,11 @@ onMounted(async () => {
                     {{ form.code || 'CÓDIGO' }}
                   </span>
                   <span
-                    v-for="level in form.levels"
-                    :key="level"
+                    v-for="planId in form.planIds"
+                    :key="planId"
                     class="rounded-full bg-white/5 px-2 py-0.5 text-[8px] font-bold text-text-muted"
                   >
-                    {{ level }}
+                    {{ planLabel(planId) }}
                   </span>
                 </div>
               </div>

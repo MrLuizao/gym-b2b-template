@@ -1,28 +1,41 @@
 import type { PlanDetail } from '#shared/types';
-import { useMockDb } from '../../utils/mock-db';
 
-export default defineEventHandler((event): PlanDetail => {
-  const id = getRouterParam(event, 'id');
-  const db = useMockDb();
+import { db, toPayment, toPlan } from '../../utils/db';
+import { requireStaff } from '../../utils/staff-auth';
 
-  const plan = db.plans.find((p) => p.id === id);
-  if (!plan) {
+export default defineEventHandler(async (event): Promise<PlanDetail> => {
+  await requireStaff(event);
+  const id = getRouterParam(event, 'id') ?? '';
+
+  const planSnap = await db().collection('plans').doc(id).get();
+  if (!planSnap.exists) {
     throw createError({ statusCode: 404, statusMessage: 'Plan no encontrado' });
   }
 
-  const payments = db.payments
-    .filter((p) => p.plan === plan.name)
-    .sort((a, b) => b.createdAt - a.createdAt);
+  const [paymentsSnap, membersCount] = await Promise.all([
+    db()
+      .collection('payments')
+      .where('plan_id', '==', id)
+      .orderBy('created_at', 'desc')
+      .limit(100)
+      .get(),
+    db()
+      .collection('users')
+      .where('membership_plan_id', '==', id)
+      .count()
+      .get(),
+  ]);
 
+  const payments = paymentsSnap.docs.map(toPayment);
   return {
-    plan,
+    plan: toPlan(planSnap),
     payments,
     stats: {
-      members: db.members.filter((m) => m.membershipType === plan.name).length,
+      members: membersCount.data().count,
       payments: payments.length,
       revenue: payments
         .filter((p) => p.status === 'APPROVED')
-        .reduce((total, p) => total + p.amount, 0),
+        .reduce((t, p) => t + p.amount, 0),
     },
   };
 });

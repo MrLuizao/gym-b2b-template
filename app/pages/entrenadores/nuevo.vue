@@ -88,7 +88,7 @@ async function submit(): Promise<void> {
   saving.value = true;
   try {
     const f = form.value;
-    const trainer = await $fetch<Trainer>('/api/trainers', {
+    const trainer = await $api<Trainer>('/api/trainers', {
       method: 'POST',
       body: {
         firstName: f.firstName.trim(),
@@ -117,7 +117,7 @@ onMounted(async () => {
     return;
   }
   try {
-    branches.value = await $fetch<Branch[]>('/api/branches');
+    branches.value = await $api<Branch[]>('/api/branches');
     if (form.value.branchIds.length === 0 && branches.value.length) {
       form.value.branchIds = [branches.value[0]!.id];
     }

@@ -1,12 +1,16 @@
 import type { ClassSchedule } from '#shared/types';
-import { useMockDb } from '../utils/mock-db';
 
-export default defineEventHandler((event): ClassSchedule[] => {
-  const db = useMockDb();
+import { db, toClass } from '../utils/db';
+import { requireStaff } from '../utils/staff-auth';
+
+export default defineEventHandler(async (event): Promise<ClassSchedule[]> => {
+  await requireStaff(event);
   const query = getQuery(event);
   const branchId = typeof query.branchId === 'string' ? query.branchId : null;
-  const list = branchId
-    ? db.classes.filter((c) => c.branchIds.includes(branchId))
-    : db.classes;
-  return [...list].sort((a, b) => a.startMinutes - b.startMinutes);
+  const ref = db().collection('classes') as FirebaseFirestore.Query;
+  const scoped = branchId ? ref.where('branch_ids', 'array-contains', branchId) : ref;
+  const snap = await scoped.get();
+  return snap.docs
+    .map(toClass)
+    .sort((a, b) => a.startMinutes - b.startMinutes);
 });

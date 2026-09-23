@@ -8,7 +8,7 @@ import {
   TicketPercent,
 } from '@lucide/vue';
 
-import type { Branch, PushLog } from '#shared/types';
+import type { Branch, MembershipPlan, PushLog } from '#shared/types';
 
 const {
   promos,
@@ -24,6 +24,7 @@ const { session } = useAuth();
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
 const branches = ref<Branch[]>([]);
+const plans = ref<MembershipPlan[]>([]);
 
 const bannerModalOpen = ref(false);
 
@@ -102,6 +103,11 @@ function branchName(id: string | null): string {
   return branches.value.find((b) => b.id === id)?.name ?? '—';
 }
 
+function planLabel(planId: string): string {
+  if (planId === 'ALL') return 'Todos';
+  return plans.value.find((p) => p.id === planId)?.name ?? planId;
+}
+
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString('es-MX', {
     day: '2-digit',
@@ -147,9 +153,15 @@ function submitBanner(): void {
 onMounted(async () => {
   await load();
   try {
-    branches.value = await $fetch<Branch[]>('/api/branches');
+    const [branchList, planList] = await Promise.all([
+      $api<Branch[]>('/api/branches'),
+      $api<MembershipPlan[]>('/api/plans'),
+    ]);
+    branches.value = branchList;
+    plans.value = planList;
   } catch {
     branches.value = [];
+    plans.value = [];
   }
 });
 </script>
@@ -235,7 +247,7 @@ onMounted(async () => {
             >
               <th class="px-5 py-3 font-bold">Cupón</th>
               <th class="px-5 py-3 font-bold">Código</th>
-              <th class="px-5 py-3 font-bold">Niveles</th>
+              <th class="px-5 py-3 font-bold">Planes</th>
               <th class="px-5 py-3 font-bold">Sede</th>
               <th class="px-5 py-3 text-right font-bold">Publicado</th>
             </tr>
@@ -276,11 +288,11 @@ onMounted(async () => {
               <td class="px-5 py-3">
                 <div class="flex flex-wrap gap-1">
                   <span
-                    v-for="level in coupon.levels"
-                    :key="level"
+                    v-for="planId in coupon.planIds"
+                    :key="planId"
                     class="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-bold text-text-muted"
                   >
-                    {{ level }}
+                    {{ planLabel(planId) }}
                   </span>
                 </div>
               </td>

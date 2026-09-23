@@ -119,17 +119,6 @@ const lockedBranchName = computed(
     '',
 );
 
-function levelBadge(level: MembershipPlan['level']): string {
-  switch (level) {
-    case 'BLACK':
-      return 'border-accent/40 bg-accent/10 text-accent';
-    case 'PLUS':
-      return 'border-sky-400/30 bg-sky-400/10 text-sky-400';
-    default:
-      return 'border-stroke bg-white/5 text-text-muted';
-  }
-}
-
 function askSubmit(): void {
   if (missingFields.value.length > 0) {
     formError.value = `Campos obligatorios faltantes: ${missingFields.value.join(', ')}`;
@@ -144,7 +133,7 @@ async function submit(): Promise<void> {
   saving.value = true;
   try {
     const f = form.value;
-    const result = await $fetch<{ member: Member }>('/api/members', {
+    const result = await $api<{ member: Member }>('/api/members', {
       method: 'POST',
       body: {
         firstName: f.firstName.trim(),
@@ -175,8 +164,8 @@ async function submit(): Promise<void> {
 onMounted(async () => {
   try {
     const [branchList, planList] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<MembershipPlan[]>('/api/plans'),
+      $api<Branch[]>('/api/branches'),
+      $api<MembershipPlan[]>('/api/plans'),
     ]);
     branches.value = branchList;
     plans.value = planList;
@@ -393,12 +382,6 @@ watch(
           </span>
           <div class="flex items-center justify-between gap-2">
             <p class="text-sm font-black text-text-primary">{{ plan.name }}</p>
-            <span
-              class="rounded-full border px-2 py-0.5 text-[9px] font-black"
-              :class="levelBadge(plan.level)"
-            >
-              {{ plan.level }}
-            </span>
           </div>
           <p class="mt-2 text-xl font-black text-accent">
             $ {{ plan.price }}

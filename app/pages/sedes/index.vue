@@ -49,8 +49,8 @@ const confirming = ref(false);
 onMounted(async () => {
   try {
     const [branchList, classList] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<ClassSchedule[]>('/api/classes'),
+      $api<Branch[]>('/api/branches'),
+      $api<ClassSchedule[]>('/api/classes'),
     ]);
     branches.value = branchList;
     classes.value = classList;
@@ -160,7 +160,7 @@ function toggleBranchStatus(branch: Branch): void {
       ? 'La sede se cerrará al público — los socios no podrán hacer check-in hasta reabrirla.'
       : 'La sede se abrirá al público y los socios podrán hacer check-in.',
     async () => {
-      const updated = await $fetch<Branch>(`/api/branches/${branch.id}`, {
+      const updated = await $api<Branch>(`/api/branches/${branch.id}`, {
         method: 'PUT',
         body: { status: next },
       });
@@ -186,7 +186,7 @@ function submitBranch(): void {
     async () => {
       creating.value = true;
       try {
-        const branch = await $fetch<Branch>('/api/branches', {
+        const branch = await $api<Branch>('/api/branches', {
           method: 'POST',
           body: {
             ...createForm.value,

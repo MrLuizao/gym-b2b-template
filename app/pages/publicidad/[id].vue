@@ -145,8 +145,8 @@ const onAlly = computed(() => readableOn(preview.value.brandColor));
 onMounted(async () => {
   try {
     const [branchList, data] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<SponsorAd>(`/api/cms/ads/${route.params.id}`),
+      $api<Branch[]>('/api/branches'),
+      $api<SponsorAd>(`/api/cms/ads/${route.params.id}`),
     ]);
     branches.value = branchList;
     ad.value = data;
@@ -282,7 +282,7 @@ async function saveAd(): Promise<void> {
 }
 
 async function reload(): Promise<void> {
-  ad.value = await $fetch<SponsorAd>(`/api/cms/ads/${route.params.id}`);
+  ad.value = await $api<SponsorAd>(`/api/cms/ads/${route.params.id}`);
 }
 
 const statusDescription = computed(() => {

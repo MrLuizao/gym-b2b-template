@@ -40,7 +40,7 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
 
   async function loadRecent(): Promise<void> {
     try {
-      recent.value = await $fetch<CheckInRecord[]>('/api/checkins', {
+      recent.value = await $api<CheckInRecord[]>('/api/checkins', {
         query: { limit: 5, branchId: toValue(branchId) },
       });
     } catch {
@@ -86,7 +86,7 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
     }
 
     const branch = toValue(branchId);
-    return $fetch<CheckInResult>('/api/checkin', {
+    return $api<CheckInResult>('/api/checkin', {
       method: 'POST',
       body:
         parsed.mode === 'signed'

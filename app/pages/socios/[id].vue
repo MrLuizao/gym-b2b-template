@@ -26,7 +26,7 @@ const saving = ref(false);
 const editForm = ref({
   name: '',
   branchId: '',
-  membershipType: '',
+  membershipPlanId: '',
   membershipUntil: '',
 });
 
@@ -51,7 +51,7 @@ const methodItems = ['Efectivo', 'Tarjeta', 'Transferencia'].map(
 
 function openPayModal(): void {
   const current = plans.value.find(
-    (p) => p.name === detail.value?.member.membershipType,
+    (p) => p.id === detail.value?.member.membershipPlanId,
   );
   payForm.value = {
     planId: current?.id ?? plans.value[0]?.id ?? '',
@@ -75,7 +75,7 @@ async function submitPayment(): Promise<void> {
   if (!m || paying.value) return;
   paying.value = true;
   try {
-    await $fetch('/api/payments', {
+    await $api('/api/payments', {
       method: 'POST',
       body: {
         memberId: m.id,
@@ -84,7 +84,7 @@ async function submitPayment(): Promise<void> {
         method: payForm.value.method,
       },
     });
-    detail.value = await $fetch<MemberDetail>(`/api/members/${m.id}`);
+    detail.value = await $api<MemberDetail>(`/api/members/${m.id}`);
     payModalOpen.value = false;
   } finally {
     paying.value = false;
@@ -104,9 +104,9 @@ const ciPage = ref(1);
 onMounted(async () => {
   try {
     const [memberDetail, branchList, planList] = await Promise.all([
-      $fetch<MemberDetail>(`/api/members/${route.params.id}`),
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<MembershipPlan[]>('/api/plans'),
+      $api<MemberDetail>(`/api/members/${route.params.id}`),
+      $api<Branch[]>('/api/branches'),
+      $api<MembershipPlan[]>('/api/plans'),
     ]);
     detail.value = memberDetail;
     branches.value = branchList;
@@ -204,6 +204,10 @@ function branchName(id: string): string {
   return branches.value.find((b) => b.id === id)?.name ?? id.toUpperCase();
 }
 
+function planName(id: string): string {
+  return plans.value.find((p) => p.id === id)?.name ?? 'Sin plan';
+}
+
 function formatDate(ts: number | null): string {
   if (!ts) return '—';
   return new Date(ts).toLocaleDateString('es-MX', {
@@ -286,7 +290,7 @@ function startEdit(): void {
   editForm.value = {
     name: m.name,
     branchId: m.branchId,
-    membershipType: m.membershipType,
+    membershipPlanId: m.membershipPlanId,
     membershipUntil: toDateInput(m.membershipUntil),
   };
   editing.value = true;
@@ -302,9 +306,9 @@ function confirmSaveMember(): void {
     changes.push(
       `Sede: ${branchName(m.branchId)} → ${branchName(editForm.value.branchId)}`,
     );
-  if (editForm.value.membershipType !== m.membershipType)
+  if (editForm.value.membershipPlanId !== m.membershipPlanId)
     changes.push(
-      `Plan: ${m.membershipType} → ${editForm.value.membershipType}`,
+      `Plan: ${planName(m.membershipPlanId)} → ${planName(editForm.value.membershipPlanId)}`,
     );
   if (editForm.value.membershipUntil !== toDateInput(m.membershipUntil))
     changes.push(
@@ -322,18 +326,18 @@ async function saveMember(): Promise<void> {
   if (!m || saving.value) return;
   saving.value = true;
   try {
-    await $fetch(`/api/members/${m.id}`, {
+    await $api(`/api/members/${m.id}`, {
       method: 'PUT',
       body: {
         name: editForm.value.name.trim(),
         ...(isAdmin.value ? { branchId: editForm.value.branchId } : {}),
-        membershipType: editForm.value.membershipType,
+        membershipPlanId: editForm.value.membershipPlanId,
         membershipUntil: editForm.value.membershipUntil
           ? new Date(`${editForm.value.membershipUntil}T23:59:59`).getTime()
           : null,
       },
     });
-    detail.value = await $fetch<MemberDetail>(`/api/members/${m.id}`);
+    detail.value = await $api<MemberDetail>(`/api/members/${m.id}`);
     saveModalOpen.value = false;
     editing.value = false;
   } finally {
@@ -418,10 +422,14 @@ async function saveMember(): Promise<void> {
         </div>
         <div>
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-            Nivel
+            Acceso
           </p>
           <p class="mt-1 text-sm font-black text-accent">
-            {{ detail.member.membershipLevel }}
+            {{
+              detail.member.allBranchesAccess
+                ? 'Todas las sedes'
+                : 'Sede de registro'
+            }}
           </p>
         </div>
         <div>
@@ -507,10 +515,10 @@ async function saveMember(): Promise<void> {
               Plan
             </span>
             <select
-              v-model="editForm.membershipType"
+              v-model="editForm.membershipPlanId"
               class="mt-1 w-full cursor-pointer rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             >
-              <option v-for="p in plans" :key="p.id" :value="p.name">
+              <option v-for="p in plans" :key="p.id" :value="p.id">
                 {{ p.name }} — $ {{ p.price }}
               </option>
             </select>

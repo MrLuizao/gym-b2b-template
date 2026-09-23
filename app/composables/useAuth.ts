@@ -3,8 +3,9 @@ import {
   getAuth,
   setPersistence,
   signInWithEmailAndPassword,
-  type Auth,
+  signOut,
 } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 export type StaffRole = 'ADMIN' | 'MANAGER' | 'RECEPTIONIST';
 
@@ -80,12 +81,42 @@ export function useAuth() {
     role: StaffRole = 'ADMIN',
   ): Promise<void> {
     const firebase = useFirebase();
-    if (firebase.enabled && firebase.app) {
-      const auth: Auth = getAuth(firebase.app);
+    if (firebase.enabled && firebase.app && firebase.db) {
+      const auth = getAuth(firebase.app);
       await setPersistence(auth, browserLocalPersistence);
-      await signInWithEmailAndPassword(auth, email, password);
-      // TODO: con Firebase el rol y la sede vendrán de custom claims / staff doc
-    } else if (!email.includes('@') || password.length < 4) {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+
+      /// El rol y la sede salen del doc staff/{uid} — fuente de verdad.
+      const staffSnap = await getDoc(
+        doc(firebase.db, 'staff', cred.user.uid),
+      );
+      if (!staffSnap.exists() || staffSnap.data().active === false) {
+        await signOut(auth);
+        throw new Error('Esta cuenta no es staff del negocio');
+      }
+      const staff = staffSnap.data();
+      const staffRole = (staff.role as StaffRole) ?? 'RECEPTIONIST';
+      const branchId = (staff.branch_id as string | null) ?? null;
+
+      let branchName: string | null = null;
+      if (branchId) {
+        const branchSnap = await getDoc(
+          doc(firebase.db, 'branches', branchId),
+        );
+        branchName = (branchSnap.data()?.name as string | undefined) ?? null;
+      }
+
+      session.value = {
+        email,
+        name: (staff.name as string | undefined) ?? deriveName(email),
+        role: staffRole,
+        branchId,
+        branchName,
+      };
+      return;
+    }
+
+    if (!email.includes('@') || password.length < 4) {
       throw new Error('Email válido y contraseña de 4+ caracteres (modo demo)');
     }
     session.value = {
@@ -130,9 +161,13 @@ export function useAuth() {
     );
   }
 
-  function logout(): void {
+  async function logout(): Promise<void> {
+    const firebase = useFirebase();
+    if (firebase.enabled && firebase.app) {
+      await signOut(getAuth(firebase.app));
+    }
     session.value = null;
-    navigateTo('/login');
+    await navigateTo('/login');
   }
 
   return {

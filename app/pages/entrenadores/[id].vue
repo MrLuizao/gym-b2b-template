@@ -55,9 +55,9 @@ const classForm = ref({
 onMounted(async () => {
   try {
     const [branchList, trainerDetail, classList] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<TrainerDetail>(`/api/trainers/${route.params.id}`),
-      $fetch<ClassSchedule[]>('/api/classes'),
+      $api<Branch[]>('/api/branches'),
+      $api<TrainerDetail>(`/api/trainers/${route.params.id}`),
+      $api<ClassSchedule[]>('/api/classes'),
     ]);
     branches.value = branchList;
     detail.value = trainerDetail;
@@ -233,12 +233,12 @@ async function saveTrainer(): Promise<void> {
   if (!detail.value || saving.value) return;
   saving.value = true;
   try {
-    await $fetch(`/api/trainers/${detail.value.trainer.id}/update`, {
+    await $api(`/api/trainers/${detail.value.trainer.id}/update`, {
       method: 'POST',
       body: editForm.value,
     });
     /// Recargar para reflejar también las clases reasignadas.
-    detail.value = await $fetch<TrainerDetail>(
+    detail.value = await $api<TrainerDetail>(
       `/api/trainers/${detail.value.trainer.id}`,
     );
     editing.value = false;
@@ -270,7 +270,7 @@ async function saveClass(): Promise<void> {
   if (!detail.value || !editingClassId.value || saving.value) return;
   saving.value = true;
   try {
-    const updated = await $fetch<ClassSchedule>(
+    const updated = await $api<ClassSchedule>(
       `/api/classes/${editingClassId.value}`,
       {
         method: 'PUT',
@@ -317,7 +317,7 @@ async function runToggleDuty(): Promise<void> {
   if (!detail.value || togglingDuty.value) return;
   togglingDuty.value = true;
   try {
-    const updated = await $fetch<{ isOnDuty: boolean }>(
+    const updated = await $api<{ isOnDuty: boolean }>(
       `/api/trainers/${detail.value.trainer.id}/duty`,
       { method: 'POST' },
     );

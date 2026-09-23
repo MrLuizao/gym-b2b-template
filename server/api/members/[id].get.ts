@@ -1,72 +1,58 @@
-import type { MemberAdmin, MemberDetail, MembershipLevel } from '#shared/types';
-import { useMockDb } from '../../utils/mock-db';
+import type { MemberDetail } from '#shared/types';
 
-const GRACE_PERIOD_DAYS = 3;
+import {
+  allPlans,
+  db,
+  toCheckIn,
+  toMember,
+  toMemberAdmin,
+  toPayment,
+} from '../../utils/db';
+import { requireBranchScope, requireStaff } from '../../utils/staff-auth';
 
-function levelFromPlan(plan: string): MembershipLevel {
-  const normalized = plan.toLowerCase();
-  if (normalized.includes('black')) return 'BLACK';
-  if (normalized.includes('plus')) return 'PLUS';
-  return 'CLASSIC';
-}
+export default defineEventHandler(async (event): Promise<MemberDetail> => {
+  const staff = await requireStaff(event);
+  const id = getRouterParam(event, 'id') ?? '';
 
-export default defineEventHandler((event): MemberDetail => {
-  const id = getRouterParam(event, 'id');
-  const db = useMockDb();
-  const now = Date.now();
-  const graceMs = 3 * 86_400_000;
-
-  const member = db.members.find((m) => m.id === id);
-  if (!member) {
+  const memberSnap = await db().collection('users').doc(id).get();
+  if (!memberSnap.exists) {
     throw createError({ statusCode: 404, statusMessage: 'Socio no encontrado' });
   }
+  const member = toMember(memberSnap);
+  requireBranchScope(staff, member.branchId);
 
-  let adminStatus: MemberAdmin['adminStatus'] = 'ACTIVE';
-  if (member.membershipStatus !== 'ACTIVE') {
-    adminStatus = 'EXPIRED';
-  } else if (member.membershipUntil !== null) {
-    if (member.membershipUntil < now) {
-      adminStatus =
-        member.membershipUntil + graceMs >= now ? 'EXPIRING' : 'EXPIRED';
-    } else if (member.membershipUntil - now <= graceMs) {
-      adminStatus = 'EXPIRING';
-    }
-  }
+  const [plans, checkInsSnap, paymentsSnap] = await Promise.all([
+    allPlans(),
+    db()
+      .collection('checkins')
+      .where('user_id', '==', id)
+      .orderBy('check_in_at', 'desc')
+      .limit(50)
+      .get(),
+    db()
+      .collection('payments')
+      .where('member_id', '==', id)
+      .orderBy('created_at', 'desc')
+      .limit(50)
+      .get(),
+  ]);
 
-  const plan = db.plans.find((p) => p.name === member.membershipType);
-  const level: MembershipLevel =
-    plan?.level ?? levelFromPlan(member.membershipType);
-
-  const checkIns = db.checkIns
-    .filter((c) => c.userId === id)
-    .sort((a, b) => b.checkInAt - a.checkInAt);
-
-  const payments = db.payments
-    .filter((p) => p.memberName === member.name)
-    .sort((a, b) => b.createdAt - a.createdAt);
+  /// checkIns son efímeros (TTL del día) — solo muestra actividad de hoy.
+  const checkIns = checkInsSnap.docs.map(toCheckIn);
+  const payments = paymentsSnap.docs.map(toPayment);
 
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
   return {
-    member: {
-      ...member,
-      membershipLevel: level,
-      adminStatus,
-      allBranchesAccess: plan?.allBranches ?? false,
-    },
+    member: toMemberAdmin(member, plans),
     checkIns,
     payments,
     stats: {
-      totalCheckIns: db.checkIns.filter(
-        (c) => c.userId === id && c.granted,
-      ).length,
-      monthCheckIns: db.checkIns.filter(
-        (c) =>
-          c.userId === id &&
-          c.granted &&
-          c.checkInAt >= monthStart.getTime(),
+      totalCheckIns: checkIns.filter((c) => c.granted).length,
+      monthCheckIns: checkIns.filter(
+        (c) => c.granted && c.checkInAt >= monthStart.getTime(),
       ).length,
     },
   };

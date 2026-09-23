@@ -1,15 +1,13 @@
-import { useMockDb } from '../../../../utils/mock-db';
+import { db } from '../../../../utils/db';
+import { requireAdmin, requireStaff } from '../../../../utils/staff-auth';
 
-export default defineEventHandler((event) => {
-  const db = useMockDb();
-  const id = getRouterParam(event, 'id');
-  const index = db.pushes.findIndex((item) => item.id === id);
-  if (index === -1) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'Notificación no encontrada',
-    });
+export default defineEventHandler(async (event) => {
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const ref = db().collection('pushLogs').doc(getRouterParam(event, 'id') ?? '');
+  if (!(await ref.get()).exists) {
+    throw createError({ statusCode: 404, statusMessage: 'Notificación no encontrada' });
   }
-  db.pushes.splice(index, 1);
+  await ref.delete();
   return { ok: true };
 });

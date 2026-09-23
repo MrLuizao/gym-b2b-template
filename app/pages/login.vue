@@ -3,7 +3,8 @@ import { Dumbbell } from '@lucide/vue';
 
 definePageMeta({ layout: false });
 
-const { login } = useAuth();
+const { login, session } = useAuth();
+const firebase = useFirebase();
 
 const email = ref('recepcion@capitalfitness.mx');
 const password = ref('demo1234');
@@ -16,7 +17,7 @@ async function submit(): Promise<void> {
   submitting.value = true;
   try {
     await login(email.value, password.value, role.value);
-    await navigateTo(homeFor(role.value));
+    await navigateTo(homeFor(session.value?.role));
   } catch (cause) {
     errorMessage.value = cause instanceof Error ? cause.message : 'No se pudo iniciar sesión';
   } finally {
@@ -74,7 +75,7 @@ async function submit(): Promise<void> {
           />
         </div>
 
-        <div>
+        <div v-if="!firebase.enabled">
           <label
             for="role"
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
@@ -108,8 +109,9 @@ async function submit(): Promise<void> {
         </button>
 
         <p class="text-center text-[10px] leading-relaxed text-text-dim">
-          Modo demo: cualquier email válido y contraseña de 4+ caracteres. Al configurar
-          Firebase Auth la validación es real.
+          {{ firebase.enabled
+            ? 'Acceso con cuenta de staff — el perfil se asigna desde el negocio.'
+            : 'Modo demo: cualquier email válido y contraseña de 4+ caracteres.' }}
         </p>
       </form>
     </div>

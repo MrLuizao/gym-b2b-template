@@ -1,0 +1,223 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════ HELPERS ═══════════════
+    // El doc /staff/{uid} es la fuente de verdad del rol (MVP).
+    // Cuando haya functions que mantengan custom claims, migrar a
+    // request.auth.token.role / .branch_id para evitar el get().
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function staffPath() {
+      return /databases/$(database)/documents/staff/$(request.auth.uid);
+    }
+    function isStaff() {
+      return signedIn() && exists(staffPath());
+    }
+    function role() {
+      return get(staffPath()).data.role;
+    }
+    function staffBranch() {
+      return get(staffPath()).data.branch_id;
+    }
+    function isAdmin() {
+      return isStaff() && role() == 'ADMIN';
+    }
+    function isManager() {
+      return isStaff() && role() == 'MANAGER';
+    }
+    function isReceptionist() {
+      return isStaff() && role() == 'RECEPTIONIST';
+    }
+    function atMyBranch(branchId) {
+      return isStaff() && staffBranch() == branchId;
+    }
+    function isMember() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // ═══════════════ CONFIG DE MARCA ═══════════════
+
+    match /config/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════ CATÁLOGOS GLOBALES ═══════════════
+    // Solo ADMIN escribe — gerente ve pero no toca.
+
+    match /plans/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /promotions/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /sponsorAds/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      // impressions / taps solo functions (Admin SDK ignora reglas).
+    }
+
+    match /pushLogs/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /store/products/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /webhookEvents/{id} {
+      allow read, write: if false;
+    }
+
+    // ═══════════════ SEDES ═══════════════
+
+    match /branches/{id} {
+      allow read: if signedIn();
+      allow update: if isAdmin()
+        || (isManager() && atMyBranch(id)
+            && !request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasAny(['max_capacity', 'current_capacity']));
+      // max_capacity lo define el negocio (admin); current_capacity solo
+      // functions. El gerente edita info/horario/status de su sede.
+      allow create, delete: if isAdmin();
+    }
+
+    // ═══════════════ STAFF ═══════════════
+
+    match /staff/{uid} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════ SOCIOS ═══════════════
+
+    match /users/{uid} {
+      allow get: if (isMember() && request.auth.uid == uid)
+        || isAdmin()
+        || ((isManager() || isReceptionist())
+            && resource.data.branch_id == staffBranch());
+      // list: la query DEBE filtrar branch_id == su sede; sin ese filtro
+      // Firestore rechaza la query completa (las reglas no filtran).
+      allow list: if isStaff();
+
+      allow create: if isAdmin()
+        || ((isManager() || isReceptionist())
+            && request.resource.data.branch_id == staffBranch())
+        || request.auth.uid == uid;
+
+      // membership_*, member_number, qr_code, stripe_customer_id,
+      // last_checkin_at: jamás escritos por clientes → solo functions.
+      allow update: if isAdmin()
+        || (isManager()
+            && resource.data.branch_id == staffBranch()
+            && request.resource.data.branch_id == staffBranch()
+            && !request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasAny(['membership_status', 'membership_plan_id',
+                          'membership_until', 'member_number', 'qr_code',
+                          'stripe_customer_id', 'last_checkin_at']))
+        || (isMember() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasOnly(['photo_url', 'phone', 'first_name', 'middle_name',
+                           'paternal_last_name', 'maternal_last_name',
+                           'sex', 'birth_date']));
+
+      allow delete: if isAdmin();
+
+      match /coupons/{couponId} {
+        allow read: if (isMember() && request.auth.uid == uid) || isStaff();
+        allow create, update: if isMember() && request.auth.uid == uid;
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ═══════════════ ENTRENADORES ═══════════════
+
+    match /trainers/{id} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        || (isManager() && staffBranch() in request.resource.data.branch_ids);
+      // Gerente: solo campos locales de coaches asignados a su sede.
+      allow update: if isAdmin()
+        || (isManager()
+            && staffBranch() in resource.data.branch_ids
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasOnly(['shift', 'is_on_duty', 'branch_ids']));
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════ CLASES ═══════════════
+
+    match /classes/{id} {
+      allow read: if signedIn();
+      allow create, delete: if isAdmin();
+      // Gerente: solo su clave dentro de branch_times — nada global.
+      allow update: if isAdmin()
+        || (isManager()
+            && staffBranch() in resource.data.branch_ids
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasOnly(['branch_times'])
+            && request.resource.data.branch_times
+                 .diff(resource.data.branch_times)
+                 .affectedKeys()
+                 .hasOnly([staffBranch()]));
+    }
+
+    // ═══════════════ CHECK-INS (efímeros, TTL) ═══════════════
+    // Escritura solo functions. Lectura: staff de la sede.
+    // El socio no los lee — su última visita vive en users.last_checkin_at.
+
+    match /checkins/{id} {
+      allow get: if isAdmin()
+        || (isStaff() && resource.data.branch_id == staffBranch());
+      allow list: if isStaff();
+      allow create, update, delete: if false;
+    }
+
+    // ═══════════════ ESTADÍSTICAS Y PRONÓSTICO ═══════════════
+
+    match /dailyStats/{id} {
+      allow get: if isAdmin()
+        || (isStaff() && resource.data.branch_id == staffBranch());
+      allow list: if isStaff();
+      allow create, update, delete: if false;
+    }
+
+    match /forecasts/{branchId} {
+      allow read: if signedIn();          // la app lo muestra al socio
+      allow write: if false;              // solo closeDay (functions)
+    }
+
+    // ═══════════════ PAGOS ═══════════════
+    // Escritura solo functions (webhook Stripe / registerManualPayment).
+    // El socio lee su historial; staff lee su sede.
+
+    match /payments/{id} {
+      allow get: if isAdmin()
+        || (isStaff() && resource.data.branch_id == staffBranch())
+        || (isMember() && resource.data.member_id == request.auth.uid);
+      allow list: if isStaff() || isMember();
+      allow create, update, delete: if false;
+    }
+
+    // ═══════════════ DEFAULT: DENY ═══════════════
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,28 +1,30 @@
-import { useMockDb } from '../../utils/mock-db';
+import { db } from '../../utils/db';
+import { requireAdmin, requireStaff } from '../../utils/staff-auth';
 
 export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, 'id');
-  const db = useMockDb();
-  const index = db.branches.findIndex((b) => b.id === id);
-  if (index === -1) {
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const id = getRouterParam(event, 'id') ?? '';
+
+  const ref = db().collection('branches').doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) {
     throw createError({ statusCode: 404, statusMessage: 'Sede no encontrada' });
   }
-  const branch = db.branches[index]!;
-  const branchId = branch.id;
 
-  const members = db.members.filter((m) => m.branchId === branchId).length;
-  const classes = db.classes.filter((c) =>
-    c.branchIds.includes(branchId),
-  ).length;
-  const trainers = db.trainers.filter((t) =>
-    t.branchIds.includes(branchId),
-  ).length;
-  if (members + classes + trainers > 0) {
+  const [members, classes, trainers] = await Promise.all([
+    db().collection('users').where('branch_id', '==', id).count().get(),
+    db().collection('classes').where('branch_ids', 'array-contains', id).count().get(),
+    db().collection('trainers').where('branch_ids', 'array-contains', id).count().get(),
+  ]);
+  const total =
+    members.data().count + classes.data().count + trainers.data().count;
+  if (total > 0) {
     throw createError({
       statusCode: 409,
-      statusMessage: `No se puede eliminar '${branch.name}': tiene ${members} socio(s), ${classes} clase(s) y ${trainers} entrenador(es) asignados`,
+      statusMessage: `No se puede eliminar '${snap.data()?.name}': tiene ${members.data().count} socio(s), ${classes.data().count} clase(s) y ${trainers.data().count} entrenador(es) asignados`,
     });
   }
-  db.branches.splice(index, 1);
+  await ref.delete();
   return { ok: true };
 });

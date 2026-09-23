@@ -19,7 +19,7 @@ const createError = ref<string | null>(null);
 
 const createForm = ref({
   name: '',
-  coach: '',
+  coachId: '',
   branchIds: [] as string[],
   room: '',
   start: '07:00',
@@ -36,9 +36,9 @@ const confirming = ref(false);
 onMounted(async () => {
   try {
     const [branchList, classList, trainerList] = await Promise.all([
-      $fetch<Branch[]>('/api/branches'),
-      $fetch<ClassSchedule[]>('/api/classes'),
-      $fetch<Trainer[]>('/api/trainers'),
+      $api<Branch[]>('/api/branches'),
+      $api<ClassSchedule[]>('/api/classes'),
+      $api<Trainer[]>('/api/trainers'),
     ]);
     branches.value = branchList;
     classes.value = classList;
@@ -60,8 +60,12 @@ const coachItems = computed(() =>
     .filter((t) =>
       t.branchIds.length === 0 || canEditInBranches(t.branchIds),
     )
-    .map((t) => ({ label: t.name, value: t.name })),
+    .map((t) => ({ label: t.name, value: t.id })),
 );
+
+function coachName(coachId: string): string {
+  return trainers.value.find((t) => t.id === coachId)?.name ?? '—';
+}
 
 const filtered = computed(() =>
   selectedBranch.value === 'todas'
@@ -129,7 +133,7 @@ function submitClass(): void {
     createError.value = 'El nombre es obligatorio (mín. 3 caracteres)';
     return;
   }
-  if (!createForm.value.coach) {
+  if (!createForm.value.coachId) {
     createError.value = 'Selecciona un coach';
     return;
   }
@@ -140,15 +144,15 @@ function submitClass(): void {
   createError.value = null;
   askConfirm(
     'Crear clase',
-    `Se creará la clase '${createForm.value.name.trim()}' (${createForm.value.start}–${createForm.value.end} · ${createForm.value.coach}) en: ${selectedBranchNames()}.`,
+    `Se creará la clase '${createForm.value.name.trim()}' (${createForm.value.start}–${createForm.value.end} · ${coachName(createForm.value.coachId)}) en: ${selectedBranchNames()}.`,
     async () => {
       creating.value = true;
       try {
-        const created = await $fetch<ClassSchedule>('/api/classes', {
+        const created = await $api<ClassSchedule>('/api/classes', {
           method: 'POST',
           body: {
             name: createForm.value.name.trim(),
-            coach: createForm.value.coach,
+            coachId: createForm.value.coachId,
             branchIds: createForm.value.branchIds,
             room: createForm.value.room,
             startMinutes: toMinutes(createForm.value.start),
@@ -160,7 +164,7 @@ function submitClass(): void {
         classes.value.sort((a, b) => a.startMinutes - b.startMinutes);
         createForm.value = {
           name: '',
-          coach: '',
+          coachId: '',
           branchIds: [],
           room: '',
           start: '07:00',
@@ -296,7 +300,7 @@ function submitClass(): void {
           />
           <div class="grid grid-cols-2 gap-3">
             <USelectMenu
-              v-model="createForm.coach"
+              v-model="createForm.coachId"
               :items="coachItems"
               value-key="value"
               placeholder="Coach…"

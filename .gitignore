@@ -9,3 +9,4 @@ dist
 functions/node_modules
 functions/lib
 serviceAccountKey.json
+service-account.json

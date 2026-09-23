@@ -1,13 +1,16 @@
-import type { Coupon, MembershipLevel } from '#shared/types';
-import { useMockDb } from '../../../utils/mock-db';
+import type { Coupon } from '#shared/types';
 
-const LEVELS: MembershipLevel[] = ['CLASSIC', 'PLUS', 'BLACK'];
+import { allPlans, db, toCoupon } from '../../../utils/db';
+import { requireAdmin, requireStaff } from '../../../utils/staff-auth';
 
 export default defineEventHandler(async (event): Promise<Coupon> => {
-  const db = useMockDb();
-  const id = getRouterParam(event, 'id');
-  const coupon = db.coupons.find((item) => item.id === id);
-  if (!coupon) {
+  const staff = await requireStaff(event);
+  requireAdmin(staff);
+  const id = getRouterParam(event, 'id') ?? '';
+
+  const ref = db().collection('promotions').doc(id);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()?.type !== 'coupon') {
     throw createError({ statusCode: 404, statusMessage: 'Cupón no encontrado' });
   }
 
@@ -16,29 +19,24 @@ export default defineEventHandler(async (event): Promise<Coupon> => {
     description?: string;
     badge?: string;
     code?: string;
-    levels?: string[];
+    planIds?: string[];
     branchId?: string | null;
   }>(event);
 
-  if (body?.title !== undefined && body.title.trim()) {
-    coupon.title = body.title.trim().slice(0, 80);
-  }
-  if (body?.description !== undefined) {
-    coupon.description = body.description.trim().slice(0, 200);
-  }
-  if (body?.badge !== undefined) {
-    coupon.badge = body.badge.trim().slice(0, 12) || 'NUEVO';
-  }
-  if (body?.code !== undefined && body.code.trim()) {
-    coupon.code = body.code.trim().toUpperCase().slice(0, 24);
-  }
-  if (body?.levels !== undefined && Array.isArray(body.levels)) {
-    const levels = body.levels.filter((l): l is MembershipLevel =>
-      LEVELS.includes(l as MembershipLevel),
+  const update: Record<string, unknown> = {};
+  if (body?.title !== undefined && body.title.trim()) update.title = body.title.trim().slice(0, 80);
+  if (body?.description !== undefined) update.description = body.description.trim().slice(0, 200);
+  if (body?.badge !== undefined) update.badge = body.badge.trim().slice(0, 12) || 'NUEVO';
+  if (body?.code !== undefined && body.code.trim()) update.code = body.code.trim().toUpperCase().slice(0, 24);
+  if (body?.planIds !== undefined && Array.isArray(body.planIds)) {
+    const valid = new Set((await allPlans()).map((p) => p.id));
+    const targets = body.planIds.filter(
+      (p): p is string => typeof p === 'string' && (p === 'ALL' || valid.has(p)),
     );
-    if (levels.length > 0) coupon.levels = levels;
+    if (targets.length > 0) update.plan_ids = targets;
   }
-  if (body?.branchId !== undefined) coupon.branchId = body.branchId || null;
+  if (body?.branchId !== undefined) update.branch_id = body.branchId || null;
 
-  return coupon;
+  if (Object.keys(update).length > 0) await ref.update(update);
+  return toCoupon(await ref.get());
 });

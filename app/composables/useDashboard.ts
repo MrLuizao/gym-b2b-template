@@ -11,7 +11,7 @@ export function useDashboard() {
 
   async function load(): Promise<void> {
     try {
-      data.value = await $fetch<DashboardResponse>('/api/dashboard');
+      data.value = await $api<DashboardResponse>('/api/dashboard');
       error.value = null;
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : 'Error de red';
@@ -37,7 +37,7 @@ export function useDashboard() {
       });
       return;
     }
-    await $fetch(`/api/branches/${branchId}/adjust`, {
+    await $api(`/api/branches/${branchId}/adjust`, {
       method: 'POST',
       body: { delta },
     });

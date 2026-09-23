@@ -17,15 +17,13 @@ const generating = ref(false);
 
 type ReportType = 'payments' | 'checkins' | 'ads';
 
-/// El reporte de aliados es comercial: solo admin. El gerente reporta su sede.
-const reportTypes = computed(() => {
-  const all = [
-    { label: 'Pagos por rango de fechas', value: 'payments' as const },
-    { label: 'Check-ins por rango de fechas', value: 'checkins' as const },
-    { label: 'Publicidad de aliados', value: 'ads' as const },
-  ];
-  return isAdmin.value ? all : all.filter((t) => t.value !== 'ads');
-});
+/// Gerente y admin ven los mismos reportes — el gerente siempre está
+/// limitado a su sede (reportBranches + selectedBranch fijo).
+const reportTypes = computed(() => [
+  { label: 'Pagos por rango de fechas', value: 'payments' as const },
+  { label: 'Check-ins por rango de fechas', value: 'checkins' as const },
+  { label: 'Publicidad de aliados', value: 'ads' as const },
+]);
 
 /// El gerente solo genera reportes de su propia sede.
 const reportBranches = computed(() =>
@@ -44,24 +42,32 @@ const paymentsReport = ref<PaymentsReport | null>(null);
 const checkInsReport = ref<CheckInsReport | null>(null);
 const adsReport = ref<AdsReportResponse | null>(null);
 
-/// Las cards "Recaudado por plan" filtran la tabla de detalle de pagos.
+/// Las cards "Recaudado por plan" filtran la tabla de detalle de pagos —
+/// el filtro guarda el planId y la card muestra el nombre resuelto.
 const paymentPlanFilter = ref('todos');
 
 const filteredPayments = computed(() => {
   const report = paymentsReport.value;
   if (!report) return [];
   if (paymentPlanFilter.value === 'todos') return report.payments;
-  return report.payments.filter((p) => p.plan === paymentPlanFilter.value);
+  return report.payments.filter((p) => p.planId === paymentPlanFilter.value);
 });
 
-function togglePaymentPlan(plan: string): void {
+const paymentPlanFilterName = computed(
+  () =>
+    paymentsReport.value?.stats.byPlan.find(
+      (r) => r.planId === paymentPlanFilter.value,
+    )?.plan ?? '',
+);
+
+function togglePaymentPlan(planId: string): void {
   paymentPlanFilter.value =
-    paymentPlanFilter.value === plan ? 'todos' : plan;
+    paymentPlanFilter.value === planId ? 'todos' : planId;
 }
 
 onMounted(async () => {
   try {
-    branches.value = await $fetch<Branch[]>('/api/branches');
+    branches.value = await $api<Branch[]>('/api/branches');
     const today = new Date();
     toDate.value = toInputDate(today);
     const weekAgo = new Date(today);
@@ -109,19 +115,19 @@ async function generate(): Promise<void> {
   const qs = `from=${from}&to=${to}&branchId=${selectedBranch.value}`;
   try {
     if (reportType.value === 'payments') {
-      paymentsReport.value = await $fetch<PaymentsReport>(
+      paymentsReport.value = await $api<PaymentsReport>(
         `/api/reports/payments?${qs}`,
       );
       checkInsReport.value = null;
       adsReport.value = null;
     } else if (reportType.value === 'checkins') {
-      checkInsReport.value = await $fetch<CheckInsReport>(
+      checkInsReport.value = await $api<CheckInsReport>(
         `/api/reports/checkins?${qs}`,
       );
       paymentsReport.value = null;
       adsReport.value = null;
     } else {
-      adsReport.value = await $fetch<AdsReportResponse>(
+      adsReport.value = await $api<AdsReportResponse>(
         `/api/reports/ads?${qs}`,
       );
       paymentsReport.value = null;
@@ -389,15 +395,15 @@ function exportCsv(): void {
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <button
             v-for="row in paymentsReport.stats.byPlan"
-            :key="row.plan"
+            :key="row.planId"
             type="button"
             class="flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 transition"
             :class="
-              paymentPlanFilter === row.plan
+              paymentPlanFilter === row.planId
                 ? 'border-accent bg-accent/10'
                 : 'border-stroke bg-surface hover:border-accent/50'
             "
-            @click="togglePaymentPlan(row.plan)"
+            @click="togglePaymentPlan(row.planId)"
           >
             <UBadge
               :color="planColor(row.plan)"
@@ -417,8 +423,8 @@ function exportCsv(): void {
           v-if="paymentPlanFilter !== 'todos'"
           class="mt-2 text-[10px] font-semibold text-text-dim"
         >
-          Filtrando por {{ paymentPlanFilter }} — toca la card de nuevo para ver
-          todos.
+          Filtrando por {{ paymentPlanFilterName }} — toca la card de nuevo
+          para ver todos.
         </p>
       </section>
 
@@ -524,7 +530,7 @@ function exportCsv(): void {
             {{
               paymentPlanFilter === 'todos'
                 ? 'Sin pagos en el rango seleccionado'
-                : `Sin pagos del plan ${paymentPlanFilter}`
+                : `Sin pagos del plan ${paymentPlanFilterName}`
             }}
           </p>
         </div>
