@@ -15,12 +15,17 @@ export function useFirebase(): FirebaseContext {
   if (cached) return cached;
 
   const config = useRuntimeConfig();
-  const raw = config.public.firebaseConfig;
+  /// Nuxt parsea a objeto las env vars que empiezan con `{` — aceptar ambos tipos.
+  const raw = config.public.firebaseConfig as
+    | string
+    | Record<string, string>
+    | undefined;
 
   let app: FirebaseApp | null = null;
   if (raw) {
     try {
-      app = getApps()[0] ?? initializeApp(JSON.parse(raw) as Record<string, string>);
+      const opts = typeof raw === 'string' ? (JSON.parse(raw) as Record<string, string>) : raw;
+      app = getApps()[0] ?? initializeApp(opts);
     } catch {
       app = null;
     }
