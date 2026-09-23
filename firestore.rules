@@ -103,7 +103,9 @@ service cloud.firestore {
     // ═══════════════ SOCIOS ═══════════════
 
     match /users/{uid} {
-      allow get: if (isMember() && request.auth.uid == uid)
+      // self-get sin exigir que el doc exista — la app necesita saber
+      // si ya hay perfil para mandar a "completar registro".
+      allow get: if (signedIn() && request.auth.uid == uid)
         || isAdmin()
         || ((isManager() || isReceptionist())
             && resource.data.branch_id == staffBranch());
