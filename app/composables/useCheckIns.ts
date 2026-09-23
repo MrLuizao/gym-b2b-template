@@ -41,7 +41,7 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
   async function loadRecent(): Promise<void> {
     try {
       recent.value = await $fetch<CheckInRecord[]>('/api/checkins', {
-        query: { limit: 8, branchId: toValue(branchId) },
+        query: { limit: 5, branchId: toValue(branchId) },
       });
     } catch {
       recent.value = [];

@@ -18,7 +18,7 @@ function timeOf(timestamp: number): string {
         Registro de accesos
       </h2>
       <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-        Últimos 8
+        Últimos 5
       </span>
     </div>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { MapPin } from '@lucide/vue';
 
-import type { Branch, CheckInResult } from '#shared/types';
+import type { Branch } from '#shared/types';
 
 const { session } = useAuth();
 
@@ -14,6 +14,9 @@ const branchItems = computed(() =>
   branches.value.map((b) => ({ label: b.name, value: b.id })),
 );
 
+/// Gerente y recepcionista operan su sede fija — ven el selector bloqueado.
+const branchLocked = computed(() => !!session.value?.branchId);
+
 const { handleScan, recent, lastResult, submitting, loadRecent } = useCheckIns(
   () => activeBranchId.value,
 );
@@ -22,21 +25,13 @@ watch(activeBranchId, () => {
   void loadRecent();
 });
 
-const alertVisible = ref(false);
-let alertTimer: ReturnType<typeof setTimeout> | null = null;
-
 async function onDetect(code: string): Promise<void> {
   await handleScan(code);
-  alertVisible.value = true;
-  if (alertTimer) clearTimeout(alertTimer);
-  alertTimer = setTimeout(() => {
-    alertVisible.value = false;
-  }, 3000);
 }
 
 onMounted(async () => {
+  branches.value = await $fetch<Branch[]>('/api/branches');
   if (!activeBranchId.value) {
-    branches.value = await $fetch<Branch[]>('/api/branches');
     activeBranchId.value = branches.value[0]?.id ?? '';
   }
   void loadRecent();
@@ -44,39 +39,33 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div
-      v-if="!session?.branchId"
-      class="flex items-center gap-3 rounded-2xl border border-stroke bg-surface px-4 py-3"
-    >
-      <MapPin class="h-4 w-4 shrink-0 text-accent" />
-      <span class="text-[11px] font-bold uppercase tracking-widest text-text-dim">
-        Operando en
-      </span>
-      <USelectMenu
-        v-model="activeBranchId"
-        :items="branchItems"
-        value-key="value"
-        class="w-48"
-      />
-    </div>
+  <div class="flex min-h-[calc(100vh-6rem)] flex-col gap-6">
+    <h1 class="text-xl font-black text-text-primary">Recepción</h1>
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <ScannerPanel @detect="onDetect" />
+    <div class="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-5">
+      <div class="flex flex-col gap-4 lg:col-span-3">
+        <ScannerPanel @detect="onDetect" />
+        <ScanResultPanel :result="lastResult" :pending="submitting" />
+      </div>
 
-      <div class="space-y-4">
-        <MemberCard :member="lastResult?.member ?? null" :result="lastResult" />
+      <div class="flex flex-col gap-4 self-start lg:col-span-2">
+        <div>
+          <span
+            class="flex items-center gap-2 text-sm font-black tracking-tight text-text-primary"
+          >
+            <MapPin class="h-4 w-4 text-accent" />
+            Operando en
+          </span>
+          <USelectMenu
+            v-model="activeBranchId"
+            :items="branchItems"
+            value-key="value"
+            :disabled="branchLocked"
+            class="mt-1 w-full"
+          />
+        </div>
         <CheckInsList :records="recent" />
       </div>
     </div>
-
-    <div
-      v-if="submitting"
-      class="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full border border-stroke bg-surface px-5 py-2 text-xs font-bold text-text-muted shadow-xl"
-    >
-      Validando acceso…
-    </div>
-
-    <AccessAlert :result="lastResult" :visible="alertVisible" />
   </div>
 </template>
