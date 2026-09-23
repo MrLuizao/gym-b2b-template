@@ -1,12 +1,12 @@
 import { getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import type { FetchOptions } from 'ofetch';
+import type { NitroFetchOptions, NitroFetchRequest } from 'nitropack';
 
 /// $fetch + Authorization: Bearer <idToken> cuando hay sesión Firebase.
 /// Auto-importado — usar en lugar de $fetch para llamadas a /api/*.
 export async function $api<T = unknown>(
-  request: string,
-  opts?: FetchOptions<'json'>,
+  request: NitroFetchRequest,
+  opts?: NitroFetchOptions<NitroFetchRequest>,
 ): Promise<T> {
   let token: string | null = null;
   const app = getApps()[0];
