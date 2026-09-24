@@ -41,6 +41,7 @@ const editForm = ref({
   imageUrl: '',
   ctaLabel: 'Ver oferta',
   branchId: 'todas',
+  placement: 'carousel' as SponsorAd['placement'],
   endsAt: '',
   description: '',
   address: '',
@@ -63,6 +64,15 @@ const branchItems = computed(() => [
   { label: 'Todas las sedes', value: 'todas' },
   ...branches.value.map((b) => ({ label: b.name, value: b.id })),
 ]);
+
+const placementItems = [
+  { label: 'Carrusel del Home', value: 'carousel' },
+  { label: 'Directorio de Aliados', value: 'list' },
+];
+
+function placementLabel(p: SponsorAd['placement']): string {
+  return p === 'carousel' ? 'Carrusel del Home' : 'Directorio de Aliados';
+}
 
 const saveModalOpen = ref(false);
 const saveModalEmpty = ref(false);
@@ -173,6 +183,7 @@ function startEdit(): void {
     imageUrl: ad.value.imageUrl,
     ctaLabel: ad.value.ctaLabel,
     branchId: ad.value.branchId ?? 'todas',
+    placement: ad.value.placement,
     endsAt: toInputDate(ad.value.endsAt),
     description: ad.value.description,
     address: ad.value.address,
@@ -215,6 +226,10 @@ function confirmSave(): void {
   const newBranch = editForm.value.branchId === 'todas' ? null : editForm.value.branchId;
   if (newBranch !== a.branchId)
     changes.push(`Sede: ${branchName(a.branchId)} → ${branchName(newBranch)}`);
+  if (editForm.value.placement !== a.placement)
+    changes.push(
+      `Espacio: ${placementLabel(a.placement)} → ${placementLabel(editForm.value.placement)}`,
+    );
   if (endsAt !== a.endsAt)
     changes.push(`Vigencia: ${formatDay(a.endsAt)} → ${formatDay(endsAt)}`);
   if (editForm.value.description !== a.description)
@@ -258,6 +273,7 @@ async function saveAd(): Promise<void> {
       ctaLabel: editForm.value.ctaLabel.trim() || 'Ver oferta',
       branchId:
         editForm.value.branchId === 'todas' ? null : editForm.value.branchId,
+      placement: editForm.value.placement,
       endsAt,
       description: editForm.value.description.trim(),
       address: editForm.value.address.trim(),
@@ -494,6 +510,14 @@ async function removeAd(): Promise<void> {
         </div>
         <div>
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Espacio
+          </p>
+          <p class="mt-1 text-sm font-black text-text-primary">
+            {{ placementLabel(ad.placement) }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
             Vigencia
           </p>
           <p class="mt-1 text-sm font-black text-text-primary">
@@ -652,6 +676,18 @@ async function removeAd(): Promise<void> {
             <USelectMenu
               v-model="editForm.branchId"
               :items="branchItems"
+              value-key="value"
+              class="mt-1 w-full"
+            />
+          </label>
+          <label class="block">
+            <span
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >Espacio</span
+            >
+            <USelectMenu
+              v-model="editForm.placement"
+              :items="placementItems"
               value-key="value"
               class="mt-1 w-full"
             />

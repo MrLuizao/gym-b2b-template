@@ -36,6 +36,7 @@ export interface AdDraft {
   imageUrl: string;
   ctaLabel: string;
   branchId: string | null;
+  placement?: SponsorAd['placement'];
   endsAt: number;
   status?: SponsorAd['status'];
   description?: string;

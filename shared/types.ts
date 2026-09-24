@@ -275,6 +275,10 @@ export interface SponsorAd {
   imageUrl: string;
   ctaLabel: string;
   branchId: string | null;
+  /// Espacio vendido: 'carousel' = carrusel del Home (premium),
+  /// 'list' = directorio de Aliados. Los ads viejos sin el campo
+  /// se tratan como 'carousel' (comportamiento previo).
+  placement: 'carousel' | 'list';
   status: 'ACTIVE' | 'PAUSED';
   endsAt: number;
   impressions: number;

@@ -214,6 +214,7 @@ onMounted(async () => {
               class="border-b border-stroke text-[10px] uppercase tracking-widest text-text-dim"
             >
               <th class="px-5 py-3 font-bold">Anuncio</th>
+              <th class="px-5 py-3 font-bold">Espacio</th>
               <th class="px-5 py-3 font-bold">Sede</th>
               <th class="px-5 py-3 font-bold">Vigencia</th>
               <th class="px-5 py-3 font-bold">Estado</th>
@@ -256,6 +257,18 @@ onMounted(async () => {
                     </p>
                   </div>
                 </div>
+              </td>
+              <td class="px-5 py-3">
+                <span
+                  class="rounded-full border px-2.5 py-0.5 text-[10px] font-black"
+                  :class="
+                    ad.placement === 'carousel'
+                      ? 'border-accent/40 bg-accent/10 text-accent'
+                      : 'border-stroke bg-base text-text-muted'
+                  "
+                >
+                  {{ ad.placement === 'carousel' ? 'CARRUSEL' : 'DIRECTORIO' }}
+                </span>
               </td>
               <td class="px-5 py-3 text-[11px] text-text-muted">
                 {{ branchName(ad.branchId) }}

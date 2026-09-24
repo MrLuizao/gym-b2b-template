@@ -20,6 +20,7 @@ const form = ref({
   imageUrl: '',
   ctaLabel: 'Ver oferta',
   branchId: 'todas',
+  placement: 'carousel' as SponsorAd['placement'],
   endsAt: '',
   status: 'ACTIVE' as SponsorAd['status'],
   description: '',
@@ -39,6 +40,17 @@ const branchItems = computed(() => [
   { label: 'Todas las sedes', value: 'todas' },
   ...branches.value.map((b) => ({ label: b.name, value: b.id })),
 ]);
+
+/// Espacios publicitarios vendibles — el carrusel del Home es el
+/// premium; el directorio de Aliados es la presencia básica.
+const placementItems = [
+  { label: 'Carrusel del Home', value: 'carousel' },
+  { label: 'Directorio de Aliados', value: 'list' },
+];
+
+const placementLabel = computed(() =>
+  placementItems.find((p) => p.value === form.value.placement)?.label ?? '',
+);
 
 const preview = computed(() => ({
   imageUrl: form.value.imageUrl,
@@ -77,7 +89,7 @@ const endsAtTs = computed(() =>
 
 const confirmDescription = computed(() => {
   const active = form.value.status === 'ACTIVE';
-  return `"${form.value.advertiser.trim()}" ${active ? 'aparecerá' : 'quedará pausado sin aparecer'} en el carrusel de Aliados del Home (${branchName(form.value.branchId === 'todas' ? null : form.value.branchId)}) hasta el ${formatDay(endsAtTs.value)}.`;
+  return `"${form.value.advertiser.trim()}" ${active ? 'aparecerá' : 'quedará pausado sin aparecer'} en ${placementLabel.value} (${branchName(form.value.branchId === 'todas' ? null : form.value.branchId)}) hasta el ${formatDay(endsAtTs.value)}.`;
 });
 
 const missingFields = computed(() => {
@@ -120,6 +132,7 @@ async function publish(): Promise<void> {
       imageUrl: form.value.imageUrl,
       ctaLabel: form.value.ctaLabel.trim() || 'Ver oferta',
       branchId: form.value.branchId === 'todas' ? null : form.value.branchId,
+      placement: form.value.placement,
       endsAt: endsAtTs.value,
       status: form.value.status,
       description: form.value.description.trim(),
@@ -331,6 +344,18 @@ onMounted(async () => {
           <USelectMenu
             v-model="form.branchId"
             :items="branchItems"
+            value-key="value"
+            class="mt-1 w-full"
+          />
+        </label>
+        <label class="block">
+          <span
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >Espacio *</span
+          >
+          <USelectMenu
+            v-model="form.placement"
+            :items="placementItems"
             value-key="value"
             class="mt-1 w-full"
           />

@@ -194,6 +194,7 @@ export function toSponsorAd(s: DocumentSnapshot): SponsorAd {
     imageUrl: d.image_url ?? '',
     ctaLabel: d.cta_label ?? '',
     branchId: d.branch_id ?? null,
+    placement: d.placement === 'list' ? 'list' : 'carousel',
     status: d.status ?? 'PAUSED',
     endsAt: toMs(d.ends_at) ?? 0,
     impressions: d.impressions ?? 0,
