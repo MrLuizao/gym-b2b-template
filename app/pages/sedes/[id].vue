@@ -287,6 +287,11 @@ async function saveBranch(): Promise<void> {
         method: 'PUT',
         body: {
           ...editForm.value,
+          /// max/current_capacity son admin-only en el PUT — enviarlos
+          /// aunque no cambiaran rechazaba TODO el guardado del gerente.
+          ...(isAdmin.value
+            ? {}
+            : { maxCapacity: undefined, currentCapacity: undefined }),
           openMinutes: toMinutes(editForm.value.openTime),
           closeMinutes: toMinutes(editForm.value.closeTime),
           lat: parseCoord(editForm.value.lat),
@@ -751,7 +756,8 @@ async function unassignTrainer(): Promise<void> {
               v-model.number="editForm.maxCapacity"
               type="number"
               min="1"
-              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              :disabled="!isAdmin"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
             />
           </label>
           <label class="block">
@@ -762,7 +768,8 @@ async function unassignTrainer(): Promise<void> {
               v-model.number="editForm.currentCapacity"
               type="number"
               min="0"
-              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              :disabled="!isAdmin"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
             />
           </label>
           <label class="block">

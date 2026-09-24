@@ -21,7 +21,9 @@ export default defineEventHandler(
     const delta = local.getTime() - startOfDayLocal.getTime();
     const startOfDay = Timestamp.fromMillis(Date.now() - delta);
 
-    /// Staff con sede fija: KPIs scopeados a su sucursal.
+    /// Staff con sede fija: KPIs/tráfico scopeados a su sucursal, pero
+    /// las cards de aforo muestran TODAS las sedes (solo lectura para
+    /// quien no puede editarlas).
     const branchId = staff.role === 'ADMIN' ? null : staff.branchId;
 
     const branchesSnap = await db().collection('branches').get();
@@ -82,7 +84,7 @@ export default defineEventHandler(
           peakHour: 0,
         },
       },
-      branches,
+      branches: allBranches,
       traffic,
       recentCheckIns: todayCheckIns.slice(0, 8),
     };

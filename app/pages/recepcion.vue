@@ -17,9 +17,8 @@ const branchItems = computed(() =>
 /// Gerente y recepcionista operan su sede fija — ven el selector bloqueado.
 const branchLocked = computed(() => !!session.value?.branchId);
 
-const { handleScan, recent, lastResult, submitting, loadRecent } = useCheckIns(
-  () => activeBranchId.value,
-);
+const { handleScan, recent, lastResult, submitting, loadRecent } =
+  useCheckIns(() => activeBranchId.value);
 
 watch(activeBranchId, () => {
   void loadRecent();

@@ -4,6 +4,7 @@ import {
   Bell,
   CalendarDays,
   CreditCard,
+  DoorClosed,
   Dumbbell,
   Handshake,
   LayoutDashboard,
@@ -15,12 +16,64 @@ import {
   Users,
 } from '@lucide/vue';
 import type { Component } from 'vue';
+import type { Branch } from '#shared/types';
 import type { StaffRole } from '~/composables/useAuth';
 
 const route = useRoute();
 const { session, logout } = useAuth();
 
 const logoutConfirmOpen = ref(false);
+
+/// Cierre de sede desde el header — final del día: archiva los check-ins
+/// abiertos de la sede a dailyStats y resetea su aforo a 0. Cualquier
+/// rol puede cerrar; admin elige sede, staff opera la suya.
+const closeDayOpen = ref(false);
+const closingDay = ref(false);
+const closeDayError = ref<string | null>(null);
+const closeDayDone = ref<string | null>(null);
+const closeBranches = ref<Branch[]>([]);
+const closeBranchId = ref('');
+const { closeDay } = useCloseDay();
+
+const isAdmin = computed(() => session.value?.role === 'ADMIN');
+const closeBranchItems = computed(() =>
+  closeBranches.value.map((b) => ({ label: b.name, value: b.id })),
+);
+
+async function openCloseDay(): Promise<void> {
+  closeDayError.value = null;
+  closeBranchId.value = session.value?.branchId ?? '';
+  if (isAdmin.value && closeBranches.value.length === 0) {
+    try {
+      closeBranches.value = await $api<Branch[]>('/api/branches');
+    } catch {
+      closeBranches.value = [];
+    }
+    closeBranchId.value =
+      closeBranchId.value || closeBranches.value[0]?.id || '';
+  }
+  closeDayOpen.value = true;
+}
+
+async function confirmCloseDay(): Promise<void> {
+  if (!closeBranchId.value || closingDay.value) return;
+  closingDay.value = true;
+  closeDayError.value = null;
+  try {
+    const swept = await closeDay(closeBranchId.value);
+    closeDayOpen.value = false;
+    closeDayDone.value =
+      swept === 0
+        ? 'Aforo en 0 — no había check-ins por archivar'
+        : `Sede cerrada — ${swept} check-in${swept === 1 ? '' : 's'} archivado${swept === 1 ? '' : 's'} y aforo en 0`;
+    setTimeout(() => (closeDayDone.value = null), 6000);
+  } catch (cause) {
+    closeDayError.value =
+      cause instanceof Error ? cause.message : 'No se pudo cerrar la sede';
+  } finally {
+    closingDay.value = false;
+  }
+}
 
 type NavItem = {
   to: string;
@@ -217,6 +270,19 @@ const pageTitle = computed(() => {
             }}{{ session?.branchName ? ` · ${session.branchName}` : '' }}
           </span>
           <button
+            class="flex items-center gap-1.5 rounded-full border border-red-400/40 bg-red-400/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 transition hover:bg-red-400/20"
+            :title="
+              isAdmin
+                ? 'Cierre de día — eliges qué sede cerrar'
+                : `Cierre de día de ${session?.branchName ?? 'tu sede'} — archiva check-ins y resetea el aforo`
+            "
+            @click="openCloseDay"
+          >
+            <DoorClosed class="h-4 w-4" />
+            <span class="hidden sm:inline">Cerrar sede</span>
+          </button>
+          <!-- Avisos y avatar ocultos por ahora — sin uso real todavía.
+          <button
             class="relative rounded-full border border-stroke bg-white/5 p-2 text-text-muted transition hover:text-text-primary"
             title="Avisos"
           >
@@ -230,6 +296,8 @@ const pageTitle = computed(() => {
           >
             {{ (session?.name ?? 'ST').slice(0, 2).toUpperCase() }}
           </div>
+          -->
+
         </div>
       </header>
 
@@ -260,5 +328,67 @@ const pageTitle = computed(() => {
         </div>
       </template>
     </UModal>
+
+    <UModal
+      v-model:open="closeDayOpen"
+      title="Cerrar sede"
+      description="Se archivan los check-ins abiertos en las estadísticas del día y el aforo queda en 0."
+    >
+      <template #body>
+        <template v-if="isAdmin">
+          <p class="mb-3 text-[11px] font-semibold text-text-muted">
+            Como admin global no tienes sede fija — elige cuál cerrar. El
+            gerente o recepcionista de cada sede también puede hacerlo desde
+            su propio botón.
+          </p>
+          <label class="block">
+            <span
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+              >Sede a cerrar</span
+            >
+            <USelectMenu
+              v-model="closeBranchId"
+              :items="closeBranchItems"
+              value-key="value"
+              class="mt-1 w-full"
+            />
+          </label>
+        </template>
+        <p v-else class="text-sm font-bold text-text-primary">
+          {{ session?.branchName ?? 'Tu sede' }}
+        </p>
+      </template>
+      <template #footer>
+        <p
+          v-if="closeDayError"
+          class="w-full text-left text-[11px] font-bold text-red-400"
+        >
+          {{ closeDayError }}
+        </p>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="closeDayOpen = false"
+          />
+          <UButton
+            label="Cerrar sede"
+            icon="i-lucide-door-closed"
+            color="error"
+            :loading="closingDay"
+            :disabled="!closeBranchId"
+            @click="confirmCloseDay"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <div
+      v-if="closeDayDone"
+      class="fixed bottom-5 right-5 z-50 rounded-xl border border-emerald-400/30 bg-surface px-4 py-3 text-xs font-bold text-emerald-400 shadow-2xl"
+    >
+      {{ closeDayDone }}
+    </div>
   </div>
 </template>

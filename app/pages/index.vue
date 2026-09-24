@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { Activity, Clock3, Flame, Users } from '@lucide/vue';
 
-const { data, pending, start, stop, adjust } = useDashboard();
+const { data, pending, start, stop, adjust, setCapacity, adjusting } =
+  useDashboard();
+const { closing } = useCloseDay();
 const { session } = useAuth();
 
-/// Admin puede ajustar cualquier sede; gerente/recepcionista solo la suya.
+/// Todos ven el aforo de todas las sedes; editarlo es admin (cualquiera)
+/// o gerente de la sede — recepcionista es solo lectura.
 function canAdjust(branchId: string): boolean {
-  const own = session.value?.branchId;
-  return !own || branchId === own;
+  const role = session.value?.role;
+  if (role === 'ADMIN') return true;
+  return role === 'MANAGER' && branchId === session.value?.branchId;
 }
 
 onMounted(() => start());
@@ -85,12 +89,37 @@ const branches = computed(() => data.value?.branches ?? []);
         </span>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <template v-if="pending && !data">
+          <div
+            v-for="i in 4"
+            :key="i"
+            class="animate-pulse rounded-2xl border border-stroke bg-surface p-5"
+          >
+            <div class="flex items-start justify-between">
+              <div class="space-y-2">
+                <div class="h-4 w-24 rounded bg-white/5" />
+                <div class="h-3 w-32 rounded bg-white/5" />
+              </div>
+              <div class="h-5 w-14 rounded-full bg-white/5" />
+            </div>
+            <div class="mt-4 h-7 w-16 rounded bg-white/5" />
+            <div class="mt-2 h-2 rounded-full bg-white/5" />
+            <div class="mt-4 flex gap-2">
+              <div class="h-8 w-8 rounded-lg bg-white/5" />
+              <div class="h-8 w-8 rounded-lg bg-white/5" />
+            </div>
+          </div>
+        </template>
         <BranchCard
           v-for="branch in branches"
+          v-else
           :key="branch.id"
           :branch="branch"
           :can-adjust="canAdjust(branch.id)"
+          :busy="adjusting.includes(branch.id)"
+          :closing="closing.includes(branch.id)"
           @adjust="(delta: number) => adjust(branch.id, delta)"
+          @set="(value: number) => setCapacity(branch.id, value)"
         />
       </div>
     </section>
