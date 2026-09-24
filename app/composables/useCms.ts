@@ -24,6 +24,7 @@ export interface PushDraft {
   audience: 'ALL' | 'BRANCH' | 'EXPIRED';
   branchId: string | null;
   kind: PushLog['kind'];
+  target?: PushLog['target'];
   scheduledAt?: number | null;
 }
 

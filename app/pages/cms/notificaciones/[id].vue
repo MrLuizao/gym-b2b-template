@@ -10,14 +10,6 @@ import {
   Trash2,
   Wifi,
 } from '@lucide/vue';
-import {
-  CalendarDate,
-  DateFormatter,
-  getLocalTimeZone,
-  today,
-  type DateValue,
-} from '@internationalized/date';
-
 import type { Branch, PushLog } from '#shared/types';
 
 const route = useRoute();
@@ -38,7 +30,24 @@ const confirmModalOpen = ref(false);
 const sendModalOpen = ref(false);
 const deleteModalOpen = ref(false);
 
-const isDraft = computed(() => push.value?.status === 'DRAFT');
+/// Borrador o envío fallido — ambos se pueden editar y (re)lanzar.
+const isDraft = computed(() => {
+  const s = push.value?.status;
+  return s === 'DRAFT' || s === 'FAILED';
+});
+
+const statusMeta = computed(() => {
+  switch (push.value?.status) {
+    case 'SENT':
+      return { label: 'Enviada', dot: 'bg-emerald-400', text: 'text-emerald-400' };
+    case 'SENDING':
+      return { label: 'Enviando…', dot: 'bg-sky-400', text: 'text-sky-400' };
+    case 'FAILED':
+      return { label: 'Falló', dot: 'bg-red-400', text: 'text-red-400' };
+    default:
+      return { label: 'Borrador', dot: 'bg-amber-400', text: 'text-amber-400' };
+  }
+});
 /// El admin gestiona el contenido global — puede editar y eliminar
 /// borradores y enviadas; el gerente solo consulta.
 const canEdit = computed(() => isAdmin.value);
@@ -49,26 +58,7 @@ const form = ref({
   kind: 'BRAND' as PushLog['kind'],
   audience: 'ALL' as 'ALL' | 'BRANCH' | 'EXPIRED',
   branchId: '',
-  time: '',
-});
-
-const scheduledDate = shallowRef<DateValue | null>(null);
-const minScheduleDate = today(getLocalTimeZone());
-const scheduleFormatter = new DateFormatter('es-MX', { dateStyle: 'medium' });
-
-const scheduledAt = computed<number | null>(() => {
-  const d = scheduledDate.value;
-  if (!d) return null;
-  const [h, m] = (form.value.time || '09:00').split(':').map(Number);
-  const date = d.toDate(getLocalTimeZone());
-  date.setHours(h || 0, m || 0, 0, 0);
-  return date.getTime();
-});
-
-const scheduledLabel = computed(() => {
-  const ts = scheduledAt.value;
-  if (!ts) return null;
-  return `${scheduleFormatter.format(new Date(ts))} · ${form.value.time || '09:00'}`;
+  target: 'auto' as PushLog['target'],
 });
 
 const kindOptions: { label: string; value: PushLog['kind'] }[] = [
@@ -82,6 +72,16 @@ const audienceOptions: { label: string; value: 'ALL' | 'BRANCH' | 'EXPIRED' }[] 
     { label: 'Por sucursal', value: 'BRANCH' },
     { label: 'Membresías vencidas', value: 'EXPIRED' },
   ];
+
+/// A dónde navega la app al tocar la notificación.
+const targetOptions: { label: string; value: PushLog['target'] }[] = [
+  { label: 'Automático — según el tipo', value: 'auto' },
+  { label: 'Inicio', value: 'home' },
+  { label: 'Explorar (clases)', value: 'explore' },
+  { label: 'Aliados', value: 'allies' },
+  { label: 'Descuentos', value: 'promos' },
+  { label: 'Perfil', value: 'profile' },
+];
 
 const branchItems = computed(() =>
   branches.value.map((b) => ({ label: b.name, value: b.id })),
@@ -123,11 +123,6 @@ function validate(): boolean {
     formError.value = `Campos obligatorios faltantes: ${missingFields.value.join(', ')}`;
     return false;
   }
-  if (scheduledAt.value !== null && scheduledAt.value <= Date.now()) {
-    formError.value =
-      'La fecha y hora programadas ya pasaron — elige una futura o déjalas vacías';
-    return false;
-  }
   formError.value = null;
   return true;
 }
@@ -151,7 +146,7 @@ async function submit(): Promise<void> {
       audience: f.audience,
       branchId: f.audience === 'BRANCH' ? f.branchId : null,
       kind: f.kind,
-      scheduledAt: scheduledAt.value,
+      target: f.target,
     });
     confirmModalOpen.value = false;
     await navigateTo('/cms');
@@ -175,7 +170,7 @@ async function submitAndSend(): Promise<void> {
       audience: f.audience,
       branchId: f.audience === 'BRANCH' ? f.branchId : null,
       kind: f.kind,
-      scheduledAt: scheduledAt.value,
+      target: f.target,
     });
     await sendPush(push.value);
     sendModalOpen.value = false;
@@ -225,17 +220,8 @@ onMounted(async () => {
       kind: p.kind,
       audience: p.audience,
       branchId: p.branchId ?? '',
-      time: '',
+      target: p.target,
     };
-    if (p.scheduledAt) {
-      const d = new Date(p.scheduledAt);
-      scheduledDate.value = new CalendarDate(
-        d.getFullYear(),
-        d.getMonth() + 1,
-        d.getDate(),
-      );
-      form.value.time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    }
   } catch {
     push.value = null;
   } finally {
@@ -273,13 +259,13 @@ onMounted(async () => {
         <p class="mt-0.5 flex items-center gap-1.5">
           <span
             class="h-1.5 w-1.5 rounded-full"
-            :class="isDraft ? 'bg-amber-400' : 'bg-emerald-400'"
+            :class="statusMeta.dot"
           />
           <span
             class="text-[10px] font-bold uppercase tracking-widest"
-            :class="isDraft ? 'text-amber-400' : 'text-emerald-400'"
+            :class="statusMeta.text"
           >
-            {{ isDraft ? 'Borrador' : 'Enviada' }}
+            {{ statusMeta.label }}
           </span>
         </p>
       </div>
@@ -407,57 +393,20 @@ onMounted(async () => {
             class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
           >
             <span class="h-4 w-1 rounded-full bg-accent" />
-            Programación
+            Destino al tocarla
           </h2>
-          <div class="mt-4 grid grid-cols-2 gap-3">
-            <div class="block">
-              <span
-                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-                >Fecha</span
-              >
-              <UPopover class="mt-1">
-                <UButton
-                  color="neutral"
-                  variant="outline"
-                  icon="i-lucide-calendar"
-                  :disabled="!canEdit"
-                  class="w-full justify-start"
-                >
-                  {{
-                    scheduledDate
-                      ? scheduleFormatter.format(
-                          scheduledDate.toDate(getLocalTimeZone()),
-                        )
-                      : 'Selecciona fecha'
-                  }}
-                </UButton>
-                <template #content>
-                  <UCalendar
-                    v-model="scheduledDate"
-                    :min-value="minScheduleDate"
-                    class="p-2"
-                  />
-                </template>
-              </UPopover>
-            </div>
-            <label class="block">
-              <span
-                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-                >Hora</span
-              >
-              <input
-                v-model="form.time"
-                type="time"
-                :disabled="!canEdit"
-                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent disabled:opacity-60"
-              />
-            </label>
-          </div>
+          <USelectMenu
+            v-model="form.target"
+            :items="targetOptions"
+            value-key="value"
+            :disabled="!canEdit"
+            class="mt-4 w-full"
+          />
           <p class="mt-3 text-[10px] font-semibold text-text-dim">
             {{
-              scheduledLabel
-                ? `Programada para el ${scheduledLabel}`
-                : 'Sin programar — se lanza manualmente desde CMS.'
+              form.target === 'auto'
+                ? `Automático: ${form.kind === 'SPONSOR' ? 'Aliados' : 'Descuentos'} según el tipo.`
+                : 'El socio aterriza en esa sección al abrir la notificación.'
             }}
           </p>
         </section>
@@ -522,13 +471,7 @@ onMounted(async () => {
                           >
                             RIR-HUB
                           </p>
-                          <p class="text-[8px] text-text-dim">
-                            {{
-                              scheduledLabel
-                                ? 'prog. ' + (form.time || '09:00')
-                                : 'ahora'
-                            }}
-                          </p>
+                          <p class="text-[8px] text-text-dim">ahora</p>
                         </div>
                         <p
                           class="mt-0.5 text-[11px] font-bold leading-tight text-text-primary"

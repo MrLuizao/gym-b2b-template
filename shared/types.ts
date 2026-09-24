@@ -293,6 +293,16 @@ export interface SponsorAd {
   photos: string[];
 }
 
+/// Tab de la app al tocar el push — 'auto' usa el mapping por kind
+/// (SPONSOR → Aliados, BRAND → Descuentos).
+export type PushTarget =
+  | 'auto'
+  | 'home'
+  | 'explore'
+  | 'allies'
+  | 'promos'
+  | 'profile';
+
 export interface PushLog {
   id: string;
   title: string;
@@ -300,8 +310,10 @@ export interface PushLog {
   audience: 'ALL' | 'BRANCH' | 'EXPIRED';
   branchId: string | null;
   kind: 'BRAND' | 'SPONSOR';
-  /// DRAFT = guardada, pendiente de envío; SENT = ya se lanzó.
-  status: 'DRAFT' | 'SENT';
+  target: PushTarget;
+  /// DRAFT = guardada/pendiente · SENDING = despachándose · SENT = enviada ·
+  /// FAILED = FCM rechazó.
+  status: 'DRAFT' | 'SENDING' | 'SENT' | 'FAILED';
   /// Timestamp de envío programado — null = se lanza manualmente.
   scheduledAt: number | null;
   sent: number;

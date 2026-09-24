@@ -225,6 +225,7 @@ export function toPushLog(s: DocumentSnapshot): PushLog {
     audience: d.audience ?? 'ALL',
     branchId: d.branch_id ?? null,
     kind: d.kind ?? 'BRAND',
+    target: d.target ?? 'auto',
     status: d.status ?? 'DRAFT',
     scheduledAt: toMs(d.scheduled_at),
     sent: d.sent ?? 0,

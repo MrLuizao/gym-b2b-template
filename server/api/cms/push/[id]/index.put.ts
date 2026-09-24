@@ -5,6 +5,15 @@ import type { PushLog } from '#shared/types';
 import { db, toPushLog } from '../../../../utils/db';
 import { requireAdmin, requireStaff } from '../../../../utils/staff-auth';
 
+const PUSH_TARGETS = new Set<PushLog['target']>([
+  'auto',
+  'home',
+  'explore',
+  'allies',
+  'promos',
+  'profile',
+]);
+
 export default defineEventHandler(async (event): Promise<PushLog> => {
   const staff = await requireStaff(event);
   requireAdmin(staff);
@@ -21,6 +30,7 @@ export default defineEventHandler(async (event): Promise<PushLog> => {
     audience?: PushLog['audience'];
     branchId?: string | null;
     kind?: PushLog['kind'];
+    target?: PushLog['target'];
     scheduledAt?: number | null;
   }>(event);
 
@@ -32,6 +42,9 @@ export default defineEventHandler(async (event): Promise<PushLog> => {
   }
   if (body?.branchId !== undefined) update.branch_id = body.branchId || null;
   if (body?.kind !== undefined) update.kind = body.kind === 'SPONSOR' ? 'SPONSOR' : 'BRAND';
+  if (body?.target !== undefined) {
+    update.target = PUSH_TARGETS.has(body.target) ? body.target : 'auto';
+  }
   if (body?.scheduledAt !== undefined) {
     update.scheduled_at =
       typeof body.scheduledAt === 'number' && body.scheduledAt > 0

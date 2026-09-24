@@ -5,16 +5,10 @@ import {
   Dumbbell,
   Lock,
   Save,
+  Send,
   Signal,
   Wifi,
 } from '@lucide/vue';
-import {
-  CalendarDate,
-  DateFormatter,
-  getLocalTimeZone,
-  today,
-  type DateValue,
-} from '@internationalized/date';
 
 import type { Branch, PushLog } from '#shared/types';
 
@@ -22,12 +16,14 @@ const router = useRouter();
 const { session } = useAuth();
 /// Push masivas = contenido comercial global — solo el admin las envía.
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
-const { createPush } = useCms();
+const { createPush, sendPush } = useCms();
 
 const branches = ref<Branch[]>([]);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const confirmModalOpen = ref(false);
+/// Qué hace el modal de confirmación: guardar borrador o enviar ya.
+const pendingAction = ref<'draft' | 'send'>('draft');
 
 const form = ref({
   title: '',
@@ -35,28 +31,7 @@ const form = ref({
   kind: 'BRAND' as PushLog['kind'],
   audience: 'ALL' as 'ALL' | 'BRANCH' | 'EXPIRED',
   branchId: '',
-  time: '',
-});
-
-/// Fecha programada (opcional) — UCalendar trabaja con CalendarDate.
-const scheduledDate = shallowRef<DateValue | null>(null);
-const minScheduleDate = today(getLocalTimeZone());
-const scheduleFormatter = new DateFormatter('es-MX', { dateStyle: 'medium' });
-
-/// Timestamp combinado fecha+hora; null = envío manual al lanzarla.
-const scheduledAt = computed<number | null>(() => {
-  const d = scheduledDate.value;
-  if (!d) return null;
-  const [h, m] = (form.value.time || '09:00').split(':').map(Number);
-  const date = d.toDate(getLocalTimeZone());
-  date.setHours(h || 0, m || 0, 0, 0);
-  return date.getTime();
-});
-
-const scheduledLabel = computed(() => {
-  const ts = scheduledAt.value;
-  if (!ts) return null;
-  return `${scheduleFormatter.format(new Date(ts))} · ${form.value.time || '09:00'}`;
+  target: 'auto' as PushLog['target'],
 });
 
 const kindOptions: { label: string; value: PushLog['kind'] }[] = [
@@ -74,6 +49,16 @@ const audienceOptions: { label: string; value: 'ALL' | 'BRANCH' | 'EXPIRED' }[] 
 const branchItems = computed(() =>
   branches.value.map((b) => ({ label: b.name, value: b.id })),
 );
+
+/// A dónde navega la app al tocar la notificación.
+const targetOptions: { label: string; value: PushLog['target'] }[] = [
+  { label: 'Automático — según el tipo', value: 'auto' },
+  { label: 'Inicio', value: 'home' },
+  { label: 'Explorar (clases)', value: 'explore' },
+  { label: 'Aliados', value: 'allies' },
+  { label: 'Descuentos', value: 'promos' },
+  { label: 'Perfil', value: 'profile' },
+];
 
 function branchName(id: string): string {
   return branches.value.find((b) => b.id === id)?.name ?? '—';
@@ -101,22 +86,22 @@ const confirmDescription = computed(() => {
     f.kind === 'SPONSOR'
       ? ' Solo llega a quienes activaron "Promos de aliados" en la app.'
       : '';
-  const scheduleNote = scheduledLabel.value
-    ? ` Quedará programada para el ${scheduledLabel.value}.`
-    : ' Podrás lanzar el envío manualmente desde CMS.';
-  return `Se guardará "${f.title.trim()}" dirigida a ${audienceLabel.value} como borrador.${scheduleNote}${optInNote}`;
+  if (pendingAction.value === 'send') {
+    return `Se enviará "${f.title.trim()}" a ${audienceLabel.value} AHORA. Esta acción no se puede deshacer.${optInNote}`;
+  }
+  return `Se guardará "${f.title.trim()}" dirigida a ${audienceLabel.value} como borrador — la lanzas cuando quieras desde CMS.${optInNote}`;
 });
 
-function askSubmit(): void {
+const confirmTitle = computed(() =>
+  pendingAction.value === 'send' ? 'Enviar notificación' : 'Guardar notificación',
+);
+
+function askSubmit(action: 'draft' | 'send'): void {
   if (missingFields.value.length > 0) {
     formError.value = `Campos obligatorios faltantes: ${missingFields.value.join(', ')}`;
     return;
   }
-  if (scheduledAt.value !== null && scheduledAt.value <= Date.now()) {
-    formError.value =
-      'La fecha y hora programadas ya pasaron — elige una futura o déjalas vacías';
-    return;
-  }
+  pendingAction.value = action;
   formError.value = null;
   confirmModalOpen.value = true;
 }
@@ -126,19 +111,28 @@ async function submit(): Promise<void> {
   saving.value = true;
   try {
     const f = form.value;
-    await createPush({
+    const log = await createPush({
       title: f.title.trim(),
       body: f.body.trim(),
       audience: f.audience,
       branchId: f.audience === 'BRANCH' ? f.branchId : null,
       kind: f.kind,
-      scheduledAt: scheduledAt.value,
+      target: f.target,
     });
     confirmModalOpen.value = false;
+    if (pendingAction.value === 'send') {
+      try {
+        await sendPush(log);
+      } catch {
+        /// El borrador ya quedó — el detalle muestra "Falló" y permite reintentar.
+        await navigateTo(`/cms/notificaciones/${log.id}`);
+        return;
+      }
+    }
     await navigateTo('/cms');
   } catch (cause) {
     formError.value =
-      cause instanceof Error ? cause.message : 'No se pudo enviar';
+      cause instanceof Error ? cause.message : 'No se pudo guardar';
   } finally {
     saving.value = false;
   }
@@ -267,6 +261,18 @@ onMounted(async () => {
             class="mt-1 w-full"
           />
         </label>
+        <label class="block">
+          <span
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >Al tocarla abre</span
+          >
+          <USelectMenu
+            v-model="form.target"
+            :items="targetOptions"
+            value-key="value"
+            class="mt-1 w-full"
+          />
+        </label>
         <p
           v-if="form.kind === 'SPONSOR'"
           class="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-[10px] font-bold text-text-muted"
@@ -276,64 +282,6 @@ onMounted(async () => {
           automáticamente.
         </p>
       </div>
-        </section>
-
-        <section class="rounded-2xl border border-stroke bg-surface p-5">
-          <h2
-            class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
-          >
-            <span class="h-4 w-1 rounded-full bg-accent" />
-            Programación
-          </h2>
-          <div class="mt-4 grid grid-cols-2 gap-3">
-            <div class="block">
-              <span
-                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-                >Fecha</span
-              >
-              <UPopover class="mt-1">
-                <UButton
-                  color="neutral"
-                  variant="outline"
-                  icon="i-lucide-calendar"
-                  class="w-full justify-start"
-                >
-                  {{
-                    scheduledDate
-                      ? scheduleFormatter.format(
-                          scheduledDate.toDate(getLocalTimeZone()),
-                        )
-                      : 'Selecciona fecha'
-                  }}
-                </UButton>
-                <template #content>
-                  <UCalendar
-                    v-model="scheduledDate"
-                    :min-value="minScheduleDate"
-                    class="p-2"
-                  />
-                </template>
-              </UPopover>
-            </div>
-            <label class="block">
-              <span
-                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-                >Hora</span
-              >
-              <input
-                v-model="form.time"
-                type="time"
-                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent"
-              />
-            </label>
-          </div>
-          <p class="mt-3 text-[10px] font-semibold text-text-dim">
-            {{
-              scheduledLabel
-                ? `Programada para el ${scheduledLabel}`
-                : 'Sin programar — queda como borrador y la lanzas manualmente desde CMS.'
-            }}
-          </p>
         </section>
       </div>
 
@@ -403,9 +351,7 @@ onMounted(async () => {
                       >
                         RIR-HUB
                       </p>
-                      <p class="text-[8px] text-text-dim">
-                        {{ scheduledLabel ? 'prog. ' + (form.time || '09:00') : 'ahora' }}
-                      </p>
+                      <p class="text-[8px] text-text-dim">ahora</p>
                     </div>
                     <p
                       class="mt-0.5 text-[11px] font-bold leading-tight text-text-primary"
@@ -434,11 +380,19 @@ onMounted(async () => {
 
           <button
             class="mt-4 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
+            :disabled="saving || missingFields.length > 0"
+            @click="askSubmit('send')"
+          >
+            <Send class="h-4 w-4" />
+            {{ saving ? 'Enviando…' : 'Enviar ahora' }}
+          </button>
+          <button
+            class="mt-2 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-stroke text-[11px] font-black text-text-muted transition hover:text-text-primary disabled:opacity-50"
             :disabled="saving"
-            @click="askSubmit"
+            @click="askSubmit('draft')"
           >
             <Save class="h-4 w-4" />
-            {{ saving ? 'Guardando…' : 'Guardar notificación' }}
+            Guardar borrador
           </button>
         </section>
       </div>
@@ -446,7 +400,7 @@ onMounted(async () => {
 
     <UModal
       v-model:open="confirmModalOpen"
-      title="Guardar notificación"
+      :title="confirmTitle"
       :description="confirmDescription"
     >
       <template #footer>
@@ -458,8 +412,8 @@ onMounted(async () => {
             @click="confirmModalOpen = false"
           />
           <UButton
-            label="Guardar"
-            icon="i-lucide-save"
+            :label="pendingAction === 'send' ? 'Enviar ahora' : 'Guardar'"
+            :icon="pendingAction === 'send' ? 'i-lucide-send' : 'i-lucide-save'"
             :loading="saving"
             @click="submit"
           />

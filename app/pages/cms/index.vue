@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
   BellRing,
+  ChevronLeft,
+  ChevronRight,
   FileEdit,
   ImageUp,
   Plus,
@@ -69,22 +71,77 @@ async function runConfirm(): Promise<void> {
   }
 }
 
-const totalReach = computed(() =>
-  pushes.value.reduce((sum, log) => sum + log.sent, 0),
-);
-
 const sentCount = computed(
   () => pushes.value.filter((log) => log.status === 'SENT').length,
 );
 const draftCount = computed(
   () => pushes.value.filter((log) => log.status === 'DRAFT').length,
 );
+/// `sent` en cada push es un flag de envío exitoso (1 por envío a topic),
+/// no dispositivos — FCM no expone suscriptores por topic. La métrica real
+/// es la tasa de entrega: envíos exitosos / intentos.
+const attemptedCount = computed(
+  () =>
+    pushes.value.filter(
+      (log) => log.status === 'SENT' || log.status === 'FAILED',
+    ).length,
+);
+const deliveryRate = computed<number | null>(() => {
+  const attempted = attemptedCount.value;
+  if (attempted === 0) return null;
+  return Math.round((sentCount.value / attempted) * 100);
+});
+
+/// Paginación de las dos tablas — mismo patrón que /socios.
+const pushPage = ref(1);
+const couponPage = ref(1);
+const pageSize = 8;
+
+const pushPageCount = computed(() =>
+  Math.max(1, Math.ceil(pushes.value.length / pageSize)),
+);
+const pagedPushes = computed(() =>
+  pushes.value.slice(
+    (pushPage.value - 1) * pageSize,
+    pushPage.value * pageSize,
+  ),
+);
+const couponPageCount = computed(() =>
+  Math.max(1, Math.ceil(coupons.value.length / pageSize)),
+);
+const pagedCoupons = computed(() =>
+  coupons.value.slice(
+    (couponPage.value - 1) * pageSize,
+    couponPage.value * pageSize,
+  ),
+);
+
+watch(pushPageCount, (pages) => {
+  if (pushPage.value > pages) pushPage.value = pages;
+});
+watch(couponPageCount, (pages) => {
+  if (couponPage.value > pages) couponPage.value = pages;
+});
 
 function pushAudienceLabel(log: PushLog): string {
   if (log.audience === 'ALL') return 'todos los socios';
   if (log.audience === 'EXPIRED')
     return 'socios con membresía vencida';
   return `los socios de ${branchName(log.branchId)}`;
+}
+
+/// Etiqueta + color del estado del push (SENT/DRAFT/SENDING/FAILED).
+function pushStatusMeta(log: PushLog): { label: string; dot: string; text: string } {
+  switch (log.status) {
+    case 'SENT':
+      return { label: 'Enviada', dot: 'bg-emerald-400', text: 'text-emerald-400' };
+    case 'SENDING':
+      return { label: 'Enviando…', dot: 'bg-sky-400', text: 'text-sky-400' };
+    case 'FAILED':
+      return { label: 'Falló', dot: 'bg-red-400', text: 'text-red-400' };
+    default:
+      return { label: 'Borrador', dot: 'bg-amber-400', text: 'text-amber-400' };
+  }
 }
 
 /// Lanza el envío (o reenvío) de una notificación — pide confirmación antes.
@@ -171,7 +228,9 @@ onMounted(async () => {
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div class="rounded-2xl border border-stroke bg-surface p-4">
         <div class="flex items-center gap-2">
-          <TicketPercent class="h-4 w-4 text-accent" />
+          <span class="rounded-lg bg-violet-400/15 p-1.5">
+            <TicketPercent class="h-4 w-4 text-violet-400" />
+          </span>
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
@@ -184,7 +243,9 @@ onMounted(async () => {
       </div>
       <div class="rounded-2xl border border-stroke bg-surface p-4">
         <div class="flex items-center gap-2">
-          <BellRing class="h-4 w-4 text-emerald-400" />
+          <span class="rounded-lg bg-emerald-400/15 p-1.5">
+            <BellRing class="h-4 w-4 text-emerald-400" />
+          </span>
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
@@ -197,7 +258,9 @@ onMounted(async () => {
       </div>
       <div class="rounded-2xl border border-stroke bg-surface p-4">
         <div class="flex items-center gap-2">
-          <FileEdit class="h-4 w-4 text-amber-400" />
+          <span class="rounded-lg bg-amber-400/15 p-1.5">
+            <FileEdit class="h-4 w-4 text-amber-400" />
+          </span>
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
@@ -210,18 +273,180 @@ onMounted(async () => {
       </div>
       <div class="rounded-2xl border border-stroke bg-surface p-4">
         <div class="flex items-center gap-2">
-          <Send class="h-4 w-4 text-accent" />
+          <span class="rounded-lg bg-sky-400/15 p-1.5">
+            <Send class="h-4 w-4 text-sky-400" />
+          </span>
           <p
             class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
           >
-            Alcance total
+            Tasa de entrega
           </p>
         </div>
         <p class="mt-2 text-xl font-black text-text-primary">
-          {{ totalReach.toLocaleString('es-MX') }}
+          {{ deliveryRate === null ? '—' : `${deliveryRate}%` }}
+          <span
+            v-if="deliveryRate !== null"
+            class="text-[10px] font-bold text-text-dim"
+          >
+            {{ sentCount }}/{{ attemptedCount }} envíos
+          </span>
         </p>
       </div>
     </div>
+
+    <section>
+      <div class="mb-3 flex items-center justify-between">
+        <h2
+          class="text-sm font-black uppercase tracking-widest text-text-muted"
+        >
+          Notificaciones enviadas
+        </h2>
+        <button
+          v-if="isAdmin"
+          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
+          @click="navigateTo('/cms/notificaciones/nueva')"
+        >
+          <Plus class="h-3.5 w-3.5" />
+          Nueva notificación
+        </button>
+      </div>
+      <div class="overflow-hidden rounded-2xl border border-stroke bg-surface">
+        <table class="w-full text-left">
+          <thead>
+            <tr
+              class="border-b border-stroke text-[10px] uppercase tracking-widest text-text-dim"
+            >
+              <th class="px-5 py-3 font-bold">Notificación</th>
+              <th class="px-5 py-3 font-bold">Audiencia</th>
+              <th class="px-5 py-3 font-bold">Estado</th>
+              <th class="px-5 py-3 font-bold">Envíos</th>
+              <th class="px-5 py-3 text-right font-bold">Fecha</th>
+              <th v-if="isAdmin" class="px-5 py-3 text-right font-bold" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="log in pagedPushes"
+              :key="log.id"
+              class="border-t border-stroke"
+            >
+              <td class="px-5 py-3">
+                <div class="flex items-center gap-1.5">
+                  <button
+                    class="cursor-pointer text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
+                    @click="navigateTo(`/cms/notificaciones/${log.id}`)"
+                  >
+                    {{ log.title }}
+                  </button>
+                  <span
+                    v-if="log.kind === 'SPONSOR'"
+                    class="rounded-full bg-accent/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-accent"
+                  >
+                    Aliado
+                  </span>
+                </div>
+                <p class="mt-0.5 line-clamp-1 text-[10px] text-text-dim">
+                  {{ log.body }}
+                </p>
+              </td>
+              <td class="px-5 py-3">
+                <span
+                  class="rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-black text-text-muted"
+                >
+                  {{
+                    log.audience === 'ALL'
+                      ? 'Todos'
+                      : log.audience === 'EXPIRED'
+                        ? 'Vencidas'
+                        : branchName(log.branchId)
+                  }}
+                </span>
+              </td>
+              <td class="px-5 py-3">
+                <span class="flex items-center gap-1.5">
+                  <span
+                    class="h-1.5 w-1.5 rounded-full"
+                    :class="pushStatusMeta(log).dot"
+                  />
+                  <span
+                    class="text-[10px] font-bold uppercase tracking-widest"
+                    :class="pushStatusMeta(log).text"
+                  >
+                    {{ pushStatusMeta(log).label }}
+                  </span>
+                </span>
+                <p
+                  v-if="log.status === 'DRAFT' && log.scheduledAt"
+                  class="mt-0.5 font-mono text-[9px] text-text-dim"
+                >
+                  prog. {{ formatDate(log.scheduledAt) }}
+                </p>
+              </td>
+              <td class="px-5 py-3">
+                <span
+                  v-if="log.status === 'SENT'"
+                  class="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-black text-accent"
+                >
+                  {{ log.sent.toLocaleString('es-MX') }}
+                </span>
+                <span v-else class="text-[11px] text-text-dim">—</span>
+              </td>
+              <td
+                class="px-5 py-3 text-right font-mono text-[10px] text-text-dim"
+              >
+                {{ formatDate(log.createdAt) }}
+              </td>
+              <td v-if="isAdmin" class="px-5 py-3 text-right">
+                <button
+                  type="button"
+                  class="inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black transition"
+                  :class="
+                    log.status === 'DRAFT'
+                      ? 'bg-accent text-base hover:opacity-90'
+                      : 'border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20'
+                  "
+                  @click="askSendPush(log)"
+                >
+                  <Send class="h-3 w-3" />
+                  {{ log.status === 'SENT' ? 'Reenviar' : 'Enviar' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p
+          v-if="!pending && pushes.length === 0"
+          class="py-8 text-center text-xs font-semibold text-text-dim"
+        >
+          Sin notificaciones enviadas
+        </p>
+        <div
+          v-if="pushPageCount > 1"
+          class="flex items-center justify-between border-t border-stroke px-5 py-2.5"
+        >
+          <p class="text-[10px] font-semibold text-text-dim">
+            {{ pushes.length }} notificaciones · página {{ pushPage }} de
+            {{ pushPageCount }}
+          </p>
+          <div class="flex gap-1.5">
+            <button
+              class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-accent hover:text-accent disabled:opacity-30"
+              :disabled="pushPage === 1"
+              @click="pushPage--"
+            >
+              <ChevronLeft class="h-3.5 w-3.5" />
+            </button>
+            <button
+              class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-accent hover:text-accent disabled:opacity-30"
+              :disabled="pushPage === pushPageCount"
+              @click="pushPage++"
+            >
+              <ChevronRight class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section>
       <div class="mb-3 flex items-center justify-between">
@@ -254,7 +479,7 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr
-              v-for="coupon in coupons"
+              v-for="coupon in pagedCoupons"
               :key="coupon.id"
               class="border-t border-stroke"
             >
@@ -313,6 +538,31 @@ onMounted(async () => {
         >
           Sin cupones publicados
         </p>
+        <div
+          v-if="couponPageCount > 1"
+          class="flex items-center justify-between border-t border-stroke px-5 py-2.5"
+        >
+          <p class="text-[10px] font-semibold text-text-dim">
+            {{ coupons.length }} cupones · página {{ couponPage }} de
+            {{ couponPageCount }}
+          </p>
+          <div class="flex gap-1.5">
+            <button
+              class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-accent hover:text-accent disabled:opacity-30"
+              :disabled="couponPage === 1"
+              @click="couponPage--"
+            >
+              <ChevronLeft class="h-3.5 w-3.5" />
+            </button>
+            <button
+              class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-stroke text-text-muted transition hover:border-accent hover:text-accent disabled:opacity-30"
+              :disabled="couponPage === couponPageCount"
+              @click="couponPage++"
+            >
+              <ChevronRight class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -394,143 +644,6 @@ onMounted(async () => {
       </div>
     </section>
     -->
-
-    <section>
-      <div class="mb-3 flex items-center justify-between">
-        <h2
-          class="text-sm font-black uppercase tracking-widest text-text-muted"
-        >
-          Notificaciones enviadas
-        </h2>
-        <button
-          v-if="isAdmin"
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
-          @click="navigateTo('/cms/notificaciones/nueva')"
-        >
-          <Plus class="h-3.5 w-3.5" />
-          Nueva notificación
-        </button>
-      </div>
-      <div class="overflow-hidden rounded-2xl border border-stroke bg-surface">
-        <table class="w-full text-left">
-          <thead>
-            <tr
-              class="border-b border-stroke text-[10px] uppercase tracking-widest text-text-dim"
-            >
-              <th class="px-5 py-3 font-bold">Notificación</th>
-              <th class="px-5 py-3 font-bold">Audiencia</th>
-              <th class="px-5 py-3 font-bold">Estado</th>
-              <th class="px-5 py-3 font-bold">Envíos</th>
-              <th class="px-5 py-3 text-right font-bold">Fecha</th>
-              <th v-if="isAdmin" class="px-5 py-3 text-right font-bold" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="log in pushes"
-              :key="log.id"
-              class="border-t border-stroke"
-            >
-              <td class="px-5 py-3">
-                <div class="flex items-center gap-1.5">
-                  <button
-                    class="cursor-pointer text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
-                    @click="navigateTo(`/cms/notificaciones/${log.id}`)"
-                  >
-                    {{ log.title }}
-                  </button>
-                  <span
-                    v-if="log.kind === 'SPONSOR'"
-                    class="rounded-full bg-accent/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-accent"
-                  >
-                    Aliado
-                  </span>
-                </div>
-                <p class="mt-0.5 line-clamp-1 text-[10px] text-text-dim">
-                  {{ log.body }}
-                </p>
-              </td>
-              <td class="px-5 py-3">
-                <span
-                  class="rounded-full border border-stroke bg-base px-2.5 py-0.5 text-[10px] font-black text-text-muted"
-                >
-                  {{
-                    log.audience === 'ALL'
-                      ? 'Todos'
-                      : log.audience === 'EXPIRED'
-                        ? 'Vencidas'
-                        : branchName(log.branchId)
-                  }}
-                </span>
-              </td>
-              <td class="px-5 py-3">
-                <span class="flex items-center gap-1.5">
-                  <span
-                    class="h-1.5 w-1.5 rounded-full"
-                    :class="
-                      log.status === 'SENT'
-                        ? 'bg-emerald-400'
-                        : 'bg-amber-400'
-                    "
-                  />
-                  <span
-                    class="text-[10px] font-bold uppercase tracking-widest"
-                    :class="
-                      log.status === 'SENT'
-                        ? 'text-emerald-400'
-                        : 'text-amber-400'
-                    "
-                  >
-                    {{ log.status === 'SENT' ? 'Enviada' : 'Borrador' }}
-                  </span>
-                </span>
-                <p
-                  v-if="log.status === 'DRAFT' && log.scheduledAt"
-                  class="mt-0.5 font-mono text-[9px] text-text-dim"
-                >
-                  prog. {{ formatDate(log.scheduledAt) }}
-                </p>
-              </td>
-              <td class="px-5 py-3">
-                <span
-                  v-if="log.status === 'SENT'"
-                  class="rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-black text-accent"
-                >
-                  {{ log.sent.toLocaleString('es-MX') }}
-                </span>
-                <span v-else class="text-[11px] text-text-dim">—</span>
-              </td>
-              <td
-                class="px-5 py-3 text-right font-mono text-[10px] text-text-dim"
-              >
-                {{ formatDate(log.createdAt) }}
-              </td>
-              <td v-if="isAdmin" class="px-5 py-3 text-right">
-                <button
-                  type="button"
-                  class="inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black transition"
-                  :class="
-                    log.status === 'DRAFT'
-                      ? 'bg-accent text-base hover:opacity-90'
-                      : 'border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20'
-                  "
-                  @click="askSendPush(log)"
-                >
-                  <Send class="h-3 w-3" />
-                  {{ log.status === 'SENT' ? 'Reenviar' : 'Enviar' }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p
-          v-if="!pending && pushes.length === 0"
-          class="py-8 text-center text-xs font-semibold text-text-dim"
-        >
-          Sin notificaciones enviadas
-        </p>
-      </div>
-    </section>
 
     <UModal
       v-model:open="bannerModalOpen"
