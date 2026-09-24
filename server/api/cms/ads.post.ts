@@ -43,7 +43,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   if (!body?.phone?.trim()) missing.push('teléfono');
   if (typeof body?.lat !== 'number') missing.push('latitud');
   if (typeof body?.lng !== 'number') missing.push('longitud');
-  if (!Array.isArray(body?.photos) || body.photos.length === 0) missing.push('galería de fotos');
+  if (!Array.isArray(body?.photos) || body.photos.length === 0) missing.push('portada');
   if (missing.length > 0) {
     throw createError({
       statusCode: 400,
@@ -83,7 +83,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
       whatsapp: String(body!.socials?.whatsapp ?? '').slice(0, 30),
     },
     photos: Array.isArray(body!.photos)
-      ? body!.photos.filter((p) => typeof p === 'string').slice(0, 8)
+      ? body!.photos.filter((p) => typeof p === 'string').slice(0, 1)
       : [],
   });
   return toSponsorAd(await ref.get());

@@ -25,7 +25,15 @@ function isExpiring(ad: SponsorAd): boolean {
   return ad.endsAt - Date.now() <= WEEK_MS;
 }
 
-const activeAds = computed(() => ads.value.filter((a) => a.status === 'ACTIVE'));
+/// La app oculta anuncios vencidos aunque status siga ACTIVE.
+function isExpired(ad: SponsorAd): boolean {
+  return ad.endsAt < Date.now();
+}
+
+/// Realmente visibles en la app — activos y vigentes (la app filtra por ends_at).
+const activeAds = computed(() =>
+  ads.value.filter((a) => a.status === 'ACTIVE' && !isExpired(a)),
+);
 const pausedAds = computed(() => ads.value.filter((a) => a.status === 'PAUSED'));
 const expiringAds = computed(() => ads.value.filter(isExpiring));
 const totalImpressions = computed(() =>
@@ -133,7 +141,7 @@ onMounted(async () => {
           {{ activeAds.length }}
         </p>
         <p class="text-[10px] font-semibold text-text-dim">
-          visibles en el Home ahora
+          visibles en la app ahora
         </p>
       </button>
       <button
@@ -195,7 +203,7 @@ onMounted(async () => {
             Inventario publicitario
           </h2>
           <p class="mt-0.5 text-[10px] font-semibold text-accent">
-            Espacios vendibles — se muestran en el Home de la app
+            Espacios vendibles — Carrusel del Home o directorio de Aliados
           </p>
         </div>
         <button
@@ -273,19 +281,30 @@ onMounted(async () => {
               <td class="px-5 py-3 text-[11px] text-text-muted">
                 {{ branchName(ad.branchId) }}
               </td>
-              <td class="px-5 py-3 font-mono text-[10px] text-text-dim">
+              <td
+                class="px-5 py-3 font-mono text-[10px]"
+                :class="isExpired(ad) ? 'font-bold text-red-400' : 'text-text-dim'"
+              >
                 {{ formatDay(ad.endsAt) }}
               </td>
               <td class="px-5 py-3">
                 <span
                   class="rounded-full border px-2.5 py-0.5 text-[10px] font-black"
                   :class="
-                    ad.status === 'ACTIVE'
-                      ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
-                      : 'border-stroke bg-base text-text-dim'
+                    isExpired(ad)
+                      ? 'border-red-400/40 bg-red-400/10 text-red-400'
+                      : ad.status === 'ACTIVE'
+                        ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
+                        : 'border-stroke bg-base text-text-dim'
                   "
                 >
-                  {{ ad.status === 'ACTIVE' ? 'ACTIVO' : 'PAUSADO' }}
+                  {{
+                    isExpired(ad)
+                      ? 'VENCIDO'
+                      : ad.status === 'ACTIVE'
+                        ? 'ACTIVO'
+                        : 'PAUSADO'
+                  }}
                 </span>
               </td>
               <td class="px-5 py-3 text-[11px] font-bold text-text-primary">

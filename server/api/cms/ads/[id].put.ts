@@ -46,7 +46,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   }
   if (body.photos !== undefined) {
     update.photos = Array.isArray(body.photos)
-      ? body.photos.filter((p): p is string => typeof p === 'string').slice(0, 8)
+      ? body.photos.filter((p): p is string => typeof p === 'string').slice(0, 1)
       : [];
   }
 

@@ -1,11 +1,12 @@
 import {
   browserLocalPersistence,
   getAuth,
+  onAuthStateChanged,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 export type StaffRole = 'ADMIN' | 'MANAGER' | 'RECEPTIONIST';
 
@@ -65,9 +66,12 @@ function deriveName(email: string): string {
 }
 
 export function useAuth() {
+  /// La cookie es solo caché del doc staff/{uid} — bindSessionToFirebase la
+  /// reescribe con datos vivos en cada cambio y la limpia al cerrar sesión.
+  /// maxAge largo: la vida real la marca Firebase Auth, no el reloj.
   const session = useCookie<StaffSession | null>('cf_b2b_session', {
     default: () => null,
-    maxAge: 60 * 60 * 12,
+    maxAge: 60 * 60 * 24 * 30,
     sameSite: 'lax',
   });
 
@@ -161,6 +165,62 @@ export function useAuth() {
     );
   }
 
+  /// La sesión es un espejo de Firebase Auth + staff/{uid}, no una copia
+  /// congelada al login: onSnapshot re-lee el doc cada vez que cambia en
+  /// Firestore (rol, sede, nombre) y actualiza la cookie en vivo.
+  /// Sin usuario Firebase autenticado la cookie se limpia — una cookie
+  /// vieja nunca puede simular una sesión que el backend rechazaría.
+  function bindSessionToFirebase(): () => void {
+    const firebase = useFirebase();
+    if (!firebase.enabled || !firebase.app || !firebase.db) {
+      return () => {};
+    }
+    const auth = getAuth(firebase.app);
+    const db = firebase.db;
+    let stopStaff: (() => void) | null = null;
+    const stopAuth = onAuthStateChanged(auth, (user) => {
+      stopStaff?.();
+      stopStaff = null;
+      if (!user) {
+        session.value = null;
+        return;
+      }
+      stopStaff = onSnapshot(
+        doc(db, 'staff', user.uid),
+        async (snap) => {
+          const staff = snap.data();
+          if (!snap.exists() || !staff || staff.active === false) {
+            session.value = null;
+            return;
+          }
+          const branchId = (staff.branch_id as string | null) ?? null;
+          let branchName: string | null = null;
+          if (branchId) {
+            const branchSnap = await getDoc(doc(db, 'branches', branchId));
+            branchName =
+              (branchSnap.data()?.name as string | undefined) ?? null;
+          }
+          session.value = {
+            email: user.email ?? '',
+            name:
+              (staff.name as string | undefined) ??
+              deriveName(user.email ?? 'staff'),
+            role: (staff.role as StaffRole) ?? 'RECEPTIONIST',
+            branchId,
+            branchName,
+          };
+        },
+        /// Error de permiso/red: conservamos la cookie — el backend sigue
+        /// siendo quien autoriza; no sacamos al usuario por ruido.
+        () => {},
+      );
+    });
+    return () => {
+      stopAuth();
+      stopStaff?.();
+    };
+  }
+
   async function logout(): Promise<void> {
     const firebase = useFirebase();
     if (firebase.enabled && firebase.app) {
@@ -175,6 +235,7 @@ export function useAuth() {
     isAuthenticated,
     login,
     logout,
+    bindSessionToFirebase,
     canEditBranch,
     canEditInBranches,
     isAtMyBranch,

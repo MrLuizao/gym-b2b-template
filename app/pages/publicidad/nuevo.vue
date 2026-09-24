@@ -1,5 +1,19 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, ImageUp } from '@lucide/vue';
+import {
+  ArrowLeft,
+  BatteryFull,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Dumbbell,
+  ImageUp,
+  Signal,
+  Star,
+  Store,
+  TriangleAlert,
+  Wifi,
+  X,
+} from '@lucide/vue';
 
 import type { Branch, SponsorAd } from '#shared/types';
 
@@ -10,6 +24,11 @@ const branches = ref<Branch[]>([]);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const confirmModalOpen = ref(false);
+
+/// Secciones colapsables — todas cerradas de inicio.
+const detailOpen = ref(false);
+const socialsOpen = ref(false);
+const galleryOpen = ref(false);
 
 const form = ref({
   advertiser: '',
@@ -60,6 +79,7 @@ const preview = computed(() => ({
   subtitle: form.value.subtitle,
   ctaLabel: form.value.ctaLabel || 'Ver oferta',
   brandColor: form.value.brandColor,
+  placement: form.value.placement,
 }));
 
 const onAlly = computed(() => readableOn(preview.value.brandColor));
@@ -87,6 +107,11 @@ const endsAtTs = computed(() =>
     : 0,
 );
 
+/// Una vigencia pasada = el anuncio nace oculto en la app.
+const endsExpired = computed(
+  () => form.value.endsAt !== '' && endsAtTs.value < Date.now(),
+);
+
 const confirmDescription = computed(() => {
   const active = form.value.status === 'ACTIVE';
   return `"${form.value.advertiser.trim()}" ${active ? 'aparecerá' : 'quedará pausado sin aparecer'} en ${placementLabel.value} (${branchName(form.value.branchId === 'todas' ? null : form.value.branchId)}) hasta el ${formatDay(endsAtTs.value)}.`;
@@ -107,13 +132,23 @@ const missingFields = computed(() => {
   if (!f.phone.trim()) missing.push('teléfono');
   if (parseCoord(f.lat) === null) missing.push('latitud');
   if (parseCoord(f.lng) === null) missing.push('longitud');
-  if (f.photos.length === 0) missing.push('galería de fotos');
+  if (f.photos.length === 0) missing.push('portada');
   return missing;
 });
+
+const imageWeight = computed(() =>
+  imagePayloadChars(form.value.imageUrl, form.value.photos),
+);
 
 function askPublish(): void {
   if (missingFields.value.length > 0) {
     formError.value = `Todos los campos son obligatorios — falta: ${missingFields.value.join(', ')}`;
+    return;
+  }
+  if (imageWeight.value > DOC_IMAGE_LIMIT_CHARS) {
+    formError.value =
+      `Las imágenes pesan ${formatKb(imageWeight.value)} — el máximo es ~${formatKb(DOC_IMAGE_LIMIT_CHARS)}. ` +
+      'Usa una imagen o portada más ligera (JPG de menor resolución).';
     return;
   }
   formError.value = null;
@@ -176,373 +211,602 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-xl font-black text-text-primary">Nuevo anuncio</h1>
-      <p class="mt-1 text-[11px] text-text-dim">
-        Espacio publicitario vendible — se muestra en el carrusel de Aliados
-        del Home de la app.
-      </p>
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="navigateTo('/publicidad')"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
+    <div class="flex items-center gap-4">
+      <div
+        class="flex h-20 w-32 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-stroke bg-surface"
+      >
+        <img
+          v-if="preview.imageUrl"
+          :src="preview.imageUrl"
+          :alt="preview.title"
+          class="h-full w-full object-cover"
+        />
+        <ImageUp v-else class="h-5 w-5 text-text-dim" />
+      </div>
+      <div class="min-w-0 flex-1">
+        <h1 class="text-xl font-black text-text-primary">Nuevo anuncio</h1>
+        <p class="mt-1 truncate text-[11px] text-text-dim">
+          Espacio publicitario vendible — se publica en la app según el
+          espacio elegido.
+        </p>
+      </div>
     </div>
 
-    <section>
-      <h2
-        class="mb-3 text-sm font-black uppercase tracking-widest text-text-muted"
-      >
-        Así se verá en el Home de la app
-      </h2>
-      <div
-        class="relative max-w-md overflow-hidden rounded-2xl border border-stroke bg-surface"
-      >
-        <div class="relative h-40">
-          <img
-            v-if="preview.imageUrl"
-            :src="preview.imageUrl"
-            :alt="preview.title"
-            class="h-full w-full object-cover"
-          />
-          <div
-            v-else
-            class="flex h-full w-full items-center justify-center bg-base"
+    <div class="grid gap-6 lg:grid-cols-[3fr_2fr]">
+      <div class="space-y-6">
+        <section class="rounded-2xl border border-stroke bg-surface p-5">
+          <h2
+            class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
           >
-            <ImageUp class="h-5 w-5 text-text-dim" />
+            <span class="h-4 w-1 rounded-full bg-accent" />
+            Contenido del anuncio
+          </h2>
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Anunciante *</span
+              >
+              <input
+                v-model="form.advertiser"
+                type="text"
+                placeholder="ej. NutriShop"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Botón (CTA) *</span
+              >
+              <input
+                v-model="form.ctaLabel"
+                type="text"
+                placeholder="ej. Ver oferta"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Título *</span
+              >
+              <input
+                v-model="form.title"
+                type="text"
+                placeholder="ej. Whey X-Treme -20%"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Subtítulo *</span
+              >
+              <input
+                v-model="form.subtitle"
+                type="text"
+                placeholder="Condiciones de la promo"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Badge *</span
+              >
+              <input
+                v-model="form.badge"
+                type="text"
+                placeholder="ALIADO"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Color de marca del aliado</span
+              >
+              <div class="mt-1 flex items-center gap-2">
+                <input
+                  v-model="form.brandColor"
+                  type="color"
+                  class="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-stroke bg-base p-1"
+                />
+                <input
+                  v-model="form.brandColor"
+                  type="text"
+                  placeholder="#f97316"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+                />
+              </div>
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Sede *</span
+              >
+              <USelectMenu
+                v-model="form.branchId"
+                :items="branchItems"
+                value-key="value"
+                class="mt-1 w-full"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Espacio *</span
+              >
+              <USelectMenu
+                v-model="form.placement"
+                :items="placementItems"
+                value-key="value"
+                class="mt-1 w-full"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Vigencia hasta *</span
+              >
+              <input
+                v-model="form.endsAt"
+                type="date"
+                class="mt-1 w-full rounded-xl border bg-base px-3 py-2 text-sm text-text-primary outline-none"
+                :class="
+                  endsExpired
+                    ? 'border-red-400/60 focus:border-red-400'
+                    : 'border-stroke focus:border-accent'
+                "
+              />
+              <p
+                v-if="endsExpired"
+                class="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-red-400"
+              >
+                <TriangleAlert class="h-3 w-3 shrink-0" />
+                Esta fecha ya venció — el anuncio no se mostrará en la app
+              </p>
+            </label>
           </div>
-          <div
-            class="absolute inset-0 bg-gradient-to-b from-black/20 to-transparent"
-          />
-          <div
-            class="absolute inset-x-0 bottom-0 backdrop-blur-md"
-            :style="{ backgroundColor: `${preview.brandColor}9e` }"
+        </section>
+
+        <section class="rounded-2xl border border-stroke bg-surface p-5">
+          <button
+            type="button"
+            class="flex w-full cursor-pointer items-center justify-between"
+            @click="detailOpen = !detailOpen"
           >
-            <div
-              class="flex items-center justify-between gap-2 px-3 py-2.5"
-            >
-              <div class="min-w-0">
-                <p
-                  class="text-[8px] font-black uppercase tracking-[0.14em]"
-                  :style="{ color: `${onAlly}bf` }"
+            <div class="text-left">
+              <h2
+                class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+              >
+                <span class="h-4 w-1 rounded-full bg-accent" />
+                Detalle del aliado
+              </h2>
+              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                Se muestra al abrir el anuncio en la app
+              </p>
+            </div>
+            <ChevronDown
+              class="h-4 w-4 shrink-0 text-text-muted transition-transform duration-200"
+              :class="detailOpen ? 'rotate-180' : ''"
+            />
+          </button>
+          <div v-if="detailOpen" class="mt-4 grid grid-cols-2 gap-3">
+            <label class="col-span-2 block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Descripción *</span
+              >
+              <textarea
+                v-model="form.description"
+                rows="2"
+                placeholder="Descripción del negocio y de la promoción"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Dirección *</span
+              >
+              <input
+                v-model="form.address"
+                type="text"
+                placeholder="Calle, número, colonia"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Teléfono *</span
+              >
+              <input
+                v-model="form.phone"
+                type="tel"
+                placeholder="+52 722 555 0101"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Latitud *</span
+              >
+              <input
+                v-model="form.lat"
+                type="text"
+                inputmode="decimal"
+                placeholder="19.2547"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+            <label class="block">
+              <span
+                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >Longitud *</span
+              >
+              <input
+                v-model="form.lng"
+                type="text"
+                inputmode="decimal"
+                placeholder="-99.6285"
+                class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border border-stroke bg-surface p-5">
+          <button
+            type="button"
+            class="flex w-full cursor-pointer items-center justify-between"
+            @click="socialsOpen = !socialsOpen"
+          >
+            <div class="text-left">
+              <h2
+                class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+              >
+                <span class="h-4 w-1 rounded-full bg-accent" />
+                Redes sociales
+              </h2>
+              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                Opcionales — enlaces que aparecen en el perfil del aliado
+              </p>
+            </div>
+            <ChevronDown
+              class="h-4 w-4 shrink-0 text-text-muted transition-transform duration-200"
+              :class="socialsOpen ? 'rotate-180' : ''"
+            />
+          </button>
+          <div v-if="socialsOpen" class="mt-4 grid grid-cols-2 gap-3">
+            <input
+              v-model="form.instagram"
+              type="text"
+              placeholder="Instagram (URL)"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+            <input
+              v-model="form.facebook"
+              type="text"
+              placeholder="Facebook (URL)"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+            <input
+              v-model="form.tiktok"
+              type="text"
+              placeholder="TikTok (URL)"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+            <input
+              v-model="form.website"
+              type="text"
+              placeholder="Sitio web (URL)"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+            <input
+              v-model="form.whatsapp"
+              type="tel"
+              placeholder="WhatsApp (ej. +52 722 555 0101)"
+              class="col-span-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+            />
+          </div>
+        </section>
+
+        <section class="rounded-2xl border border-stroke bg-surface p-5">
+          <button
+            type="button"
+            class="flex w-full cursor-pointer items-center justify-between"
+            @click="galleryOpen = !galleryOpen"
+          >
+            <div class="text-left">
+              <h2
+                class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+              >
+                <span class="h-4 w-1 rounded-full bg-accent" />
+                Imágenes
+              </h2>
+              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                Imagen del anuncio + portada del perfil del aliado
+              </p>
+            </div>
+            <ChevronDown
+              class="h-4 w-4 shrink-0 text-text-muted transition-transform duration-200"
+              :class="galleryOpen ? 'rotate-180' : ''"
+            />
+          </button>
+          <div v-if="galleryOpen" class="mt-4">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <span
+                  class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                  >Imagen del anuncio *</span
                 >
-                  {{ preview.advertiser }}
-                </p>
+                <ImagePicker
+                  v-model="form.imageUrl"
+                  label="Subir imagen del anuncio"
+                  class="mt-1"
+                  @error="formError = $event"
+                />
+              </div>
+              <div>
+                <span
+                  class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                  >Portada *</span
+                >
+                <div class="mt-1">
+                  <PhotosPicker
+                    v-model="form.photos"
+                    :max="1"
+                    label="Subir portada"
+                    @error="formError = $event"
+                  />
+                </div>
+              </div>
+            </div>
+            <p
+              class="mt-2 text-[10px] font-medium"
+              :class="imageWeight > DOC_IMAGE_LIMIT_CHARS ? 'text-red-400' : 'text-text-dim'"
+            >
+              Peso total de imágenes: {{ formatKb(imageWeight) }} / ~{{ formatKb(DOC_IMAGE_LIMIT_CHARS) }}
+            </p>
+          </div>
+        </section>
+
+        <div
+          class="flex items-center justify-between rounded-2xl border border-stroke bg-surface px-5 py-4"
+        >
+          <span class="text-[11px] font-bold text-text-muted">
+            {{
+              form.status === 'ACTIVE'
+                ? 'Visible en la app desde su publicación'
+                : 'Borrador — se guarda pausado y no se muestra en la app'
+            }}
+          </span>
+          <button
+            type="button"
+            class="relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition"
+            :class="
+              form.status === 'ACTIVE'
+                ? 'bg-accent'
+                : 'border border-stroke bg-base'
+            "
+            @click="
+              form.status = form.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE'
+            "
+          >
+            <span
+              class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+              :class="
+                form.status === 'ACTIVE'
+                  ? 'left-[22px] bg-base'
+                  : 'left-0.5 bg-white'
+              "
+            />
+          </button>
+        </div>
+      </div>
+
+      <section
+        class="flex flex-1 flex-col rounded-2xl border border-stroke bg-surface p-5"
+      >
+        <h2
+          class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+        >
+          <span class="h-4 w-1 rounded-full bg-accent" />
+          Así se ve en Aliados
+        </h2>
+        <div class="mt-3 flex justify-center">
+          <div class="w-full max-w-[260px]">
+            <div
+              class="flex items-center gap-3 rounded-2xl border border-stroke bg-base p-3"
+            >
+              <div
+                class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface"
+              >
+                <img
+                  v-if="preview.imageUrl"
+                  :src="preview.imageUrl"
+                  :alt="preview.advertiser"
+                  class="h-full w-full object-cover"
+                />
+                <Store v-else class="h-5 w-5 text-text-dim" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1">
+                  <p
+                    class="truncate text-[9px] font-black uppercase tracking-widest text-accent"
+                  >
+                    {{ preview.advertiser }}
+                  </p>
+                  <Star
+                    v-if="preview.placement === 'carousel'"
+                    class="h-3 w-3 shrink-0 fill-accent text-accent"
+                  />
+                </div>
                 <p
-                  class="truncate text-xs font-black"
-                  :style="{ color: onAlly }"
+                  class="truncate text-[13px] font-black text-text-primary"
                 >
                   {{ preview.title }}
                 </p>
                 <p
-                  class="truncate text-[10px] font-semibold"
-                  :style="{ color: `${onAlly}bf` }"
+                  class="truncate text-[11px] font-semibold text-text-muted"
                 >
                   {{ preview.subtitle }}
                 </p>
               </div>
-              <span
-                class="shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black"
-                :style="{
-                  color: onAlly,
-                  borderColor: `${onAlly}8c`,
-                  backgroundColor: `${onAlly}29`,
-                }"
-              >
-                {{ preview.ctaLabel }}
-              </span>
+              <ChevronRight class="h-5 w-5 shrink-0 text-text-dim" />
             </div>
           </div>
         </div>
-      </div>
-    </section>
 
-    <section class="rounded-2xl border border-stroke bg-surface p-5">
-      <h2 class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-        Contenido del anuncio
-      </h2>
-      <div class="mt-4 grid grid-cols-2 gap-3">
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Anunciante *</span
+        <div class="mt-6 border-t border-stroke pt-5">
+          <h3
+            class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
           >
-          <input
-            v-model="form.advertiser"
-            type="text"
-            placeholder="ej. NutriShop"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Botón (CTA) *</span
-          >
-          <input
-            v-model="form.ctaLabel"
-            type="text"
-            placeholder="ej. Ver oferta"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Título *</span
-          >
-          <input
-            v-model="form.title"
-            type="text"
-            placeholder="ej. Whey X-Treme -20%"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Subtítulo *</span
-          >
-          <input
-            v-model="form.subtitle"
-            type="text"
-            placeholder="Condiciones de la promo"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Badge *</span
-          >
-          <input
-            v-model="form.badge"
-            type="text"
-            placeholder="ALIADO"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Color de marca del aliado</span
-          >
-          <div class="mt-1 flex items-center gap-2">
-            <input
-              v-model="form.brandColor"
-              type="color"
-              class="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-stroke bg-base p-1"
-            />
-            <input
-              v-model="form.brandColor"
-              type="text"
-              placeholder="#f97316"
-              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-            />
-          </div>
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Sede *</span
-          >
-          <USelectMenu
-            v-model="form.branchId"
-            :items="branchItems"
-            value-key="value"
-            class="mt-1 w-full"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Espacio *</span
-          >
-          <USelectMenu
-            v-model="form.placement"
-            :items="placementItems"
-            value-key="value"
-            class="mt-1 w-full"
-          />
-        </label>
-        <div class="col-span-2">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Imagen del anuncio *</span
-          >
-          <ImagePicker
-            v-model="form.imageUrl"
-            label="Subir imagen del anuncio"
-            compact
-            class="mt-1"
-            @error="formError = $event"
-          />
+            <span class="h-4 w-1 rounded-full bg-accent" />
+            Así se ve en el Home
+          </h3>
         </div>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Vigencia hasta *</span
-          >
-          <input
-            v-model="form.endsAt"
-            type="date"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-          />
-        </label>
-      </div>
-    </section>
 
-    <section class="rounded-2xl border border-stroke bg-surface p-5">
-      <h2 class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-        Detalle del aliado · se muestra al abrir el anuncio en la app
-      </h2>
-      <div class="mt-4 grid grid-cols-2 gap-3">
-        <label class="col-span-2 block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Descripción *</span
+        <div class="mt-4 flex flex-1 items-center justify-center">
+          <div
+            class="w-full max-w-[260px] rounded-[2.4rem] border-4 border-stroke bg-black p-1.5 shadow-2xl"
           >
-          <textarea
-            v-model="form.description"
-            rows="2"
-            placeholder="Descripción del negocio y de la promoción"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Dirección *</span
-          >
-          <input
-            v-model="form.address"
-            type="text"
-            placeholder="Calle, número, colonia"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Teléfono *</span
-          >
-          <input
-            v-model="form.phone"
-            type="tel"
-            placeholder="+52 722 555 0101"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Latitud *</span
-          >
-          <input
-            v-model="form.lat"
-            type="text"
-            inputmode="decimal"
-            placeholder="19.2547"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span
-            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >Longitud *</span
-          >
-          <input
-            v-model="form.lng"
-            type="text"
-            inputmode="decimal"
-            placeholder="-99.6285"
-            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-          />
-        </label>
-      </div>
-    </section>
+            <div
+              class="relative flex h-[420px] flex-col overflow-hidden rounded-[1.9rem] bg-base"
+            >
+              <div
+                class="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black"
+              />
+              <div
+                class="flex items-center justify-between px-6 pt-3 text-[9px] font-bold text-text-primary"
+              >
+                <span>9:41</span>
+                <span class="flex items-center gap-1 text-text-primary">
+                  <Signal class="h-2.5 w-2.5" />
+                  <Wifi class="h-2.5 w-2.5" />
+                  <BatteryFull class="h-3 w-3" />
+                </span>
+              </div>
+              <div class="flex flex-1 flex-col px-3 pt-8">
+                <div class="flex items-center gap-1.5 px-1">
+                  <div
+                    class="flex h-5 w-5 items-center justify-center rounded-md bg-accent"
+                  >
+                    <Dumbbell class="h-3 w-3 text-base" />
+                  </div>
+                  <p
+                    class="text-[9px] font-black uppercase tracking-widest text-text-primary"
+                  >
+                    RIR-HUB
+                  </p>
+                </div>
+                <p
+                  class="mt-3 px-1 text-[8px] font-bold uppercase tracking-widest text-text-dim"
+                >
+                  Aliados
+                </p>
+                <div
+                  class="relative mt-1.5 overflow-hidden rounded-2xl border border-stroke"
+                >
+                  <div class="relative h-32">
+                    <img
+                      v-if="preview.imageUrl"
+                      :src="preview.imageUrl"
+                      :alt="preview.title"
+                      class="h-full w-full object-cover"
+                    />
+                    <div
+                      v-else
+                      class="flex h-full w-full items-center justify-center bg-surface"
+                    >
+                      <ImageUp class="h-5 w-5 text-text-dim" />
+                    </div>
+                    <div
+                      class="absolute inset-x-0 bottom-0 backdrop-blur-md"
+                      :style="{ backgroundColor: `${preview.brandColor}9e` }"
+                    >
+                      <div
+                        class="flex items-center justify-between gap-2 px-2.5 py-2"
+                      >
+                        <div class="min-w-0">
+                          <p
+                            class="text-[7px] font-black uppercase tracking-[0.14em]"
+                            :style="{ color: `${onAlly}bf` }"
+                          >
+                            {{ preview.advertiser }}
+                          </p>
+                          <p
+                            class="truncate text-[10px] font-black"
+                            :style="{ color: onAlly }"
+                          >
+                            {{ preview.title }}
+                          </p>
+                          <p
+                            class="truncate text-[8px] font-semibold"
+                            :style="{ color: `${onAlly}bf` }"
+                          >
+                            {{ preview.subtitle }}
+                          </p>
+                        </div>
+                        <span
+                          class="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black"
+                          :style="{
+                            color: onAlly,
+                            borderColor: `${onAlly}8c`,
+                            backgroundColor: `${onAlly}29`,
+                          }"
+                        >
+                          {{ preview.ctaLabel }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="mx-auto mb-2 h-1 w-24 rounded-full bg-text-dim/60"
+              />
+            </div>
+          </div>
+        </div>
 
-    <section class="rounded-2xl border border-stroke bg-surface p-5">
-      <h2 class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-        Redes sociales · opcionales
-      </h2>
-      <div class="mt-4 grid grid-cols-2 gap-3">
-        <input
-          v-model="form.instagram"
-          type="text"
-          placeholder="Instagram (URL)"
-          class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-        />
-        <input
-          v-model="form.facebook"
-          type="text"
-          placeholder="Facebook (URL)"
-          class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-        />
-        <input
-          v-model="form.tiktok"
-          type="text"
-          placeholder="TikTok (URL)"
-          class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-        />
-        <input
-          v-model="form.website"
-          type="text"
-          placeholder="Sitio web (URL)"
-          class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-        />
-        <input
-          v-model="form.whatsapp"
-          type="tel"
-          placeholder="WhatsApp (ej. +52 722 555 0101)"
-          class="col-span-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-        />
-      </div>
-    </section>
+        <p
+          v-if="formError"
+          class="mt-3 text-[11px] font-bold text-red-400"
+        >
+          {{ formError }}
+        </p>
 
-    <section class="rounded-2xl border border-stroke bg-surface p-5">
-      <h2 class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-        Galería de fotos · mínimo 1
-      </h2>
-      <div class="mt-4">
-        <PhotosPicker v-model="form.photos" @error="formError = $event" />
-      </div>
-    </section>
-
-    <div
-      class="flex items-center justify-between rounded-2xl border border-stroke bg-surface px-5 py-4"
-    >
-      <span class="text-[11px] font-bold text-text-muted">
-        Visible en el Home desde su publicación
-      </span>
-      <button
-        type="button"
-        class="relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition"
-        :class="
-          form.status === 'ACTIVE'
-            ? 'bg-accent'
-            : 'border border-stroke bg-base'
-        "
-        @click="form.status = form.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE'"
-      >
-        <span
-          class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
-          :class="
-            form.status === 'ACTIVE'
-              ? 'left-[22px] bg-base'
-              : 'left-0.5 bg-white'
-          "
-        />
-      </button>
+        <button
+          class="mt-4 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
+          :disabled="saving"
+          @click="askPublish"
+        >
+          <Check class="h-4 w-4" />
+          {{ saving ? 'Publicando…' : 'Publicar anuncio' }}
+        </button>
+        <button
+          class="mt-2 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-stroke text-[11px] font-black text-text-muted transition hover:text-text-primary"
+          @click="navigateTo('/publicidad')"
+        >
+          <X class="h-3.5 w-3.5" />
+          Cancelar
+        </button>
+      </section>
     </div>
-
-    <p v-if="formError" class="text-[11px] font-bold text-red-400">
-      {{ formError }}
-    </p>
-
-    <button
-      class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
-      :disabled="saving"
-      @click="askPublish"
-    >
-      <Check class="h-4 w-4" />
-      {{ saving ? 'Publicando…' : 'Publicar anuncio' }}
-    </button>
 
     <UModal
       v-model:open="confirmModalOpen"
@@ -565,13 +829,5 @@ onMounted(async () => {
         </div>
       </template>
     </UModal>
-
-    <NuxtLink
-      to="/publicidad"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Publicidad
-    </NuxtLink>
   </div>
 </template>

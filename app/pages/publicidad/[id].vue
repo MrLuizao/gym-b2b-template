@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   BatteryFull,
   Check,
+  ChevronRight,
+  CircleCheck,
   Dumbbell,
   Eye,
   ImageUp,
@@ -12,7 +14,10 @@ import {
   Pencil,
   Play,
   Signal,
+  Star,
+  Store,
   Trash2,
+  TriangleAlert,
   Wifi,
   X,
 } from '@lucide/vue';
@@ -77,6 +82,9 @@ function placementLabel(p: SponsorAd['placement']): string {
 const saveModalOpen = ref(false);
 const saveModalEmpty = ref(false);
 const saveChanges = ref<string[]>([]);
+const actionError = ref<string | null>(null);
+/// Errores del formulario de edición (pickers, validaciones pre-modal).
+const formError = ref<string | null>(null);
 
 function branchName(id: string | null): string {
   if (!id) return 'Todas las sedes';
@@ -112,6 +120,18 @@ const daysLeft = computed(() => {
   return Math.max(0, Math.ceil((ad.value.endsAt - Date.now()) / 86_400_000));
 });
 
+/// La app oculta anuncios vencidos aunque status siga ACTIVE — el panel
+/// lo grita para que nadie guarde una fecha pasada sin darse cuenta.
+const isExpired = computed(
+  () => !!ad.value && ad.value.endsAt < Date.now(),
+);
+
+const editEndsExpired = computed(() => {
+  const v = editForm.value.endsAt;
+  if (!v) return false;
+  return new Date(`${v}T23:59:59`).getTime() < Date.now();
+});
+
 const socialLinks = computed(() => {
   const s = ad.value?.socials;
   if (!s) return {};
@@ -136,6 +156,7 @@ const preview = computed(() => {
       subtitle: editForm.value.subtitle,
       ctaLabel: editForm.value.ctaLabel || 'Ver oferta',
       brandColor: editForm.value.brandColor,
+      placement: editForm.value.placement,
     };
   }
   const a = ad.value;
@@ -147,6 +168,7 @@ const preview = computed(() => {
     subtitle: a?.subtitle ?? '',
     ctaLabel: a?.ctaLabel ?? '',
     brandColor: argbToHex(a?.brandColor) ?? '#f4e701',
+    placement: a?.placement ?? 'carousel',
   };
 });
 
@@ -200,9 +222,20 @@ function startEdit(): void {
   editing.value = true;
 }
 
+const imageWeight = computed(() =>
+  imagePayloadChars(editForm.value.imageUrl, editForm.value.photos),
+);
+
 function confirmSave(): void {
   const a = ad.value;
   if (!a) return;
+  if (imageWeight.value > DOC_IMAGE_LIMIT_CHARS) {
+    formError.value =
+      `Las imágenes pesan ${formatKb(imageWeight.value)} — el máximo es ~${formatKb(DOC_IMAGE_LIMIT_CHARS)}. ` +
+      'Usa una imagen o portada más ligera (JPG de menor resolución).';
+    return;
+  }
+  formError.value = null;
   const endsAt = editForm.value.endsAt
     ? new Date(`${editForm.value.endsAt}T23:59:59`).getTime()
     : a.endsAt;
@@ -250,9 +283,10 @@ function confirmSave(): void {
     editForm.value.whatsapp !== a.socials.whatsapp;
   if (socialsChanged) changes.push('Se actualizarán las redes sociales');
   if (JSON.stringify(editForm.value.photos) !== JSON.stringify(a.photos))
-    changes.push(`Galería: ${a.photos.length} → ${editForm.value.photos.length} foto(s)`);
+    changes.push('Se actualizará la portada del aliado');
   saveChanges.value = changes;
   saveModalEmpty.value = changes.length === 0;
+  actionError.value = null;
   saveModalOpen.value = true;
 }
 
@@ -290,10 +324,13 @@ async function saveAd(): Promise<void> {
       photos: editForm.value.photos,
     });
     await reload();
+    saveModalOpen.value = false;
     editing.value = false;
+  } catch (cause) {
+    actionError.value =
+      cause instanceof Error ? cause.message : 'No se pudo guardar';
   } finally {
     saving.value = false;
-    saveModalOpen.value = false;
   }
 }
 
@@ -311,6 +348,7 @@ const statusDescription = computed(() => {
 async function toggleStatus(): Promise<void> {
   if (!ad.value || saving.value) return;
   saving.value = true;
+  actionError.value = null;
   try {
     await updateAdStatus(
       ad.value,
@@ -318,6 +356,9 @@ async function toggleStatus(): Promise<void> {
     );
     await reload();
     statusModalOpen.value = false;
+  } catch (cause) {
+    actionError.value =
+      cause instanceof Error ? cause.message : 'No se pudo actualizar';
   } finally {
     saving.value = false;
   }
@@ -326,10 +367,14 @@ async function toggleStatus(): Promise<void> {
 async function removeAd(): Promise<void> {
   if (!ad.value || deleting.value) return;
   deleting.value = true;
+  actionError.value = null;
   try {
     await deleteAd(ad.value);
     deleteModalOpen.value = false;
     await navigateTo('/publicidad');
+  } catch (cause) {
+    actionError.value =
+      cause instanceof Error ? cause.message : 'No se pudo eliminar';
   } finally {
     deleting.value = false;
   }
@@ -365,24 +410,36 @@ async function removeAd(): Promise<void> {
           {{ ad.advertiser }}
         </h1>
         <p class="mt-1 truncate text-[11px] text-text-dim">
-          {{ ad.title }} · vigente hasta {{ formatFullDay(ad.endsAt) }}
+          {{ ad.title }}
         </p>
         <p class="mt-0.5 flex items-center gap-1.5">
           <span
             class="h-1.5 w-1.5 rounded-full"
             :class="
-              ad.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-text-dim'
+              isExpired
+                ? 'bg-red-400'
+                : ad.status === 'ACTIVE'
+                  ? 'bg-emerald-400'
+                  : 'bg-text-dim'
             "
           />
           <span
             class="text-[10px] font-bold uppercase tracking-widest"
             :class="
-              ad.status === 'ACTIVE'
-                ? 'text-emerald-400'
-                : 'text-text-dim'
+              isExpired
+                ? 'text-red-400'
+                : ad.status === 'ACTIVE'
+                  ? 'text-emerald-400'
+                  : 'text-text-dim'
             "
           >
-            {{ ad.status === 'ACTIVE' ? 'Activo' : 'Pausado' }}
+            {{
+              isExpired
+                ? 'Vencido'
+                : ad.status === 'ACTIVE'
+                  ? 'Activo'
+                  : 'Pausado'
+            }}
           </span>
         </p>
       </div>
@@ -395,7 +452,7 @@ async function removeAd(): Promise<void> {
               ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
               : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
           "
-          @click="statusModalOpen = true"
+          @click="actionError = null; statusModalOpen = true"
         >
           <Pause v-if="ad.status === 'ACTIVE'" class="h-3.5 w-3.5" />
           <Play v-else class="h-3.5 w-3.5" />
@@ -404,7 +461,7 @@ async function removeAd(): Promise<void> {
         <button
           type="button"
           class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-red-400/40 bg-red-400/10 px-4 text-[11px] font-black text-red-400 transition hover:bg-red-400/20"
-          @click="deleteModalOpen = true"
+          @click="actionError = null; deleteModalOpen = true"
         >
           <Trash2 class="h-3.5 w-3.5" />
           Eliminar
@@ -461,10 +518,10 @@ async function removeAd(): Promise<void> {
         </h2>
         <button
           v-if="isAdmin && !editing"
-          class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1 text-[10px] font-black text-text-muted transition hover:border-accent hover:text-accent"
+          class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] font-black text-base transition hover:opacity-90"
           @click="startEdit"
         >
-          <Pencil class="h-3 w-3" />
+          <Pencil class="h-3.5 w-3.5" />
           Editar
         </button>
       </div>
@@ -520,8 +577,16 @@ async function removeAd(): Promise<void> {
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
             Vigencia
           </p>
-          <p class="mt-1 text-sm font-black text-text-primary">
+          <p
+            class="mt-1 flex items-center gap-1.5 text-sm font-black"
+            :class="isExpired ? 'text-red-400' : 'text-emerald-400'"
+          >
+            <TriangleAlert v-if="isExpired" class="h-3.5 w-3.5 shrink-0" />
+            <CircleCheck v-else class="h-3.5 w-3.5 shrink-0" />
             {{ formatFullDay(ad.endsAt) }}
+            <span class="text-[10px] font-bold uppercase tracking-widest opacity-75">
+              {{ isExpired ? 'vencido' : 'vigente' }}
+            </span>
           </p>
         </div>
         <div class="col-span-2">
@@ -579,7 +644,7 @@ async function removeAd(): Promise<void> {
 
       <div v-if="!editing && ad.photos.length" class="mt-4">
         <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-          Galería · {{ ad.photos.length }} foto(s)
+          Portada
         </p>
         <div class="mt-2 grid grid-cols-4 gap-2">
           <img
@@ -592,7 +657,7 @@ async function removeAd(): Promise<void> {
         </div>
       </div>
 
-      <div v-else class="mt-4 space-y-3">
+      <div v-if="editing" class="mt-4 space-y-3">
         <div class="grid grid-cols-2 gap-3">
           <label class="block">
             <span
@@ -692,18 +757,6 @@ async function removeAd(): Promise<void> {
               class="mt-1 w-full"
             />
           </label>
-          <div class="col-span-2">
-            <span
-              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-              >Imagen</span
-            >
-            <ImagePicker
-              v-model="editForm.imageUrl"
-              label="Subir imagen del anuncio"
-              compact
-              class="mt-1"
-            />
-          </div>
           <label class="block">
             <span
               class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
@@ -712,8 +765,20 @@ async function removeAd(): Promise<void> {
             <input
               v-model="editForm.endsAt"
               type="date"
-              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              class="mt-1 w-full rounded-xl border bg-base px-3 py-2 text-sm text-text-primary outline-none"
+              :class="
+                editEndsExpired
+                  ? 'border-red-400/60 focus:border-red-400'
+                  : 'border-stroke focus:border-accent'
+              "
             />
+            <p
+              v-if="editEndsExpired"
+              class="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-red-400"
+            >
+              <TriangleAlert class="h-3 w-3 shrink-0" />
+              Esta fecha ya venció — el anuncio no se mostrará en la app
+            </p>
           </label>
           <label class="col-span-2 block">
             <span
@@ -814,13 +879,27 @@ async function removeAd(): Promise<void> {
             />
           </div>
         </div>
-        <div>
-          <p
-            class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
-          >
-            Galería de fotos
-          </p>
-          <PhotosPicker v-model="editForm.photos" />
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p
+              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Imagen del anuncio
+            </p>
+            <ImagePicker
+              v-model="editForm.imageUrl"
+              label="Subir imagen del anuncio"
+              @error="formError = $event"
+            />
+          </div>
+          <div>
+            <p
+              class="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Portada
+            </p>
+            <PhotosPicker v-model="editForm.photos" :max="1" label="Subir portada" @error="formError = $event" />
+          </div>
         </div>
       </div>
     </section>
@@ -834,8 +913,60 @@ async function removeAd(): Promise<void> {
             class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
           >
             <span class="h-4 w-1 rounded-full bg-accent" />
-            Así se ve en el Home
+            Así se ve en Aliados
           </h2>
+          <div class="mt-3 flex justify-center">
+            <div class="w-full max-w-[260px]">
+              <div
+                class="flex items-center gap-3 rounded-2xl border border-stroke bg-base p-3"
+              >
+                <div
+                  class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface"
+                >
+                  <img
+                    v-if="preview.imageUrl"
+                    :src="preview.imageUrl"
+                    :alt="preview.advertiser"
+                    class="h-full w-full object-cover"
+                  />
+                  <Store v-else class="h-5 w-5 text-text-dim" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1">
+                    <p
+                      class="truncate text-[9px] font-black uppercase tracking-widest text-accent"
+                    >
+                      {{ preview.advertiser }}
+                    </p>
+                    <Star
+                      v-if="preview.placement === 'carousel'"
+                      class="h-3 w-3 shrink-0 fill-accent text-accent"
+                    />
+                  </div>
+                  <p
+                    class="truncate text-[13px] font-black text-text-primary"
+                  >
+                    {{ preview.title }}
+                  </p>
+                  <p
+                    class="truncate text-[11px] font-semibold text-text-muted"
+                  >
+                    {{ preview.subtitle }}
+                  </p>
+                </div>
+                <ChevronRight class="h-5 w-5 shrink-0 text-text-dim" />
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 border-t border-stroke pt-5">
+            <h3
+              class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+            >
+              <span class="h-4 w-1 rounded-full bg-accent" />
+              Así se ve en el Home
+            </h3>
+          </div>
 
           <div class="mt-4 flex flex-1 items-center justify-center">
             <div
@@ -939,6 +1070,12 @@ async function removeAd(): Promise<void> {
           </div>
 
           <template v-if="editing">
+            <p
+              v-if="formError"
+              class="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-medium leading-snug text-red-400"
+            >
+              {{ formError }}
+            </p>
             <button
               class="mt-4 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
               :disabled="saving"
@@ -969,19 +1106,27 @@ async function removeAd(): Promise<void> {
       "
     >
       <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton
-            label="Cancelar"
-            color="neutral"
-            variant="outline"
-            @click="saveModalOpen = false"
-          />
-          <UButton
-            label="Confirmar cambios"
-            :disabled="saveModalEmpty"
-            :loading="saving"
-            @click="saveAd"
-          />
+        <div class="flex w-full flex-col gap-2">
+          <p
+            v-if="actionError"
+            class="text-[11px] font-bold text-red-400"
+          >
+            {{ actionError }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton
+              label="Cancelar"
+              color="neutral"
+              variant="outline"
+              @click="saveModalOpen = false"
+            />
+            <UButton
+              label="Confirmar cambios"
+              :disabled="saveModalEmpty"
+              :loading="saving"
+              @click="saveAd"
+            />
+          </div>
         </div>
       </template>
     </UModal>
@@ -992,18 +1137,26 @@ async function removeAd(): Promise<void> {
       :description="statusDescription"
     >
       <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton
-            label="Cancelar"
-            color="neutral"
-            variant="outline"
-            @click="statusModalOpen = false"
-          />
-          <UButton
-            label="Confirmar"
-            :loading="saving"
-            @click="toggleStatus"
-          />
+        <div class="flex w-full flex-col gap-2">
+          <p
+            v-if="actionError"
+            class="text-[11px] font-bold text-red-400"
+          >
+            {{ actionError }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton
+              label="Cancelar"
+              color="neutral"
+              variant="outline"
+              @click="statusModalOpen = false"
+            />
+            <UButton
+              label="Confirmar"
+              :loading="saving"
+              @click="toggleStatus"
+            />
+          </div>
         </div>
       </template>
     </UModal>
@@ -1014,19 +1167,27 @@ async function removeAd(): Promise<void> {
       :description="`Se eliminará '${ad.advertiser}' y su historial de impresiones. Esta acción no se puede deshacer.`"
     >
       <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton
-            label="Cancelar"
-            color="neutral"
-            variant="outline"
-            @click="deleteModalOpen = false"
-          />
-          <UButton
-            label="Eliminar anuncio"
-            color="error"
-            :loading="deleting"
-            @click="removeAd"
-          />
+        <div class="flex w-full flex-col gap-2">
+          <p
+            v-if="actionError"
+            class="text-[11px] font-bold text-red-400"
+          >
+            {{ actionError }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton
+              label="Cancelar"
+              color="neutral"
+              variant="outline"
+              @click="deleteModalOpen = false"
+            />
+            <UButton
+              label="Eliminar anuncio"
+              color="error"
+              :loading="deleting"
+              @click="removeAd"
+            />
+          </div>
         </div>
       </template>
     </UModal>
