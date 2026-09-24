@@ -39,6 +39,7 @@ otro proyecto Firebase, no otro tenant.
 /staff/{uid}                     personal (rol + sede)
 
 /checkins/{checkinId}            entradas del día (TTL — se borran solas)
+/bookings/{bookingId}            reservas de clase por ocurrencia (class_date)
 /dailyStats/{statId}             agregado diario por sede (historia de reportes)
 /forecasts/{branchId}            aforo típico por hora/día de semana (app)
 /payments/{paymentId}            pagos (solo functions escribe)
@@ -79,14 +80,19 @@ Escritura: solo ADMIN.
 | `image_url` | string | |
 | `address` | string | |
 | `max_capacity` | number | Aforo máximo |
-| `current_capacity` | number | **Contador atómico** — solo functions |
+| `current_capacity` | number | **Contador** — solo server (API/functions) |
+| `capacity_adjusted_at` | timestamp | Sello del último ajuste manual de aforo |
+| `capacity_adjusted_by` | string | Email/uid del staff que ajustó |
 | `status` | string | `OPEN` \| `CLOSED` |
 | `open_minutes` | number | Minutos desde 00:00 |
 | `close_minutes` | number | |
 | `lat` / `lng` | number | Para mapa de la app |
 
 Lectura: todos los autenticados. Escritura: ADMIN (cualquier sede),
-MANAGER (solo la suya). `current_capacity` solo functions.
+MANAGER (solo la suya, sin tocar `max_capacity`/`current_capacity`).
+`current_capacity` solo se escribe vía API: check-in/out, auto-checkout,
+cierre de día y `POST /api/branches/{id}/adjust` (delta o valor absoluto,
+clamp `[0, max]`, deja sello `capacity_adjusted_*`).
 
 ---
 
@@ -198,8 +204,32 @@ Definición global + overrides por sede en `branch_times`.
 | `room` | string | ADMIN | Sala base |
 | `start_minutes` / `end_minutes` | number | ADMIN | Horario base |
 | `capacity` | number | ADMIN | |
-| `booked` | number | functions | Contador |
+| `booked` | number | functions | Inscritos de HOY total — suma de sedes (compat) |
+| `booked_by_date` | map | functions | Cupo por ocurrencia **y sede**: `{ 'YYYY-MM-DD': { <branchId>: n } }`. Se poda al reservar y en close-day |
 | `branch_times` | map | MANAGER (su clave) | `{ <branchId>: { start_minutes, end_minutes, room } }` |
+
+La reserva es por **ocurrencia** (fecha CDMX), no por clase en abstracto:
+`POST /api/classes/{id}/book` recibe `{ date, branchId }`, valida vigencia
+(no pasada, ≤8 días, si es hoy la clase no debe haber terminado según
+`branch_times` de esa sede) y cupo **en transacción por sede** — dos
+reservas simultáneas no rebasan `capacity` de esa sede. `DELETE` toma
+`?date=` y decrementa la llave de la sede registrada en la reserva.
+
+### `/bookings/{bookingId}` — reservas de clase
+
+Escritura solo vía API (functions); el socio lee las suyas
+(`auth_uid == uid`). Historial persistente — el roster del día filtra
+`class_date == hoy`.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `class_id` | string | → `classes/{id}` |
+| `class_date` | string | `YYYY-MM-DD` CDMX — la ocurrencia reservada |
+| `user_id` / `auth_uid` | string | Socio (doc id + auth uid) |
+| `member_name` | string | Snapshot para roster |
+| `branch_id` | string | Sede donde se toma la clase |
+| `status` | string | `confirmed` / `cancelled` |
+| `created_at` / `cancelled_at` | timestamp | |
 
 El gerente solo puede escribir su propia clave dentro de `branch_times` —
 nada de campos globales ni otras sedes (se fuerza en reglas).

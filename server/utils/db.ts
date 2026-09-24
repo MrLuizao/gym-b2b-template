@@ -113,6 +113,20 @@ export function toClass(s: DocumentSnapshot): ClassSchedule {
     endMinutes: d.end_minutes ?? 0,
     capacity: d.capacity ?? 0,
     booked: d.booked ?? 0,
+    bookedByDate:
+      d.booked_by_date == null
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(
+              d.booked_by_date as Record<string, unknown>,
+            ).map(([date, v]) => [
+              date,
+              /// Legacy: número plano → llave '_' (conteo sin sede).
+              typeof v === 'number'
+                ? { _: v }
+                : (v as Record<string, number>),
+            ]),
+          ),
     branchTimes: d.branch_times ?? undefined,
   };
 }

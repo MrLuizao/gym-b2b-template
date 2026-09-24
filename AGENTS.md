@@ -1,7 +1,17 @@
 # Prototipo Gym B2B — Consola de administración
 
 Nuxt 3 + Vue 3 (`<script setup lang="ts">`) + Nuxt UI + Tailwind + Lucide.
-Mock backend en `server/` (sin persistencia real). Firebase planeado.
+**Firebase activo** — Auth + Firestore + FCM son reales (ya no hay mock);
+los endpoints en `server/api/**` escriben con firebase-admin y validan
+rol/sede server-side (`server/utils/staff-auth.ts`).
+
+Repo hermano — app del socio (Flutter):
+`/Users/luis/Develop/Personal/prototipo-gym` (tiene su propio `AGENTS.md`).
+
+**Modelo de negocio**: un proyecto Firebase = un negocio con varias sedes.
+No existe `brand_id` operativo; el branding vive en `/config/brand`.
+Timezone del negocio: `America/Mexico_City` — todas las fechas de
+ocurrencia (`class_date`, dailyStats) se calculan en esa TZ.
 
 ## Comandos
 
@@ -11,6 +21,77 @@ npm run typecheck  # vue-tsc — debe quedar en 0 errores
 ```
 
 Si `npm` no está en PATH: `export PATH="/Users/luis/.nvm/versions/node/v24.13.0/bin:$PATH"`
+
+Nota: `npm run typecheck` a veces crashea con `ERR_PACKAGE_PATH_NOT_EXPORTED`
+(bug conocido de Volar/vue-tsc) — revisar que no haya errores TS reales en
+la salida; el crash de la herramienta no es un error del código.
+
+## Flujos operativos clave
+
+Detalle de colecciones y campos en `FIRESTORE.md`; reglas en
+`firestore.rules`.
+
+### Alta de socios (claim)
+
+Recepción crea al socio (`/socios` → `members.post`) y le asigna
+`member_number` + teléfono. La app **nunca crea** el registro: el usuario
+entra con Google/Apple y reclama su ficha vía `POST /api/members/claim`
+(número + teléfono). Sin vínculo no ve datos del gym.
+
+### Check-ins y aforo en tiempo real
+
+- `branches.current_capacity`: check-in `+1` (`checkin.post` rechaza si
+  `>= max_capacity`), checkout `-1`, cierre `= 0`. Ajuste manual por
+  `POST /api/branches/{id}/adjust` (`delta` o `value`, transacción con
+  clamp + sello `capacity_adjusted_at/by`) — admin todas, gerente su sede,
+  recepcionista **no puede**.
+- **Auto-checkout**: cron externo (cron-job.org) cada 15 min →
+  `POST /api/cron/auto-checkout` libera check-ins >90 min sin salida
+  (`release_reason: 'auto_checkout_cron'`). El doc queda en `checkins`
+  hasta el cierre de día.
+- **Cierre de día** (`sweepCheckins` + `sweepClassBookings` en
+  `server/utils/close-day.ts`): agrega check-ins a `dailyStats` por
+  (sede, fecha del check-in), actualiza `forecasts` (EMA por weekday),
+  borra los docs, limpia `active_checkin_*` de socios, resetea aforo y
+  cupo de clases. Dos entradas: botón "Cerrar sede" del header
+  (`POST /api/branches/{id}/close-day`, cualquier rol pero solo su sede
+  salvo admin) y cron global `POST /api/cron/close-day` (vercel.json
+  23:55 CDMX — requiere `CRON_SECRET` en Vercel; hoy NO corre en
+  producción, el cierre real es el botón o cron-job.org).
+
+### Reservas de clase — por ocurrencia
+
+- `bookings/{id}`: `class_id` + `class_date` (YYYY-MM-DD CDMX) +
+  `auth_uid` + `branch_id` (sede donde se toma) + `status`
+  (`confirmed`/`cancelled`). El socio lee solo las suyas; escribe solo el
+  backend.
+- `POST /api/classes/{id}/book` `{date?, branchId?}`: valida membresía
+  `ACTIVE`, fecha en `[hoy, hoy+8]`, vigencia (si hoy, no haber pasado
+  `end_minutes` — respeta `branch_times` de la sede), cupo **en
+  transacción** sobre `classes.booked_by_date[date]`; idempotente por
+  (clase+socio+fecha). `DELETE .../book?date=` cancela esa ocurrencia.
+- `classes.booked` = espejo de "inscritos hoy" total (compat);
+  `booked_by_date` = `{fecha: {branchId: n}}` es la fuente real — cupo
+  **por sede**. Valores planos legacy se migran a la sede de la reserva
+  (o a `'_'` al leer). Reservas viejas sin `class_date` cuentan por su
+  `created_at`. El close-day resetea `booked` y poda llaves `<= hoy`;
+  las fechas futuras se conservan.
+- `GET /api/classes/{id}/roster` — reservas confirmadas de hoy; staff con
+  sede ve solo las de su sede.
+
+### Push / CMS
+
+- `pushLogs`: `status` draft/sent/failed + `target` (`auto|home|explore|
+  allies|promos|profile`) que la app mapea a tab; `auto` cae al mapping
+  por `kind` (SPONSOR→Aliados, BRAND→Descuentos).
+- Flujo manual: crear borrador → "Enviar ahora". El scheduler
+  (`cms/push/dispatch` + `scheduledAt`) está **apagado por flag**
+  `PUSH_SCHEDULER !== '1'` — código intacto, se reactiva con env.
+- Audiencias por topic FCM: `all_members`, `branch_{id}`,
+  `expired_members`. `log.sent` = 1 por envío exitoso al topic (FCM no
+  expone suscriptores); el KPI "Tasa de entrega" es SENT/(SENT+FAILED).
+
+## Matriz de permisos por perfil
 
 ## Matriz de permisos por perfil
 
@@ -23,7 +104,7 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 
 | Sección | Recepcionista | Gerente | Admin global |
 |---|---|---|---|
-| Dashboard (`/`) | ver | ver | ver |
+| Dashboard (`/`) | ver todas las sedes (sin editar aforo) | ver todas; ajustar aforo solo su sede | ver + ajustar todas |
 | Recepción (`/recepcion`) | su sede (selector bloqueado) | su sede (selector bloqueado) | cualquier sede |
 | Socios (`/socios`) | ver + crear (sin editar existentes) | ver todo; editar/crear solo su sede | editar/crear cualquier sede |
 | Clases (`/clases`) | ver | ver todo; editar solo horario/sala **de su sede** | editar todo (campos globales) |
@@ -77,12 +158,15 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 - `canAccess(role, path)` / `ROLE_ROUTES` — gating de navegación
   (middleware `auth.global.ts` + nav en `layouts/default.vue`).
 
-## Deuda conocida para la migración a Firebase
+## Deuda conocida / pendientes
 
-- **Todo el enforcement es cliente.** El server mock (`server/api/**`) no valida
-  rol ni sede. En Firebase replicar la matriz en: custom claims (`role`,
-  `branchId`), Firestore security rules y endpoints.
-- `useAuth.login` es demo (rol elegido en `/login`); con Firebase el rol/sede
-  vendrán de custom claims o doc `staff`.
+- **Stripe**: endpoint `payments/intent` existe; el flujo de cobro en la app
+  está planeado pero sin completar.
+- **Cron `close-day` en Vercel**: configurado en `vercel.json` pero no corre
+  sin deploy a producción + env `CRON_SECRET`. Hoy el cierre es manual
+  (botón header) o vía cron-job.org. `auto-checkout` sí corre en
+  cron-job.org cada 15 min.
+- **`bookings` sin TTL**: crecen como historial; si el volumen molesta,
+  archivar en el close-day.
 - `html5-qrcode` está en `package.json` sin uso (recepción usa lector USB).
 - Moneda/locale: México — `es-MX`, `$` (MXN), sedes seed en Toluca/Metepec.

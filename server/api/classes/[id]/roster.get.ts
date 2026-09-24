@@ -5,19 +5,39 @@ import { requireStaff } from '../../../utils/staff-auth';
 
 export default defineEventHandler(
   async (event): Promise<(Member & { membershipType: string })[]> => {
-    await requireStaff(event);
+    const staff = await requireStaff(event);
     const id = getRouterParam(event, 'id') ?? '';
 
-    /// Reservas confirmadas — el filtro de status va en código para no
-    /// exigir un índice compuesto extra (class_id + status).
+    /// Reservas confirmadas de HOY — los filtros de status/fecha van en
+    /// código para no exigir índices compuestos extra.
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Mexico_City',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const today = fmt.format(new Date());
     const bookings = await db()
       .collection('bookings')
       .where('class_id', '==', id)
       .get();
+    /// Reservas viejas sin class_date cuentan en la fecha de su created_at.
+    const bookingDate = (b: FirebaseFirestore.DocumentData) =>
+      (b.class_date as string) ??
+      (b.created_at?.toDate ? fmt.format(b.created_at.toDate()) : today);
     const userIds = [
       ...new Set(
         bookings.docs
-          .filter((b) => b.data().status === 'confirmed')
+          .filter(
+            (b) =>
+              b.data().status === 'confirmed' &&
+              bookingDate(b.data()) === today &&
+              /// Staff con sede ve solo las reservas de su sede — una clase
+              /// multi-sede tiene contadores por sede.
+              (staff.role === 'ADMIN' ||
+                !staff.branchId ||
+                (b.data().branch_id ?? '') === staff.branchId),
+          )
           .map((b) => b.data().user_id as string)
           .filter(Boolean),
       ),

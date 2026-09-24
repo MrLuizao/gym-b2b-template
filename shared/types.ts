@@ -82,7 +82,12 @@ export interface ClassSchedule {
   startMinutes: number;
   endMinutes: number;
   capacity: number;
+  /// Inscritos de HOY (America/Mexico_City) — compat con vistas viejas.
   booked: number;
+  /// Cupo por ocurrencia Y sede: 'YYYY-MM-DD' → { branchId → inscritos }.
+  /// La llave '_' contiene un conteo legacy sin sede. Se poda al reservar
+  /// y en close-day.
+  bookedByDate?: Record<string, Record<string, number>>;
   /// Overrides por sede: branchId → horario/sala local.
   branchTimes?: Record<string, ClassBranchTime>;
 }
