@@ -33,10 +33,15 @@ Detalle de colecciones y campos en `FIRESTORE.md`; reglas en
 
 ### Alta de socios (claim)
 
-Recepción crea al socio (`/socios` → `members.post`) y le asigna
-`member_number` + teléfono. La app **nunca crea** el registro: el usuario
-entra con Google/Apple y reclama su ficha vía `POST /api/members/claim`
-(número + teléfono). Sin vínculo no ve datos del gym.
+Recepción crea al socio (`/socios` → `members.post`) con `member_number`
++ `contact_email` obligatorio; el backend genera un `claim_pin` de 6 díg
+y lo envía por correo (`server/utils/mail.ts`, SMTP por env — sin SMTP
+se loguea en consola y se muestra en el detalle del socio). La app
+**nunca crea** el registro: el usuario entra con Google/Apple y reclama
+su ficha vía `POST /api/members/claim` (número + PIN, single-use — se
+borra al reclamar). `POST /api/members/{id}/claim-pin` regenera/reenvía
+(staff, scope de sede). `contact_email` ≠ `email` (login Google/Apple).
+Sin vínculo no ve datos del gym.
 
 ### Check-ins y aforo en tiempo real
 
@@ -78,6 +83,21 @@ entra con Google/Apple y reclama su ficha vía `POST /api/members/claim`
   las fechas futuras se conservan.
 - `GET /api/classes/{id}/roster` — reservas confirmadas de hoy; staff con
   sede ve solo las de su sede.
+
+### Avatares (sin fotos subidas)
+
+- **Coach**: `trainers.avatar` = id de `COACH_AVATAR_IDS`
+  (`shared/coach-avatars.ts`) — se elige con picker al crear en
+  `/entrenadores/nuevo` y lo edita solo ADMIN en `[id]` (campo global,
+  fuera de MANAGER_KEYS). Los SVG viven en `public/avatars/coaches/` —
+  regenerar arte con `node scripts/generate-coach-avatars.mjs` (emite a
+  public/ y al bundle de la app). `photo_url` quedó legacy.
+- **Socio**: `users.avatar` = id de `memberAvatarCatalog` (app) — el
+  socio lo elige en su perfil; self-write permitido vía whitelist en
+  firestore.rules. En el B2B se renderiza con `MemberAvatar.vue`
+  (espejo del catálogo en `shared/member-avatars.ts` — icono lucide +
+  gradiente) en `/socios`, detalle y ScanResultPanel; mantener ids
+  alineados con la app.
 
 ### Push / CMS
 

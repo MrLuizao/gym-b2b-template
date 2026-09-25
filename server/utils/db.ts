@@ -72,6 +72,7 @@ export function toMember(s: DocumentSnapshot): Member {
     branchId: d.branch_id ?? '',
     name: d.name ?? '',
     photoUrl: d.photo_url ?? '',
+    avatar: d.avatar ?? null,
     membershipStatus: d.membership_status ?? 'ACTIVE',
     membershipPlanId: d.membership_plan_id ?? '',
     memberNumber: d.member_number ?? '',
@@ -83,6 +84,9 @@ export function toMember(s: DocumentSnapshot): Member {
     sex: d.sex ?? null,
     birthDate: d.birth_date ?? null,
     phone: d.phone ?? null,
+    contactEmail: d.contact_email ?? null,
+    claimPin: d.claim_pin ?? null,
+    linked: Boolean(d.auth_uid),
     idNumber: d.id_number ?? null,
   };
 }
@@ -95,6 +99,7 @@ export function toTrainer(s: DocumentSnapshot): Trainer {
     name: d.name ?? '',
     specialty: d.specialty ?? '',
     photoUrl: d.photo_url ?? '',
+    avatar: d.avatar ?? null,
     shift: d.shift ?? 'MAÑANA',
     isOnDuty: d.is_on_duty ?? false,
   };

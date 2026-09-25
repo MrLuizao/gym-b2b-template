@@ -2,7 +2,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 import type { CheckInAlert, CheckInResult } from '#shared/types';
 
-import { db, planNameFor, toCheckIn } from '../utils/db';
+import { db, toCheckIn } from '../utils/db';
 import { verifyQrToken } from '../utils/qr';
 import { requireBranchScope, requireStaff } from '../utils/staff-auth';
 
@@ -15,6 +15,7 @@ const EXPIRING_MESSAGE = 'Membresía por vencer';
 interface MemberData {
   name?: string;
   photo_url?: string;
+  avatar?: string | null;
   member_number?: string;
   membership_status?: string;
   membership_plan_id?: string;
@@ -103,12 +104,19 @@ export default defineEventHandler(async (event): Promise<CheckInResult> => {
   }
 
   const member = (memberSnap.data() ?? {}) as MemberData;
-  const planName = await planNameFor(member.membership_plan_id ?? '');
+  /// El plan define el alcance de sede: `all_branches` = multi-sede.
+  const planSnap = member.membership_plan_id
+    ? await db().collection('plans').doc(member.membership_plan_id).get()
+    : null;
+  const plan = planSnap?.data() ?? {};
+  const planName = (plan.name as string | undefined) ?? '';
+  const planAllBranches = plan.all_branches === true;
   const memberView = {
     id: memberSnap.id,
     branchId: (memberSnap.get('branch_id') as string) ?? '',
     name: member.name ?? '',
     photoUrl: member.photo_url ?? '',
+    avatar: member.avatar ?? null,
     membershipStatus:
       member.membership_status === 'EXPIRED'
         ? ('EXPIRED' as const)
@@ -159,6 +167,19 @@ export default defineEventHandler(async (event): Promise<CheckInResult> => {
       alert: 'RED',
       reason: evaluation.reason,
       message: evaluation.message,
+      member: memberView,
+    };
+  }
+
+  /// Planes de una sede solo entran a la sede de registro del socio.
+  const homeBranch = (memberSnap.get('branch_id') as string) ?? '';
+  if (!planAllBranches && homeBranch !== branchId) {
+    await writeRecord(false, 'PLAN_BRANCH_RESTRICTED', 'RED', null);
+    return {
+      granted: false,
+      alert: 'RED',
+      reason: 'PLAN_BRANCH_RESTRICTED',
+      message: `Tu plan ${planName} no incluye esta sede — solo tu sede de registro`,
       member: memberView,
     };
   }

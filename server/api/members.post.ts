@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type { Member, PaymentRecord } from '#shared/types';
 
 import { db, toMember, toPayment } from '../utils/db';
+import { generateClaimPin, sendClaimPinEmail } from '../utils/mail';
 import { requireBranchScope, requireStaff } from '../utils/staff-auth';
 
 /// El formulario manda etiquetas ('Efectivo'…) — normaliza al enum del schema.
@@ -17,7 +18,14 @@ function normalizeMethod(raw: string): string {
 }
 
 export default defineEventHandler(
-  async (event): Promise<{ member: Member; payment: PaymentRecord }> => {
+  async (
+    event,
+  ): Promise<{
+    member: Member;
+    payment: PaymentRecord;
+    claimPin: string;
+    emailSent: boolean;
+  }> => {
     const staff = await requireStaff(event);
     const body = await readBody<{
       firstName?: string;
@@ -27,6 +35,7 @@ export default defineEventHandler(
       sex?: 'M' | 'F' | 'O';
       birthDate?: string;
       phone?: string;
+      email?: string;
       idNumber?: string;
       branchId?: string;
       planId?: string;
@@ -63,6 +72,15 @@ export default defineEventHandler(
       throw createError({
         statusCode: 400,
         statusMessage: 'El teléfono es obligatorio',
+      });
+    }
+    /// El correo de contacto es obligatorio: ahí llega el PIN de
+    /// activación — es independiente del email de login (Google/Apple).
+    const contactEmail = body?.email?.trim().toLowerCase() ?? '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Un correo válido es obligatorio — ahí llega el código de activación',
       });
     }
 
@@ -115,6 +133,8 @@ export default defineEventHandler(
     const memberRef = db().collection('users').doc();
     const paymentRef = db().collection('payments').doc();
     const until = Timestamp.fromMillis(Date.now() + 30 * 86_400_000);
+    /// PIN de activación de un solo uso — se borra al reclamar la cuenta.
+    const claimPin = generateClaimPin();
 
     const batch = db().batch();
     batch.set(memberRef, {
@@ -137,6 +157,8 @@ export default defineEventHandler(
           ? body.birthDate
           : null,
       phone: body?.phone?.trim() ?? null,
+      contact_email: contactEmail,
+      claim_pin: claimPin,
       id_number: body?.idNumber?.trim() ?? null,
       stripe_customer_id: null,
       last_checkin_at: null,
@@ -167,10 +189,29 @@ export default defineEventHandler(
     });
     await batch.commit();
 
+    /// El correo no bloquea el alta — si SMTP no está configurado el
+    /// recepcionista ve el PIN en pantalla y se lo dicta al socio.
+    let emailSent = false;
+    try {
+      emailSent = await sendClaimPinEmail({
+        to: contactEmail,
+        name,
+        memberNumber,
+        pin: claimPin,
+      });
+    } catch (err) {
+      console.warn('[mail] fallo al enviar PIN:', err);
+    }
+
     const [memberSnap2, paymentSnap] = await Promise.all([
       memberRef.get(),
       paymentRef.get(),
     ]);
-    return { member: toMember(memberSnap2), payment: toPayment(paymentSnap) };
+    return {
+      member: toMember(memberSnap2),
+      payment: toPayment(paymentSnap),
+      claimPin,
+      emailSent,
+    };
   },
 );

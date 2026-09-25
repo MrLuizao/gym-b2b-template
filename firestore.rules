@@ -145,7 +145,8 @@ service cloud.firestore {
             && request.resource.data.branch_id == staffBranch());
 
       // membership_*, member_number, qr_code, stripe_customer_id,
-      // last_checkin_at: jamás escritos por clientes → solo functions.
+      // last_checkin_at, claim_pin, contact_email: jamás escritos por
+      // clientes → solo functions.
       allow update: if isAdmin()
         || (isManager()
             && resource.data.branch_id == staffBranch()
@@ -154,13 +155,15 @@ service cloud.firestore {
                  .affectedKeys()
                  .hasAny(['membership_status', 'membership_plan_id',
                           'membership_until', 'member_number', 'qr_code',
-                          'stripe_customer_id', 'last_checkin_at']))
+                          'stripe_customer_id', 'last_checkin_at',
+                          'claim_pin', 'contact_email']))
         || (isSelf()
             && request.resource.data.diff(resource.data)
                  .affectedKeys()
-                 .hasOnly(['photo_url', 'phone', 'first_name', 'middle_name',
-                           'paternal_last_name', 'maternal_last_name',
-                           'sex', 'birth_date', 'branch_id']));
+                 .hasOnly(['photo_url', 'avatar', 'phone', 'first_name',
+                           'middle_name', 'paternal_last_name',
+                           'maternal_last_name', 'sex', 'birth_date',
+                           'branch_id']));
 
       allow delete: if isAdmin();
 

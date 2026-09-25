@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, Download, Pencil, X } from '@lucide/vue';
+import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, Download, KeyRound, Mail, Pencil, X } from '@lucide/vue';
 
 import type { Branch, CheckInRecord, MemberDetail, MembershipPlan, PaymentRecord } from '#shared/types';
 
@@ -25,9 +25,11 @@ const editing = ref(false);
 const saving = ref(false);
 const editForm = ref({
   name: '',
-  branchId: '',
-  membershipPlanId: '',
-  membershipUntil: '',
+  phone: '',
+  contactEmail: '',
+  idNumber: '',
+  sex: '',
+  birthDate: '',
 });
 
 const saveModalOpen = ref(false);
@@ -37,6 +39,32 @@ const saveModalEmpty = ref(false);
 const payModalOpen = ref(false);
 const paying = ref(false);
 const payForm = ref({ planId: '', amount: 0, method: 'Efectivo' });
+
+const resendingPin = ref(false);
+const pinFeedback = ref<string | null>(null);
+
+/// Recepción regenera el PIN (socio sin correo recibido / alta antigua)
+/// — el server lo reenvía a contact_email y lo devuelve para dictarlo.
+async function resendClaimPin(): Promise<void> {
+  const m = detail.value?.member;
+  if (!m || resendingPin.value) return;
+  resendingPin.value = true;
+  pinFeedback.value = null;
+  try {
+    const res = await $api<{ claimPin: string; emailSent: boolean }>(
+      `/api/members/${m.id}/claim-pin`,
+      { method: 'POST' },
+    );
+    detail.value = await $api<MemberDetail>(`/api/members/${m.id}`);
+    pinFeedback.value = res.emailSent
+      ? 'Código reenviado al correo registrado'
+      : `Correo no enviado — dicta el código ${res.claimPin} al socio`;
+  } catch {
+    pinFeedback.value = 'No se pudo generar el código';
+  } finally {
+    resendingPin.value = false;
+  }
+}
 
 const planItems = computed(() =>
   plans.value.map((p) => ({
@@ -289,9 +317,11 @@ function startEdit(): void {
   const m = detail.value.member;
   editForm.value = {
     name: m.name,
-    branchId: m.branchId,
-    membershipPlanId: m.membershipPlanId,
-    membershipUntil: toDateInput(m.membershipUntil),
+    phone: m.phone ?? '',
+    contactEmail: m.contactEmail ?? '',
+    idNumber: m.idNumber ?? '',
+    sex: m.sex ?? '',
+    birthDate: m.birthDate ?? '',
   };
   editing.value = true;
 }
@@ -302,18 +332,18 @@ function confirmSaveMember(): void {
   const changes: string[] = [];
   if (editForm.value.name.trim() !== m.name)
     changes.push(`Nombre: '${m.name}' → '${editForm.value.name.trim()}'`);
-  if (isAdmin.value && editForm.value.branchId !== m.branchId)
+  if (editForm.value.phone.trim() !== (m.phone ?? ''))
+    changes.push(`Teléfono: '${m.phone ?? '—'}' → '${editForm.value.phone.trim()}'`);
+  if (editForm.value.contactEmail.trim() !== (m.contactEmail ?? ''))
     changes.push(
-      `Sede: ${branchName(m.branchId)} → ${branchName(editForm.value.branchId)}`,
+      `Correo: '${m.contactEmail ?? '—'}' → '${editForm.value.contactEmail.trim()}'`,
     );
-  if (editForm.value.membershipPlanId !== m.membershipPlanId)
-    changes.push(
-      `Plan: ${planName(m.membershipPlanId)} → ${planName(editForm.value.membershipPlanId)}`,
-    );
-  if (editForm.value.membershipUntil !== toDateInput(m.membershipUntil))
-    changes.push(
-      `Vigencia: ${formatDate(m.membershipUntil)} → ${editForm.value.membershipUntil || 'sin fecha'}`,
-    );
+  if (editForm.value.idNumber.trim() !== (m.idNumber ?? ''))
+    changes.push(`Identificación: '${m.idNumber ?? '—'}' → '${editForm.value.idNumber.trim()}'`);
+  if (editForm.value.sex !== (m.sex ?? ''))
+    changes.push(`Sexo: '${m.sex ?? '—'}' → '${editForm.value.sex || '—'}'`);
+  if (editForm.value.birthDate !== (m.birthDate ?? ''))
+    changes.push(`Nacimiento: '${m.birthDate ?? '—'}' → '${editForm.value.birthDate || '—'}'`);
   saveModalDescription.value = changes.length
     ? `${changes.join('. ')}.`
     : 'No se detectaron cambios respecto a los datos actuales.';
@@ -330,11 +360,11 @@ async function saveMember(): Promise<void> {
       method: 'PUT',
       body: {
         name: editForm.value.name.trim(),
-        ...(isAdmin.value ? { branchId: editForm.value.branchId } : {}),
-        membershipPlanId: editForm.value.membershipPlanId,
-        membershipUntil: editForm.value.membershipUntil
-          ? new Date(`${editForm.value.membershipUntil}T23:59:59`).getTime()
-          : null,
+        phone: editForm.value.phone.trim(),
+        contactEmail: editForm.value.contactEmail.trim(),
+        idNumber: editForm.value.idNumber.trim(),
+        sex: editForm.value.sex || null,
+        birthDate: editForm.value.birthDate || null,
       },
     });
     detail.value = await $api<MemberDetail>(`/api/members/${m.id}`);
@@ -366,10 +396,16 @@ async function saveMember(): Promise<void> {
 
     <section class="rounded-2xl border border-stroke bg-surface p-5">
       <div class="mt-4 flex items-center gap-4">
-        <img
-          :src="detail.member.photoUrl"
-          :alt="detail.member.name"
-          class="h-16 w-16 rounded-2xl border border-stroke object-cover"
+        <MemberAvatar
+          :avatar-id="detail.member.avatar"
+          :initials="
+            detail.member.name
+              .split(' ')
+              .slice(0, 2)
+              .map((p) => p[0])
+              .join('')
+          "
+          :size="64"
         />
         <div class="min-w-0 flex-1">
           <p class="truncate text-lg font-black text-text-primary">
@@ -442,6 +478,14 @@ async function saveMember(): Promise<void> {
         </div>
         <div>
           <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Núm. de socio
+          </p>
+          <p class="mt-1 font-mono text-sm font-black text-accent">
+            {{ detail.member.memberNumber }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
             Identificación
           </p>
           <p class="mt-1 font-mono text-sm font-black text-text-primary">
@@ -454,6 +498,14 @@ async function saveMember(): Promise<void> {
           </p>
           <p class="mt-1 font-mono text-sm font-black text-text-primary">
             {{ detail.member.phone ?? '—' }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Correo de contacto
+          </p>
+          <p class="mt-1 truncate text-sm font-black text-text-primary">
+            {{ detail.member.contactEmail ?? '—' }}
           </p>
         </div>
         <div>
@@ -483,6 +535,44 @@ async function saveMember(): Promise<void> {
             {{ formatDate(Date.parse(detail.member.birthDate)) }}
           </p>
         </div>
+
+      <!-- PIN de activación: solo mientras la cuenta no se vincula —
+           debe vivir DENTRO del v-if="!editing" para no romper la
+           adjacencia con el v-else del formulario de edición. -->
+        <div
+          v-if="!detail.member.linked"
+          class="col-span-full mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/40 bg-accent/5 px-4 py-3"
+        >
+        <div>
+          <p
+            class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-text-dim"
+          >
+            <KeyRound class="h-3 w-3 text-accent" />
+            Código de activación
+          </p>
+          <p class="mt-0.5 font-mono text-xl font-black tracking-[6px] text-accent">
+            {{ detail.member.claimPin ?? '—' }}
+          </p>
+          <p class="text-[10px] text-text-dim">
+            {{
+              detail.member.claimPin
+                ? `Enviado a ${detail.member.contactEmail ?? 'correo registrado'}`
+                : 'Sin código activo — genera uno nuevo'
+            }}
+          </p>
+          <p v-if="pinFeedback" class="mt-1 text-[10px] font-bold text-accent">
+            {{ pinFeedback }}
+          </p>
+        </div>
+        <button
+          class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke bg-base px-3.5 py-2 text-[11px] font-bold text-text-primary transition hover:border-accent disabled:opacity-50"
+          :disabled="resendingPin"
+          @click="resendClaimPin"
+        >
+          <Mail class="h-3.5 w-3.5" />
+          {{ resendingPin ? 'Generando…' : 'Reenviar código' }}
+        </button>
+        </div>
       </div>
 
       <div v-else class="mt-5 space-y-3 border-t border-stroke pt-4">
@@ -497,38 +587,59 @@ async function saveMember(): Promise<void> {
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             />
           </label>
-          <label v-if="isAdmin" class="block">
-            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Sede
-            </span>
-            <select
-              v-model="editForm.branchId"
-              class="mt-1 w-full cursor-pointer rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            >
-              <option v-for="b in branches" :key="b.id" :value="b.id">
-                {{ b.name }}
-              </option>
-            </select>
-          </label>
           <label class="block">
             <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Plan
-            </span>
-            <select
-              v-model="editForm.membershipPlanId"
-              class="mt-1 w-full cursor-pointer rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
-            >
-              <option v-for="p in plans" :key="p.id" :value="p.id">
-                {{ p.name }} — $ {{ p.price }}
-              </option>
-            </select>
-          </label>
-          <label class="block">
-            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
-              Vigencia hasta
+              Teléfono
             </span>
             <input
-              v-model="editForm.membershipUntil"
+              v-model="editForm.phone"
+              type="tel"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Correo de contacto
+            </span>
+            <input
+              v-model="editForm.contactEmail"
+              type="email"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            />
+            <span class="mt-1 block text-[9px] text-text-dim">
+              Canal del PIN de activación — no es el correo de login.
+            </span>
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Identificación
+            </span>
+            <input
+              v-model="editForm.idNumber"
+              type="text"
+              class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Sexo
+            </span>
+            <select
+              v-model="editForm.sex"
+              class="mt-1 w-full cursor-pointer rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+            >
+              <option value="">Sin especificar</option>
+              <option value="M">Masculino</option>
+              <option value="F">Femenino</option>
+              <option value="O">Otro</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Fecha de nacimiento
+            </span>
+            <input
+              v-model="editForm.birthDate"
               type="date"
               class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             />
@@ -799,7 +910,7 @@ async function saveMember(): Promise<void> {
     <UModal
       v-model:open="payModalOpen"
       title="Registrar pago"
-      description="El pago renueva la membresía del socio por 30 días y actualiza su plan."
+      description="El pago renueva la membresía del socio por 30 días y actualiza su plan — para subir de plan elige el nuevo aquí."
     >
       <template #body>
         <div class="space-y-3">

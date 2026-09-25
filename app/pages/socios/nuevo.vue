@@ -19,6 +19,7 @@ import {
 import type { Branch, Member, MembershipPlan } from '#shared/types';
 
 const { session } = useAuth();
+const router = useRouter();
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
 const branches = ref<Branch[]>([]);
@@ -35,6 +36,7 @@ const form = ref({
   sex: '',
   birthDate: '',
   phone: '',
+  email: '',
   idNumber: '',
   branchId: session.value?.branchId ?? '',
   planId: '',
@@ -89,6 +91,8 @@ const missingFields = computed(() => {
   if (!f.birthDate) missing.push('fecha de nacimiento');
   if (!f.idNumber.trim()) missing.push('identificación');
   if (!f.phone.trim()) missing.push('teléfono');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
+    missing.push('correo válido');
   if (!f.branchId) missing.push('sede');
   if (!f.planId) missing.push('plan');
   if (f.amount <= 0) missing.push('monto');
@@ -143,6 +147,7 @@ async function submit(): Promise<void> {
         sex: f.sex || null,
         birthDate: f.birthDate || null,
         phone: f.phone.trim(),
+        email: f.email.trim(),
         idNumber: f.idNumber.trim(),
         branchId: f.branchId,
         planId: f.planId,
@@ -193,6 +198,15 @@ watch(
 
 <template>
   <div class="space-y-6">
+    <button
+      type="button"
+      class="inline-flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-widest text-text-muted transition hover:text-accent"
+      @click="router.back()"
+    >
+      <ArrowLeft class="h-4 w-4 text-accent" />
+      Volver
+    </button>
+
     <div>
       <h1 class="text-xl font-black text-text-primary">Nuevo socio</h1>
       <p class="mt-1 text-[11px] text-text-dim">
@@ -328,6 +342,22 @@ watch(
             placeholder="ej. 70012345"
             class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
           />
+        </label>
+        <label class="block">
+          <span
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >Correo *</span
+          >
+          <input
+            v-model="form.email"
+            type="email"
+            placeholder="ej. maria@correo.com"
+            class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+          />
+          <span class="mt-1 block text-[9px] text-text-dim">
+            Aquí llega el código de activación y los links de la app — no
+            tiene que ser el mismo correo del login.
+          </span>
         </label>
       </div>
     </section>
@@ -485,14 +515,6 @@ watch(
       <UserPlus class="h-4 w-4" />
       {{ saving ? 'Registrando…' : 'Registrar socio' }}
     </button>
-
-    <NuxtLink
-      to="/socios"
-      class="flex h-11 items-center justify-center gap-2 rounded-full border border-stroke bg-surface text-xs font-black text-text-primary transition hover:border-accent"
-    >
-      <ArrowLeft class="h-4 w-4" />
-      Volver a Socios
-    </NuxtLink>
 
     <UModal
       v-model:open="confirmModalOpen"

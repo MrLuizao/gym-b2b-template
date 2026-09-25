@@ -1,26 +1,25 @@
+import { FieldValue } from 'firebase-admin/firestore';
+
 import type { Member } from '#shared/types';
 
 import { db, toMember } from '../../utils/db';
 import { requireUser } from '../../utils/staff-auth';
 
-/// Solo dígitos — los teléfonos se guardan como los tecleó recepción.
-function digits(raw: string | null | undefined): string {
-  return (raw ?? '').replace(/\D/g, '');
-}
-
 /// El socio reclama su alta de recepción: entra con Google/Apple,
-/// dicta su member_number + teléfono y el backend lo vincula con
-/// `auth_uid`. El doc NO se mueve — payments/checkins ya lo referencian.
+/// escribe su member_number + el PIN de 6 dígitos que recepción le
+/// envió por correo (contact_email) → el backend vincula el doc con
+/// `auth_uid` y consume el PIN (single-use). El doc NO se mueve —
+/// payments/checkins ya lo referencian.
 export default defineEventHandler(async (event): Promise<{ member: Member }> => {
   const user = await requireUser(event);
-  const body = await readBody<{ memberNumber?: string; phone?: string }>(event);
+  const body = await readBody<{ memberNumber?: string; pin?: string }>(event);
 
   const memberNumber = body?.memberNumber?.trim().toUpperCase() ?? '';
-  const phone = digits(body?.phone);
-  if (!memberNumber || phone.length < 7) {
+  const pin = (body?.pin ?? '').replace(/\D/g, '');
+  if (!memberNumber || pin.length !== 6) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Ingresa tu número de socio y el teléfono registrado',
+      statusMessage: 'Ingresa tu número de socio y el código de 6 dígitos',
     });
   }
 
@@ -39,15 +38,20 @@ export default defineEventHandler(async (event): Promise<{ member: Member }> => 
   const doc = snap.docs[0]!;
   const data = doc.data();
 
-  /// member_number es secuencial (adivinable) — el teléfono registrado
-  /// es el segundo factor. Comparamos los últimos 10 dígitos por si
-  /// recepción guardó lada/prefijo distinto.
-  const stored = digits(data.phone as string | undefined).slice(-10);
-  const given = phone.slice(-10);
-  if (stored.length < 7 || stored !== given) {
+  /// member_number es secuencial (adivinable) — el claim_pin enviado al
+  /// correo registrado es el segundo factor. Un socio sin PIN (alta
+  /// antigua) debe pedir uno nuevo en recepción.
+  const storedPin = data.claim_pin as string | undefined;
+  if (!storedPin) {
     throw createError({
       statusCode: 403,
-      statusMessage: 'El teléfono no coincide con el registrado en recepción',
+      statusMessage: 'Esta cuenta no tiene código activo — pide uno en recepción',
+    });
+  }
+  if (storedPin !== pin) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Código incorrecto — revisa el correo que te envió recepción',
     });
   }
 
@@ -62,8 +66,11 @@ export default defineEventHandler(async (event): Promise<{ member: Member }> => 
   if (linked !== user.uid) {
     await doc.ref.update({
       auth_uid: user.uid,
+      /// El email del doc es el de login (Google/Apple) — el correo que
+      /// recibió el PIN vive aparte en `contact_email` y no se toca.
       email: user.email || (data.email as string | null) || null,
       photo_url: data.photo_url ?? null,
+      claim_pin: FieldValue.delete(),
     });
   }
 

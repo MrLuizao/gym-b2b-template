@@ -314,10 +314,16 @@ function formatDate(ts: number | null): string {
           >
             <td class="px-5 py-3">
               <div class="flex items-center gap-3">
-                <img
-                  :src="member.photoUrl"
-                  :alt="member.name"
-                  class="h-9 w-9 rounded-full border border-stroke object-cover"
+                <MemberAvatar
+                  :avatar-id="member.avatar"
+                  :initials="
+                    member.name
+                      .split(' ')
+                      .slice(0, 2)
+                      .map((p) => p[0])
+                      .join('')
+                  "
+                  :size="36"
                 />
                 <div>
                   <button

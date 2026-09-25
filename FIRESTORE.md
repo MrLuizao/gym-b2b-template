@@ -117,13 +117,17 @@ Lectura: todos. Escritura: solo ADMIN (gerente ni crea ni edita).
 
 ### `/users/{userId}` — socios
 
-El `userId` es el UID de Firebase Auth del socio.
+El `userId` es el UID de Firebase Auth del socio — o un doc id aleatorio
+para socios creados en recepción aún no reclamados (su `auth_uid` se
+escribe al reclamar con `POST /api/members/claim`, número + `claim_pin`
+que llegó por correo).
 
 | Campo | Tipo | Quién escribe | Notas |
 |---|---|---|---|
 | `branch_id` | string | staff | Sede de registro → `branches/{id}` |
 | `name` | string | socio/staff | Display |
-| `photo_url` | string | socio/staff | |
+| `photo_url` | string | socio/staff | Legacy — la app usa `avatar` |
+| `avatar` | string | socio | Id de `memberAvatarCatalog` (app) — avatar prediseñado |
 | `member_number` | string | functions | `CF-XXXXX` — lector USB |
 | `qr_code` | string | functions | Contenido del QR firmado |
 | `membership_status` | string | functions | `ACTIVE` \| `EXPIRED` |
@@ -136,6 +140,9 @@ El `userId` es el UID de Firebase Auth del socio.
 | `sex` | string | socio/staff | |
 | `birth_date` | timestamp | socio/staff | |
 | `phone` | string | socio/staff | |
+| `contact_email` | string | functions | Correo capturado en recepción — recibe el PIN; **independiente** del `email` de login |
+| `email` | string | functions | Email de la cuenta de login (Google/Apple) — se escribe al reclamar |
+| `claim_pin` | string | functions | PIN de activación de 6 díg — **se borra al reclamar** (single-use) |
 | `id_number` | string | staff | Identificación |
 | `stripe_customer_id` | string | functions | Customer de Stripe (lazy) |
 | `last_checkin_at` | timestamp | functions | Última entrada — la app la muestra |
@@ -181,7 +188,8 @@ Escritura: solo ADMIN. Las security rules leen este doc para decidir permisos.
 | `branch_ids` | string[] | Sedes donde trabaja → `branches/{id}` |
 | `name` | string | |
 | `specialty` | string | |
-| `photo_url` | string | |
+| `photo_url` | string | Legacy — la app usa `avatar` |
+| `avatar` | string | Id del catálogo `COACH_AVATAR_IDS` → `public/avatars/coaches/{id}.svg` |
 | `shift` | string | `MAÑANA` \| `TARDE` \| `NOCHE` — campo local |
 | `is_on_duty` | bool | Campo local |
 | `active` | bool | |
@@ -457,7 +465,7 @@ pushLogs.branch_id         → branches.id | null
 
 | Escritor | Colecciones / campos |
 |---|---|
-| **Solo Cloud Functions** | `payments`, `checkins`, `webhookEvents`; `users.membership_*`, `member_number`, `qr_code`, `stripe_customer_id`; `branches.current_capacity`; `sponsorAds.impressions/taps`; `classes.booked` |
+| **Solo Cloud Functions** | `payments`, `checkins`, `webhookEvents`; `users.membership_*`, `member_number`, `qr_code`, `stripe_customer_id`, `claim_pin`, `contact_email`; `branches.current_capacity`; `sponsorAds.impressions/taps`; `classes.booked` |
 | **ADMIN** | `config`, `plans`, `promotions`, `sponsorAds`, `pushLogs`, `store/products`, `staff`, `branches` (todas), `classes` (global), `trainers` (todo) |
 | **MANAGER** (su sede) | `branches[suSede]`, `users` (edita los de su sede), `trainers` (`shift`, `is_on_duty`, `branch_ids`), `classes.branch_times[suSede]` |
 | **RECEPTIONIST** (su sede) | `users` (crear en su sede); operación de check-in/pagos vía callables |

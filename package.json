@@ -18,6 +18,7 @@
     "firebase": "^12.19.0",
     "firebase-admin": "^12.7.0",
     "html5-qrcode": "^2.3.8",
+    "nodemailer": "^10.0.10",
     "nuxt": "^4.5.2",
     "stripe": "^22.6.2",
     "tailwindcss": "^4.3.3",
@@ -25,6 +26,7 @@
     "vue-router": "4.5"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "typescript": "^5.9.0",
     "vue-tsc": "^3.3.11"
   }

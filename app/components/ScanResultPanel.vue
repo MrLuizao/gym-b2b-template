@@ -18,6 +18,8 @@ const props = defineProps<{
 const DENIED_LABELS: Record<string, string> = {
   MEMBER_NOT_FOUND: 'Socio no registrado',
   MEMBERSHIP_EXPIRED: 'Membresía vencida — pasar a caja',
+  PLAN_BRANCH_RESTRICTED: 'Su plan no cubre esta sede',
+  ALREADY_CHECKED_IN: 'Ya registró entrada',
   BRANCH_FULL: 'Aforo completo en esta sede',
   QR_INVALID: 'Código QR inválido o expirado',
 };
@@ -139,11 +141,17 @@ const subtitle = computed(() => {
         </div>
 
         <div class="mt-7 flex items-start gap-5">
-        <img
+        <MemberAvatar
           v-if="result.member"
-          :src="result.member.photoUrl"
-          :alt="result.member.name"
-          class="h-20 w-20 shrink-0 rounded-2xl border border-stroke object-cover"
+          :avatar-id="result.member.avatar"
+          :initials="
+            result.member.name
+              .split(' ')
+              .slice(0, 2)
+              .map((p) => p[0])
+              .join('')
+          "
+          :size="80"
         />
 
         <div class="min-w-0 flex-1">

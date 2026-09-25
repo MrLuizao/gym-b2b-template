@@ -49,6 +49,9 @@ export interface Trainer {
   maternalLastName?: string | null;
   specialty: string;
   photoUrl: string;
+  /// Avatar ilustrado prediseñado (COACH_AVATAR_IDS) — elegido al
+  /// crear el coach; reemplaza a photoUrl en la app.
+  avatar?: string | null;
   shift: 'MAÑANA' | 'TARDE' | 'NOCHE';
   isOnDuty: boolean;
 }
@@ -183,6 +186,9 @@ export interface Member {
   branchId: string;
   name: string;
   photoUrl: string;
+  /// Avatar prediseñado elegido en la app (MEMBER_AVATARS) —
+  /// reemplaza a photoUrl.
+  avatar?: string | null;
   membershipStatus: MembershipStatus;
   /// Referencia canónica al plan (MembershipPlan.id) — nunca el nombre.
   membershipPlanId: string;
@@ -196,6 +202,14 @@ export interface Member {
   sex?: 'M' | 'F' | 'O' | null;
   birthDate?: string | null;
   phone?: string | null;
+  /// Correo capturado por recepción — ahí llega el PIN de activación;
+  /// es independiente del email de login (Google/Apple).
+  contactEmail?: string | null;
+  /// PIN de activación de un solo uso (vista staff) — null una vez
+  /// reclamada la cuenta.
+  claimPin?: string | null;
+  /// Ya vinculó su cuenta con Google/Apple (auth_uid presente).
+  linked?: boolean;
   idNumber?: string | null;
 }
 

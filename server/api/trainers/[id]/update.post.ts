@@ -1,4 +1,5 @@
 import type { Trainer } from '#shared/types';
+import { COACH_AVATAR_IDS } from '#shared/coach-avatars';
 
 import { db, toTrainer } from '../../../utils/db';
 import { requireStaff } from '../../../utils/staff-auth';
@@ -56,6 +57,13 @@ export default defineEventHandler(async (event): Promise<Trainer> => {
   }
   if (typeof body.isOnDuty === 'boolean') {
     update.is_on_duty = body.isOnDuty;
+  }
+  /// Avatar ilustrado — campo global, solo admin (no está en MANAGER_KEYS).
+  if (
+    typeof body.avatar === 'string' &&
+    (COACH_AVATAR_IDS as readonly string[]).includes(body.avatar)
+  ) {
+    update.avatar = body.avatar;
   }
 
   /// branch_ids: admin manda el arreglo completo; gerente solo add/remove

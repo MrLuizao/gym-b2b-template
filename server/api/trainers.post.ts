@@ -1,4 +1,5 @@
 import type { Trainer } from '#shared/types';
+import { COACH_AVATAR_IDS } from '#shared/coach-avatars';
 
 import { db, toTrainer } from '../utils/db';
 import { requireStaff } from '../utils/staff-auth';
@@ -15,6 +16,7 @@ export default defineEventHandler(async (event): Promise<Trainer> => {
     specialty?: string;
     shift?: string;
     branchIds?: string[];
+    avatar?: string;
   }>(event);
 
   const firstName = body?.firstName?.trim() ?? '';
@@ -71,7 +73,13 @@ export default defineEventHandler(async (event): Promise<Trainer> => {
     paternal_last_name: paternalLastName,
     maternal_last_name: body?.maternalLastName?.trim() || null,
     specialty,
-    photo_url: `https://picsum.photos/seed/${ref.id.slice(0, 8)}/300/300`,
+    /// Avatar ilustrado — sin fotos subidas; validado contra el
+    /// catálogo de COACH_AVATAR_IDS.
+    avatar: (COACH_AVATAR_IDS as readonly string[]).includes(
+      body?.avatar ?? '',
+    )
+      ? body!.avatar
+      : COACH_AVATAR_IDS[0],
     shift,
     is_on_duty: false,
     active: true,

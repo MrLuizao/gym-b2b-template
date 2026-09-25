@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Plus } from '@lucide/vue';
 
+import { coachAvatarSrc } from '#shared/coach-avatars';
 import type { Branch, Trainer } from '#shared/types';
 
 const { session, isAtMyBranch } = useAuth();
@@ -111,10 +112,23 @@ async function runToggleDuty(): Promise<void> {
       >
         <div class="flex items-center gap-4">
           <img
-            :src="trainer.photoUrl"
+            v-if="coachAvatarSrc(trainer.avatar)"
+            :src="coachAvatarSrc(trainer.avatar)!"
             :alt="trainer.name"
             class="h-14 w-14 rounded-2xl border border-stroke object-cover"
           />
+          <div
+            v-else
+            class="flex h-14 w-14 items-center justify-center rounded-2xl border border-stroke bg-base text-sm font-black text-accent"
+          >
+            {{
+              trainer.name
+                .split(' ')
+                .slice(0, 2)
+                .map((p) => p[0])
+                .join('')
+            }}
+          </div>
           <div class="min-w-0 flex-1">
             <button
               class="cursor-pointer truncate text-left text-sm font-black text-text-primary transition hover:text-accent hover:underline"

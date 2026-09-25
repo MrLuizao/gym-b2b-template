@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, Lock, UserPlus } from '@lucide/vue';
 
+import { COACH_AVATAR_IDS } from '#shared/coach-avatars';
 import type { Branch, Trainer } from '#shared/types';
 
 const router = useRouter();
@@ -24,6 +25,7 @@ const form = ref({
   specialty: '',
   shift: 'TARDE' as Trainer['shift'],
   branchIds: session.value?.branchId ? [session.value.branchId] : [],
+  avatar: COACH_AVATAR_IDS[0] as string,
 });
 
 const shiftOptions: Trainer['shift'][] = ['MAÑANA', 'TARDE', 'NOCHE'];
@@ -98,6 +100,7 @@ async function submit(): Promise<void> {
         specialty: f.specialty.trim(),
         shift: f.shift,
         branchIds: f.branchIds,
+        avatar: f.avatar,
       },
     });
     confirmModalOpen.value = false;
@@ -214,6 +217,38 @@ onMounted(async () => {
             class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
           />
         </label>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-stroke bg-surface p-5">
+      <h2
+        class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+      >
+        <span class="h-4 w-1 rounded-full bg-accent" />
+        Avatar
+      </h2>
+      <p class="mt-1 text-[11px] text-text-dim">
+        Identidad ilustrada del coach — es lo que ven los socios en la app.
+      </p>
+      <div class="mt-4 grid grid-cols-6 gap-3">
+        <button
+          v-for="id in COACH_AVATAR_IDS"
+          :key="id"
+          type="button"
+          class="cursor-pointer overflow-hidden rounded-full border-2 transition"
+          :class="
+            form.avatar === id
+              ? 'border-accent'
+              : 'border-stroke hover:border-text-dim'
+          "
+          @click="form.avatar = id"
+        >
+          <img
+            :src="`/avatars/coaches/${id}.svg`"
+            :alt="`Avatar ${id}`"
+            class="aspect-square w-full"
+          />
+        </button>
       </div>
     </section>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, Check, Pencil, Power, X } from '@lucide/vue';
 
+import { COACH_AVATAR_IDS, coachAvatarSrc } from '#shared/coach-avatars';
 import type { Branch, ClassSchedule, TrainerDetail } from '#shared/types';
 
 const route = useRoute();
@@ -23,6 +24,7 @@ const editForm = ref({
   shift: 'TARDE',
   branchIds: [] as string[],
   classIds: [] as string[],
+  avatar: '',
 });
 
 const shiftItems = ['MAÑANA', 'TARDE', 'NOCHE'].map((s) => ({
@@ -130,6 +132,8 @@ const trainerChanges = computed<string[]>(() => {
     changes.push(
       `Turno: ${shiftLabel(t.shift)} → ${shiftLabel(editForm.value.shift)}`,
     );
+  if (isAdmin.value && editForm.value.avatar !== (t.avatar ?? ''))
+    changes.push('Se actualizará el avatar');
   const before = [...t.branchIds].sort().join(',');
   const after = [...editForm.value.branchIds].sort().join(',');
   if (before !== after) {
@@ -225,6 +229,7 @@ function startEdit(): void {
     shift: detail.value.trainer.shift,
     branchIds: [...detail.value.trainer.branchIds],
     classIds: detail.value.classes.map((c) => c.id),
+    avatar: detail.value.trainer.avatar ?? '',
   };
   editing.value = true;
 }
@@ -233,9 +238,12 @@ async function saveTrainer(): Promise<void> {
   if (!detail.value || saving.value) return;
   saving.value = true;
   try {
+    /// El avatar es campo global (admin-only) — no enviarlo a gerentes
+    /// o el server rechaza por llave no permitida.
+    const { avatar, ...managerForm } = editForm.value;
     await $api(`/api/trainers/${detail.value.trainer.id}/update`, {
       method: 'POST',
-      body: editForm.value,
+      body: isAdmin.value ? editForm.value : managerForm,
     });
     /// Recargar para reflejar también las clases reasignadas.
     detail.value = await $api<TrainerDetail>(
@@ -352,10 +360,23 @@ async function runToggleDuty(): Promise<void> {
 
     <div class="flex items-center gap-4">
       <img
-        :src="detail.trainer.photoUrl"
+        v-if="coachAvatarSrc(detail.trainer.avatar)"
+        :src="coachAvatarSrc(detail.trainer.avatar)!"
         :alt="detail.trainer.name"
         class="h-20 w-20 rounded-2xl border border-stroke object-cover"
       />
+      <div
+        v-else
+        class="flex h-20 w-20 items-center justify-center rounded-2xl border border-stroke bg-base text-xl font-black text-accent"
+      >
+        {{
+          detail.trainer.name
+            .split(' ')
+            .slice(0, 2)
+            .map((p) => p[0])
+            .join('')
+        }}
+      </div>
       <div class="min-w-0 flex-1">
         <h1 class="text-xl font-black text-text-primary">
           {{ detail.trainer.name }}
@@ -526,6 +547,33 @@ async function runToggleDuty(): Promise<void> {
               class="mt-1 w-full"
             />
           </label>
+          <div v-if="isAdmin" class="col-span-2 block">
+            <span
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Avatar
+            </span>
+            <div class="mt-2 grid grid-cols-6 gap-2">
+              <button
+                v-for="id in COACH_AVATAR_IDS"
+                :key="id"
+                type="button"
+                class="cursor-pointer overflow-hidden rounded-full border-2 transition"
+                :class="
+                  editForm.avatar === id
+                    ? 'border-accent'
+                    : 'border-stroke hover:border-text-dim'
+                "
+                @click="editForm.avatar = id"
+              >
+                <img
+                  :src="`/avatars/coaches/${id}.svg`"
+                  :alt="`Avatar ${id}`"
+                  class="aspect-square w-full"
+                />
+              </button>
+            </div>
+          </div>
           <div class="col-span-2 block">
             <span
               class="text-[10px] font-bold uppercase tracking-widest text-text-dim"

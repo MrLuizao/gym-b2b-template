@@ -93,6 +93,21 @@ export default defineEventHandler(async (event) => {
     branchIds[0] ??
     '';
 
+  /// Alcance de sede: planes sin `all_branches` solo reservan en la
+  /// sede de registro del socio.
+  const planSnap = member.membership_plan_id
+    ? await db().collection('plans').doc(member.membership_plan_id as string).get()
+    : null;
+  if (
+    planSnap?.data()?.all_branches !== true &&
+    bookingBranch !== member.branch_id
+  ) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Tu plan no incluye esta sede — solo tu sede de registro',
+    });
+  }
+
   /// Vigencia: si reserva para hoy, la clase no debe haber terminado
   /// (respeta el horario por sede de branch_times).
   const branchTime =
