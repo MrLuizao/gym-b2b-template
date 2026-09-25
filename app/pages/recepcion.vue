@@ -17,8 +17,14 @@ const branchItems = computed(() =>
 /// Gerente y recepcionista operan su sede fija — ven el selector bloqueado.
 const branchLocked = computed(() => !!session.value?.branchId);
 
-const { handleScan, recent, lastResult, submitting, loadRecent } =
-  useCheckIns(() => activeBranchId.value);
+const {
+  handleScan,
+  handlePartnerScan,
+  recent,
+  lastResult,
+  submitting,
+  loadRecent,
+} = useCheckIns(() => activeBranchId.value);
 
 watch(activeBranchId, () => {
   void loadRecent();
@@ -26,6 +32,13 @@ watch(activeBranchId, () => {
 
 async function onDetect(code: string): Promise<void> {
   await handleScan(code);
+}
+
+async function onPartner(
+  provider: 'wellhub' | 'totalpass',
+  token: string,
+): Promise<void> {
+  await handlePartnerScan(provider, token);
 }
 
 onMounted(async () => {
@@ -39,11 +52,11 @@ onMounted(async () => {
 
 <template>
   <div class="flex min-h-[calc(100vh-6rem)] flex-col gap-6">
-    <h1 class="text-xl font-black text-text-primary">Recepción</h1>
+    <!-- <h1 class="text-xl font-black text-text-primary">Recepción</h1> -->
 
     <div class="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-5">
       <div class="flex flex-col gap-4 lg:col-span-3">
-        <ScannerPanel @detect="onDetect" />
+        <ScannerPanel @detect="onDetect" @partner="onPartner" />
         <ScanResultPanel :result="lastResult" :pending="submitting" />
       </div>
 

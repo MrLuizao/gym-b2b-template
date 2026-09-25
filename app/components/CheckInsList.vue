@@ -34,12 +34,24 @@ function timeOf(timestamp: number): string {
         />
         <div class="min-w-0 flex-1">
           <button
+            v-if="record.userId"
             type="button"
             class="block max-w-full cursor-pointer truncate text-xs font-bold text-text-primary transition hover:text-accent hover:underline"
             @click="navigateTo(`/socios/${record.userId}`)"
           >
             {{ record.memberName }}
           </button>
+          <p
+            v-else
+            class="flex max-w-full items-center gap-1.5 truncate text-xs font-bold text-text-primary"
+          >
+            {{ record.memberName }}
+            <span
+              class="shrink-0 rounded-full border border-accent/40 bg-accent/10 px-1.5 py-px text-[8px] font-black uppercase tracking-widest text-accent"
+            >
+              {{ (record.provider ?? 'member').toUpperCase() }}
+            </span>
+          </p>
           <p class="text-[10px] font-medium text-text-dim">
             {{ record.membershipType }} · {{ record.method.toUpperCase() }}
             <template v-if="!record.granted"> · {{ record.reason }}</template>

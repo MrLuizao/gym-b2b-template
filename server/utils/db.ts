@@ -147,6 +147,8 @@ export function toCheckIn(s: DocumentSnapshot): CheckInRecord {
     method: d.method ?? 'qr',
     granted: d.granted ?? false,
     reason: d.reason ?? undefined,
+    provider: d.provider ?? 'member',
+    externalId: d.external_id ?? undefined,
     checkInAt: toMs(d.check_in_at) ?? 0,
     checkedOut: d.checked_out ?? false,
     checkedOutAt: toMs(d.checked_out_at) ?? undefined,

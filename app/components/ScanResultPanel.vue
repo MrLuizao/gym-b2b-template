@@ -19,6 +19,7 @@ const DENIED_LABELS: Record<string, string> = {
   MEMBER_NOT_FOUND: 'Socio no registrado',
   MEMBERSHIP_EXPIRED: 'Membresía vencida — pasar a caja',
   PLAN_BRANCH_RESTRICTED: 'Su plan no cubre esta sede',
+  PARTNER_TOKEN_INVALID: 'Token de agregador inválido o expirado',
   ALREADY_CHECKED_IN: 'Ya registró entrada',
   BRANCH_FULL: 'Aforo completo en esta sede',
   QR_INVALID: 'Código QR inválido o expirado',
@@ -157,14 +158,23 @@ const subtitle = computed(() => {
         <div class="min-w-0 flex-1">
           <template v-if="result.member">
             <button
+              v-if="result.member.id"
               type="button"
               class="block max-w-full cursor-pointer truncate text-left text-2xl font-black tracking-tight text-text-primary transition hover:text-accent hover:underline"
               @click="navigateTo(`/socios/${result.member!.id}`)"
             >
               {{ result.member.name }}
             </button>
+            <p
+              v-else
+              class="block max-w-full truncate text-left text-2xl font-black tracking-tight text-text-primary"
+            >
+              {{ result.member.name }}
+            </p>
             <p class="mt-0.5 flex items-center gap-2 font-mono text-[11px] text-text-dim">
-              Nº {{ result.member.memberNumber }}
+              <template v-if="result.member.memberNumber">
+                Nº {{ result.member.memberNumber }}
+              </template>
               <span class="flex items-center gap-1">
                 <span
                   class="h-1.5 w-1.5 rounded-full"
@@ -224,7 +234,7 @@ const subtitle = computed(() => {
       </div>
 
       <button
-        v-if="result.member"
+        v-if="result.member?.id"
         type="button"
         class="mt-10 flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-accent text-[11px] font-black uppercase tracking-widest text-base transition hover:opacity-90"
         @click="navigateTo(`/socios/${result.member!.id}`)"

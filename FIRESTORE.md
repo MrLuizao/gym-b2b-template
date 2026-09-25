@@ -256,12 +256,14 @@ nada de campos globales ni otras sedes (se fuerza en reglas).
 
 | Campo | Tipo | Notas |
 |---|---|---|
-| `user_id` | string | → `users/{id}` |
+| `user_id` | string \| null | → `users/{id}`; **null** en check-ins de agregador |
+| `provider` | string | `member` (default) \| `wellhub` \| `totalpass` |
+| `external_id` | string \| null | Id del visitante en el agregador (dedupe diario) |
 | `branch_id` | string | → `branches/{id}` |
-| `member_name` | string | Snapshot display |
-| `membership_type` | string | Snapshot del nombre del plan al entrar |
+| `member_name` | string | Snapshot display (nombre del socio o del visitante) |
+| `membership_type` | string | Snapshot del plan — en partners, tier del agregador |
 | `membership_plan_id` | string | **Canónico** — analítica por plan |
-| `method` | string | `qr` \| `usb` \| `manual` |
+| `method` | string | `qr` \| `usb` \| `manual` \| `partner` |
 | `granted` | bool | |
 | `reason` | string | Motivo de rechazo (si aplica) |
 | `check_in_at` | timestamp | Server timestamp |
@@ -270,8 +272,15 @@ nada de campos globales ni otras sedes (se fuerza en reglas).
 | `membership_alert` | string | `GREEN` \| `YELLOW` \| `RED` |
 | `expires_at` | timestamp | **TTL** — cierre de sede + margen |
 
-Queries: `branch_id + check_in_at` (lista del día en recepción).
+Queries: `branch_id + check_in_at` (lista del día en recepción);
+`provider + external_id + check_in_at + granted` (dedupe de agregador).
 No hay historial por socio aquí — el socio ve su `last_checkin_at`.
+
+**Agregadores (Wellhub/TotalPass)**: `POST /api/partners/checkin` valida
+el token del día contra la API del proveedor (`server/utils/partners.ts`
+— `PARTNER_VALIDATION=mock` en dev, credenciales del convenio en prod:
+`WELLHUB_API_KEY` / `TOTALPASS_API_KEY`). El visitante no tiene doc en
+`/users`; el pago es por liquidación del agregador, no por `/payments`.
 
 ### `/dailyStats/{statId}` — agregado diario por sede
 

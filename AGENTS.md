@@ -63,6 +63,22 @@ Sin vínculo no ve datos del gym.
   salvo admin) y cron global `POST /api/cron/close-day` (vercel.json
   23:55 CDMX — requiere `CRON_SECRET` en Vercel; hoy NO corre en
   producción, el cierre real es el botón o cron-job.org).
+- **Validación de alcance de sede**: `checkin.post` y
+  `classes/{id}/book` rechazan si el plan del socio no tiene
+  `all_branches` y la sede no es su `branch_id`
+  (`PLAN_BRANCH_RESTRICTED` — registrado como denegado).
+- **Agregadores (Wellhub/TotalPass)** — esqueleto con mock:
+  `ScannerPanel` tiene modo por proveedor →
+  `POST /api/partners/checkin` (`{provider, token}`) →
+  `validatePartnerToken` en `server/utils/partners.ts` (**mock hoy** —
+  token ≥6 chars pasa como "Visitante demo"; las credenciales reales
+  del convenio se enchufan ahí por env, sin tocar UI). El check-in se
+  escribe en `checkins` con `provider` + `external_id`,
+  `user_id: null`, `method: 'partner'` — mismo aforo/TTL/cierre de día
+  que socios. Dedupe: un `external_id` solo rinde una entrada por día.
+  CheckInsList/ScanResultPanel muestran el visitante sin link a socio
+  y sin botón de pago. Índice compuesto
+  `provider+external_id+check_in_at` ya deployado.
 
 ### Reservas de clase — por ocurrencia
 
@@ -205,4 +221,9 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 - **`bookings` sin TTL**: crecen como historial; si el volumen molesta,
   archivar en el close-day.
 - `html5-qrcode` está en `package.json` sin uso (recepción usa lector USB).
+- **Wellhub/TotalPass reales**: `validatePartnerToken` es mock — falta
+  el convenio del gym (Partner Portal) para obtener API keys, base URL
+  y saber qué artefacto valida cada agregador (QR, token, lookup por
+  ID). Pendiente también reporte de visitas×tarifa (liquidación
+  estimada) una vez conocidas las tarifas negociadas por tier.
 - Moneda/locale: México — `es-MX`, `$` (MXN), sedes seed en Toluca/Metepec.

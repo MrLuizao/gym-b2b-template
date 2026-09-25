@@ -2,12 +2,12 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 import type { CheckInAlert, CheckInResult } from '#shared/types';
 
+import { closeExpiry } from '../utils/checkin-shared';
 import { db, toCheckIn } from '../utils/db';
 import { verifyQrToken } from '../utils/qr';
 import { requireBranchScope, requireStaff } from '../utils/staff-auth';
 
 const GRACE_PERIOD_DAYS = 3;
-const TZ = 'America/Mexico_City';
 
 const EXPIRED_MESSAGE = 'Membresía Vencida - Favor de pasar a caja';
 const EXPIRING_MESSAGE = 'Membresía por vencer';
@@ -53,17 +53,8 @@ function evaluateMembership(d: MemberData): {
   };
 }
 
-/// TTL: próximo cierre de la sede + 2h de margen.
-function closeExpiry(closeMinutes: number): Timestamp {
-  const now = new Date();
-  const local = new Date(now.toLocaleString('en-US', { timeZone: TZ }));
-  const localMinutes = local.getHours() * 60 + local.getMinutes();
-  const closeLocal = new Date(local);
-  closeLocal.setHours(Math.floor(closeMinutes / 60), closeMinutes % 60, 0, 0);
-  if (localMinutes >= closeMinutes) closeLocal.setDate(closeLocal.getDate() + 1);
-  const delta = closeLocal.getTime() - local.getTime();
-  return Timestamp.fromMillis(now.getTime() + delta + 120 * 60_000);
-}
+/// TTL compartido con el check-in de partners → `closeExpiry` en
+/// server/utils/checkin-shared.ts.
 
 export default defineEventHandler(async (event): Promise<CheckInResult> => {
   const staff = await requireStaff(event);

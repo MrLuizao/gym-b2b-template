@@ -1,10 +1,17 @@
-import type { CheckInRecord, CheckInResult } from '#shared/types';
+import type {
+  CheckInRecord,
+  CheckInResult,
+  PartnerProvider,
+} from '#shared/types';
 
 const REASON_LABELS: Record<string, string> = {
   MEMBER_NOT_FOUND: 'Socio no registrado',
   MEMBERSHIP_EXPIRED: 'Membresía Vencida - Favor de pasar a caja',
   BRANCH_FULL: 'Aforo completo',
   QR_INVALID: 'Código QR inválido',
+  PLAN_BRANCH_RESTRICTED: 'Su plan no cubre esta sede',
+  PARTNER_TOKEN_INVALID: 'Token de agregador inválido o expirado',
+  ALREADY_CHECKED_IN: 'Ya registró entrada',
 };
 
 export const EXPIRING_MESSAGE = 'Membresía por vencer';
@@ -88,7 +95,27 @@ export function useCheckIns(branchId: MaybeRefOrGetter<string>) {
     });
   }
 
-  return { recent, lastResult, submitting, loadRecent, handleScan };
+  /// Check-in de agregador: el token del día (Wellhub/TotalPass) lo
+  /// valida el server contra la API del proveedor (mock en dev).
+  async function handlePartnerScan(
+    provider: PartnerProvider,
+    token: string,
+  ): Promise<CheckInResult> {
+    submitting.value = true;
+    try {
+      const result = await $api<CheckInResult>('/api/partners/checkin', {
+        method: 'POST',
+        body: { provider, token: token.trim(), branchId: toValue(branchId) },
+      });
+      lastResult.value = result;
+      await loadRecent();
+      return result;
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  return { recent, lastResult, submitting, loadRecent, handleScan, handlePartnerScan };
 }
 
 export function reasonLabel(reason?: string): string {

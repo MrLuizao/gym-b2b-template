@@ -213,15 +213,24 @@ export interface Member {
   idNumber?: string | null;
 }
 
+/// Agregadores corporativos (gimnasio vende acceso por visita vía
+/// convenio) — el visitante no es socio, el check-in lo valida la API
+/// del proveedor.
+export type PartnerProvider = 'wellhub' | 'totalpass';
+
 export interface CheckInRecord {
   id: string;
   userId: string;
   branchId: string;
   memberName: string;
   membershipType: string;
-  method: 'qr' | 'usb' | 'manual';
+  method: 'qr' | 'usb' | 'manual' | 'partner';
   granted: boolean;
   reason?: string;
+  /// 'member' (default) o el agregador que validó el acceso.
+  provider?: 'member' | PartnerProvider;
+  /// Id del usuario dentro del agregador (no es users/{id} local).
+  externalId?: string;
   checkInAt: number;
   checkedOut: boolean;
   checkedOutAt?: number;
