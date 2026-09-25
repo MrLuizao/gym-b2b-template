@@ -251,7 +251,10 @@ service cloud.firestore {
       allow get: if isAdmin()
         || (isStaff() && resource.data.branch_id == staffBranch())
         || (isMember() && resource.data.member_id == request.auth.uid);
-      allow list: if isStaff() || isMember();
+      /// list también va por documento — el query del socio debe filtrar
+      /// member_id == uid; sin esto cualquier socio listaba TODOS los pagos.
+      allow list: if isStaff()
+        || (isMember() && resource.data.member_id == request.auth.uid);
       allow create, update, delete: if false;
     }
 

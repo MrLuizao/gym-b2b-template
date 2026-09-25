@@ -158,10 +158,26 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 - `canAccess(role, path)` / `ROLE_ROUTES` — gating de navegación
   (middleware `auth.global.ts` + nav en `layouts/default.vue`).
 
+### Pagos con Stripe
+
+- `POST /api/payments/intent` `{planId}`: crea/reusa `stripe_customer_id`
+  del socio y devuelve `clientSecret` para el Payment Sheet de la app.
+- `POST /api/webhooks/stripe` (firma `STRIPE_WEBHOOK_SECRET`,
+  idempotente vía `/webhookEvents/{eventId}`): `payment_intent.succeeded`
+  escribe `/payments` (APPROVED) y activa la membresía
+  (`membership_status=ACTIVE`, `membership_until` +30d desde
+  max(hoy, vencimiento)); `payment_failed` → DECLINED;
+  `charge.refunded` → REFUNDED.
+- Montos: `plans.price` en pesos MXN → Stripe en centavos (×100).
+- Env requeridas en `.env`: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+  `CRON_SECRET`. Dev: `stripe listen --forward-to
+  localhost:3000/api/webhooks/stripe` (requiere Stripe CLI).
+
 ## Deuda conocida / pendientes
 
-- **Stripe**: endpoint `payments/intent` existe; el flujo de cobro en la app
-  está planeado pero sin completar.
+- **Stripe keys**: el flujo está programado de punta a punta; falta
+  poblar `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (.env B2B) y
+  `stripePublishableKey` (app_config.dart) con llaves reales.
 - **Cron `close-day` en Vercel**: configurado en `vercel.json` pero no corre
   sin deploy a producción + env `CRON_SECRET`. Hoy el cierre es manual
   (botón header) o vía cron-job.org. `auto-checkout` sí corre en
