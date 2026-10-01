@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { Activity, Clock3, Flame, Users } from '@lucide/vue';
 
-const { data, pending, start, stop, adjust, setCapacity, adjusting } =
-  useDashboard();
+const {
+  branches,
+  recentCheckIns,
+  traffic,
+  kpis: staticKpis,
+  pending,
+  start,
+  stop,
+  adjust,
+  setCapacity,
+  adjusting,
+} = useDashboardRealtime();
 const { closing } = useCloseDay();
 const { session } = useAuth();
 
@@ -18,7 +28,7 @@ onMounted(() => start());
 onBeforeUnmount(() => stop());
 
 const trafficValues = computed(() =>
-  data.value?.traffic.map((point) => point.value) ?? [],
+  traffic.value.map((point) => point.value),
 );
 
 function sliceSpark(values: number[], offset: number): number[] {
@@ -26,42 +36,65 @@ function sliceSpark(values: number[], offset: number): number[] {
   return values.slice(offset, offset + 9);
 }
 
+/// membersToday se calcula en vivo desde el listener de check-ins
+const membersToday = computed(() =>
+  recentCheckIns.value.filter((c) => c.granted).length,
+);
+
+/// Aforo promedio calculado en vivo desde branches
+const avgOccupancy = computed(() => {
+  if (branches.value.length === 0) return 0;
+  const sum = branches.value.reduce(
+    (acc, b) => acc + b.currentCapacity / Math.max(1, b.maxCapacity),
+    0,
+  );
+  return Math.round((sum / branches.value.length) * 100);
+});
+
+/// Sede más concurrida en vivo
+const busiestBranch = computed(() => {
+  if (branches.value.length === 0) return '—';
+  const sorted = [...branches.value].sort(
+    (a, b) =>
+      b.currentCapacity / Math.max(1, b.maxCapacity) -
+      a.currentCapacity / Math.max(1, a.maxCapacity),
+  );
+  return sorted[0]?.name ?? '—';
+});
+
 const kpis = computed(() => {
-  const kpis = data.value?.kpis;
   const values = trafficValues.value;
   return [
     {
       label: 'Socios hoy',
-      value: kpis ? String(kpis.membersToday) : '—',
-      trend: kpis?.trends.membersToday ?? 0,
+      value: String(membersToday.value),
+      trend: staticKpis.value?.trends.membersToday ?? 0,
       spark: sliceSpark(values, 0),
       icon: Users,
     },
     {
       label: 'Aforo promedio',
-      value: `${kpis?.avgOccupancy ?? 0}%`,
-      trend: kpis?.trends.avgOccupancy ?? 0,
+      value: `${avgOccupancy.value}%`,
+      trend: staticKpis.value?.trends.avgOccupancy ?? 0,
       spark: sliceSpark(values, 1),
       icon: Activity,
     },
     {
       label: 'Sede más concurrida',
-      value: kpis?.busiestBranch ?? '—',
-      trend: kpis?.trends.busiestBranch ?? 0,
+      value: busiestBranch.value,
+      trend: staticKpis.value?.trends.busiestBranch ?? 0,
       spark: sliceSpark(values, 2),
       icon: Flame,
     },
     {
       label: 'Hora pico estimada',
-      value: kpis?.peakHour ?? '—',
-      trend: kpis?.trends.peakHour ?? 0,
+      value: staticKpis.value?.peakHour ?? '—',
+      trend: staticKpis.value?.trends.peakHour ?? 0,
       spark: sliceSpark(values, 3),
       icon: Clock3,
     },
   ];
 });
-
-const branches = computed(() => data.value?.branches ?? []);
 </script>
 
 <template>
@@ -89,7 +122,7 @@ const branches = computed(() => data.value?.branches ?? []);
         </span>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <template v-if="pending && !data">
+        <template v-if="pending && branches.length === 0">
           <div
             v-for="i in 4"
             :key="i"
@@ -136,7 +169,7 @@ const branches = computed(() => data.value?.branches ?? []);
         </div>
       </div>
       <div class="mt-4">
-        <TrafficChart v-if="data" :traffic="data.traffic" />
+        <TrafficChart v-if="traffic.length" :traffic="traffic" />
         <div v-else class="h-64 animate-pulse rounded-xl bg-base" />
       </div>
     </section>

@@ -12,8 +12,10 @@ import {
   MapPin,
   Medal,
   Megaphone,
+  MessageCircle,
   ScanLine,
   Users,
+  X,
 } from '@lucide/vue';
 import type { Component } from 'vue';
 import type { Branch } from '#shared/types';
@@ -21,6 +23,7 @@ import type { StaffRole } from '~/composables/useAuth';
 
 const route = useRoute();
 const { session, logout } = useAuth();
+const { unreadCount, lastAlert, start, dismissAlert } = useSupportUnread();
 
 const logoutConfirmOpen = ref(false);
 
@@ -139,6 +142,12 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
         // Recepción ve el catálogo (read-only) para cotizar altas.
         roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
       },
+      {
+        to: '/soporte',
+        label: 'Soporte',
+        icon: MessageCircle,
+        roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
+      },
     ],
   },
   {
@@ -187,6 +196,12 @@ const pageTitle = computed(() => {
   );
   return item?.label ?? 'RIR-HUB';
 });
+
+onMounted(() => {
+  // Listener global de mensajes de soporte — vive mientras la sesión
+  // esté activa, alimenta el badge del menú y el toast de alerta.
+  start();
+});
 </script>
 
 <template>
@@ -232,6 +247,12 @@ const pageTitle = computed(() => {
               />
               <component :is="item.icon" class="h-4 w-4" />
               {{ item.label }}
+              <span
+                v-if="item.to === '/soporte' && unreadCount > 0"
+                class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-black text-white"
+              >
+                {{ unreadCount }}
+              </span>
             </NuxtLink>
           </div>
         </div>
@@ -390,5 +411,43 @@ const pageTitle = computed(() => {
     >
       {{ closeDayDone }}
     </div>
+
+    <!-- Toast de nuevo mensaje de soporte — click lleva a /soporte -->
+    <Transition
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="translate-y-4 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-4 opacity-0"
+    >
+      <NuxtLink
+        v-if="lastAlert"
+        to="/soporte"
+        class="fixed bottom-5 right-5 z-50 flex w-80 cursor-pointer items-start gap-3 rounded-xl border border-accent/40 bg-surface p-4 shadow-2xl"
+        @click="dismissAlert()"
+      >
+        <div
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/20"
+        >
+          <MessageCircle class="h-4 w-4 text-accent" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-bold text-text-primary">
+            Nuevo mensaje de {{ lastAlert.memberName }}
+          </p>
+          <p class="mt-0.5 truncate text-[11px] text-text-muted">
+            {{ lastAlert.preview }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 cursor-pointer rounded p-0.5 text-text-dim transition hover:text-text-primary"
+          @click.prevent.stop="dismissAlert()"
+        >
+          <X class="h-3.5 w-3.5" />
+        </button>
+      </NuxtLink>
+    </Transition>
   </div>
 </template>

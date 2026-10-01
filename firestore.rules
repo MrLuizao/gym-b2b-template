@@ -261,6 +261,33 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // ═══════════════ SOPORTE / CHAT ═══════════════
+    // Escritura solo backend (API). El socio lee su conversación; staff
+    // lee las de su sede (o todas si es admin). Mensajes en subcolección.
+
+    match /conversations/{id} {
+      // El socio lee solo su conversación — isSelfDoc resuelve
+      // users/{member_id}.auth_uid contra el auth actual (reclamo).
+      allow read: if isAdmin()
+        || (isStaff() && resource.data.branch_id == staffBranch())
+        || (signedIn() && resource.data.member_id != null
+            && isSelfDoc(resource.data.member_id));
+      // Escritura solo API (functions/Admin SDK).
+      allow create, update, delete: if false;
+
+      match /messages/{msgId} {
+        allow read: if isAdmin()
+          || (isStaff()
+              && get(/databases/$(database)/documents/conversations/$(id))
+                   .data.branch_id == staffBranch())
+          || (signedIn()
+              && isSelfDoc(
+                   get(/databases/$(database)/documents/conversations/$(id))
+                     .data.member_id));
+        allow create, update, delete: if false;
+      }
+    }
+
     // ═══════════════ DEFAULT: DENY ═══════════════
 
     match /{document=**} {

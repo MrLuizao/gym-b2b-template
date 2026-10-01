@@ -364,3 +364,34 @@ export interface AdsReportResponse {
     optedInMembers: number;
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Soporte / Chat
+// ─────────────────────────────────────────────────────────────────────
+
+export type ConversationStatus = 'open' | 'resolved';
+
+export interface Conversation {
+  id: string;
+  memberId: string;
+  memberName: string;
+  branchId: string;
+  status: ConversationStatus;
+  createdAt: number;
+  lastMessageAt: number;
+  lastMessagePreview: string;
+  /// Mensajes sin leer por el socio
+  unreadMember: number;
+  /// Mensajes sin leer por staff
+  unreadStaff: number;
+}
+
+export interface SupportMessage {
+  id: string;
+  conversationId: string;
+  sender: 'member' | 'staff';
+  senderName: string;
+  text: string;
+  createdAt: number;
+  read: boolean;
+}

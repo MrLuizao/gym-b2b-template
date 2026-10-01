@@ -445,6 +445,39 @@ Escritura: solo ADMIN.
 
 ---
 
+### `/conversations/{conversationId}` — soporte / chat
+
+Conversaciones de ayuda entre socios y staff. Se borran al resolverse
+(historial solo de activas).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `member_id` | string | → `users/{id}` |
+| `member_name` | string | Snapshot display |
+| `branch_id` | string | Sede del socio — staff ve las de su sede |
+| `status` | string | `open` \| `resolved` |
+| `created_at` | timestamp | |
+| `last_message_at` | timestamp | Ordenamiento |
+| `last_message_preview` | string | Primeros 100 chars del último mensaje |
+| `unread_member` | number | Mensajes sin leer por el socio |
+| `unread_staff` | number | Mensajes sin leer por staff |
+
+Lectura: el socio (su conversación), staff según sede. Escritura: API.
+
+#### `/conversations/{id}/messages/{msgId}` — mensajes
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `sender` | string | `member` \| `staff` |
+| `sender_name` | string | |
+| `text` | string | |
+| `created_at` | timestamp | |
+| `read` | bool | |
+
+Lectura/escritura: API valida permisos.
+
+---
+
 ## Relaciones (canónicas)
 
 ```

@@ -45,6 +45,12 @@ Sin vínculo no ve datos del gym.
 
 ### Check-ins y aforo en tiempo real
 
+- **Dashboard realtime**: `useDashboardRealtime` usa listeners de
+  Firestore (`onSnapshot`) en vez de polling — `branches` y
+  `recentCheckIns` se actualizan instantáneamente cuando hay cambios.
+  Los KPIs históricos y la curva de tráfico se cargan una vez al montar
+  (`/api/dashboard/static`). El composable viejo `useDashboard` con
+  polling cada 5s queda deprecado.
 - `branches.current_capacity`: check-in `+1` (`checkin.post` rechaza si
   `>= max_capacity`), checkout `-1`, cierre `= 0`. Ajuste manual por
   `POST /api/branches/{id}/adjust` (`delta` o `value`, transacción con
@@ -116,6 +122,31 @@ Sin vínculo no ve datos del gym.
   (espejo del catálogo en `shared/member-avatars.ts` — icono lucide +
   gradiente) en `/socios`, detalle y ScanResultPanel; mantener ids
   alineados con la app.
+
+### Soporte / chat socio-staff
+
+- `conversations/{id}` + subcolección `messages` — solo conversaciones
+  **activas**: al resolver (`POST /api/support/{id}/resolve`) se borra el
+  doc y sus mensajes, no hay historial. Las abandonadas también se borran:
+  cada doc lleva `expires_at` (última actividad +24h, renovable por
+  mensaje) y el cron `auto-checkout` las barre (`last_message_at` >24h).
+  La TTL policy nativa de Firestore no se pudo activar vía API (requiere
+  billing en el proyecto); si se activa a mano en la consola (Firestore →
+  TTL → collection groups `conversations` y `messages`, campo
+  `expires_at`), hace la misma limpieza — ambos mecanismos coexisten sin
+  problema.
+- El socio escribe desde la app ("Ayuda y soporte"); la conversación se
+  crea perezosa en el **primer mensaje** (`POST /api/support/conversations`),
+  no al abrir la pantalla.
+- `unread_member`/`unread_staff` se incrementan en el POST de mensajes y
+  se resetean en `GET .../messages` según quién lee.
+- Respuesta de staff → push FCM al topic `member_{memberDocId}` con
+  `data.type='support'` (la app abre el chat al tocarla).
+- B2B `/soporte`: lista + chat con listeners realtime (filtro `branch_id`
+  simple — `status`/orden en memoria, sin índice compuesto). Cualquier
+  staff responde; gerente/recepcionista solo su sede. Badge rojo en el
+  menú + toast: `useSupportUnread` (singleton, escucha `unread_staff`,
+  beep via Web Audio — el browser lo permite tras el primer click).
 
 ### Push / CMS
 
