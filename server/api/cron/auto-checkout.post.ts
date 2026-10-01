@@ -48,11 +48,16 @@ export default defineEventHandler(async (event) => {
   }
   await batch.commit();
 
+  /// Clamp a 0 — si el cierre de día ya reseteó el aforo (o dos
+  /// corridas se solapan), el decremento nunca deja la cuenta en
+  /// negativo.
   for (const [branchId, count] of releasedByBranch) {
-    await db()
-      .collection('branches')
-      .doc(branchId)
-      .update({ current_capacity: FieldValue.increment(-count) });
+    const ref = db().collection('branches').doc(branchId);
+    await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const cur = Number(snap.data()?.current_capacity ?? 0);
+      tx.update(ref, { current_capacity: Math.max(0, cur - count) });
+    });
   }
 
   return {

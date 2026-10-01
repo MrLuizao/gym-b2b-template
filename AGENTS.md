@@ -53,7 +53,9 @@ Sin vínculo no ve datos del gym.
 - **Auto-checkout**: cron externo (cron-job.org) cada 15 min →
   `POST /api/cron/auto-checkout` libera check-ins >90 min sin salida
   (`release_reason: 'auto_checkout_cron'`). El doc queda en `checkins`
-  hasta el cierre de día.
+  hasta el cierre de día. El decremento de `current_capacity` va en
+  transacción con clamp a 0 (el cierre de día pudo haber reseteado
+  antes de que el cron aplicara su decremento).
 - **Cierre de día** (`sweepCheckins` + `sweepClassBookings` en
   `server/utils/close-day.ts`): agrega check-ins a `dailyStats` por
   (sede, fecha del check-in), actualiza `forecasts` (EMA por weekday),
