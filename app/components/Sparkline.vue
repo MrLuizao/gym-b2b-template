@@ -23,7 +23,7 @@ const geometry = computed(() => {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
   return {
-    line: points.join(' '),
+    line: `M${points.join(' L')}`,
     area: `M0,${props.height} L${points.join(' L')} L${props.width},${props.height} Z`,
   };
 });

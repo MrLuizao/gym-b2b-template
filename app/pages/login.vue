@@ -6,9 +6,9 @@ definePageMeta({ layout: false });
 const { login, session } = useAuth();
 const firebase = useFirebase();
 
-const email = ref('recepcion@capitalfitness.mx');
+const email = ref('admin@rirhub.mx');
 const password = ref('demo1234');
-const role = ref<StaffRole>('RECEPTIONIST');
+const role = ref<StaffRole>('ADMIN');
 const errorMessage = ref<string | null>(null);
 const submitting = ref(false);
 

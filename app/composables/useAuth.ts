@@ -128,7 +128,7 @@ export function useAuth() {
       name: deriveName(email),
       role,
       branchId: role === 'ADMIN' ? null : 'select',
-      branchName: role === 'ADMIN' ? null : 'Select',
+      branchName: role === 'ADMIN' ? null : 'VIP',
     };
   }
 

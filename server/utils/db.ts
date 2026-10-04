@@ -39,7 +39,7 @@ export function toBranch(s: DocumentSnapshot): Branch {
   const d = s.data() ?? {};
   return {
     id: s.id,
-    brandId: 'capital_fitness',
+    brandId: 'rir_hub',
     name: d.name ?? '',
     maxCapacity: d.max_capacity ?? 0,
     currentCapacity: d.current_capacity ?? 0,

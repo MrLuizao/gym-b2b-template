@@ -55,7 +55,7 @@ console.log('Sembrando en proyecto', sa.project_id);
 
 // ═══ config/brand ═══
 await db.collection('config').doc('brand').set({
-  name: 'Capital Fitness',
+  name: 'RIR-HUB',
   logo_url: '',
   colors: { primary: '#f97316', accent: '#f97316', background: '#0a0a0a' },
   timezone: TZ,
@@ -65,10 +65,10 @@ await db.collection('config').doc('brand').set({
 
 // ═══ branches ═══
 const branches = [
-  { id: 'select', name: 'Select', max: 200, open: 360, close: 1320, address: 'Av. Hidalgo · Centro', lat: 19.2926, lng: -99.6572 },
-  { id: 'xpress', name: 'Xpress Metepec', max: 90, open: 360, close: 1320, address: 'Av. Paseo Tollocan #412', lat: 19.2548, lng: -99.6057 },
-  { id: 'centro', name: 'Centro Histórico', max: 150, open: 420, close: 1320, address: 'Av. Juárez Sur #129', lat: 19.2855, lng: -99.6549 },
-  { id: 'carranza', name: 'Carranza', max: 120, open: 420, close: 1300, address: 'C. Carranza #285', lat: 19.281, lng: -99.6603 },
+  { id: 'select', name: 'VIP', max: 200, open: 360, close: 1320, address: 'Av. Hidalgo · Centro', lat: 19.2926, lng: -99.6572 },
+  { id: 'xpress', name: 'Fast', max: 90, open: 360, close: 1320, address: 'Av. Paseo Tollocan #412', lat: 19.2548, lng: -99.6057 },
+  { id: 'centro', name: 'Centro', max: 150, open: 420, close: 1320, address: 'Av. Juárez Sur #129', lat: 19.2855, lng: -99.6549 },
+  { id: 'carranza', name: 'Norte', max: 120, open: 420, close: 1300, address: 'C. Carranza #285', lat: 19.281, lng: -99.6603 },
 ];
 for (const b of branches) {
   await db.collection('branches').doc(b.id).set({
@@ -134,9 +134,9 @@ console.log('✓ classes:', classes.length);
 
 // ═══ staff auth + docs ═══
 const staffDefs = [
-  { email: 'admin@capitalfitness.mx', name: 'Admin Global', role: 'ADMIN', branch: null },
-  { email: 'gerente@capitalfitness.mx', name: 'Gerente Select', role: 'MANAGER', branch: 'select' },
-  { email: 'recepcion@capitalfitness.mx', name: 'Recepción Select', role: 'RECEPTIONIST', branch: 'select' },
+  { email: 'admin@rirhub.mx', name: 'Admin Global', role: 'ADMIN', branch: null },
+  { email: 'gerente@rirhub.mx', name: 'Gerente VIP', role: 'MANAGER', branch: 'select' },
+  { email: 'recepcion@rirhub.mx', name: 'Recepción VIP', role: 'RECEPTIONIST', branch: 'select' },
 ];
 for (const s of staffDefs) {
   const uid = await ensureUser(s.email, s.name);
@@ -148,11 +148,11 @@ console.log('✓ staff:', staffDefs.map((s) => s.email).join(', '));
 
 // ═══ members (auth + users) ═══
 const members = [
-  { email: 'socio1@capitalfitness.mx', name: 'Luis Rojas', branch: 'select', plan: 'black', num: 'CF-00421', until: now + 45 * DAY, status: 'ACTIVE' },
-  { email: 'socio2@capitalfitness.mx', name: 'Carla Mendoza', branch: 'carranza', plan: 'plus', num: 'CF-01187', until: now - 12 * DAY, status: 'EXPIRED' },
-  { email: 'socio3@capitalfitness.mx', name: 'Diego Salas', branch: 'centro', plan: 'select', num: 'CF-00873', until: now + 30 * DAY, status: 'ACTIVE' },
-  { email: 'socio4@capitalfitness.mx', name: 'Roxana Vega', branch: 'select', plan: 'black', num: 'CF-00219', until: now - 1 * DAY, status: 'ACTIVE' },
-  { email: 'socio5@capitalfitness.mx', name: 'Iván Paredes', branch: 'xpress', plan: 'xpress', num: 'CF-01540', until: now - 40 * DAY, status: 'EXPIRED' },
+  { email: 'socio1@rirhub.mx', name: 'Luis Rojas', branch: 'select', plan: 'black', num: 'CF-00421', until: now + 45 * DAY, status: 'ACTIVE' },
+  { email: 'socio2@rirhub.mx', name: 'Carla Mendoza', branch: 'carranza', plan: 'plus', num: 'CF-01187', until: now - 12 * DAY, status: 'EXPIRED' },
+  { email: 'socio3@rirhub.mx', name: 'Diego Salas', branch: 'centro', plan: 'select', num: 'CF-00873', until: now + 30 * DAY, status: 'ACTIVE' },
+  { email: 'socio4@rirhub.mx', name: 'Roxana Vega', branch: 'select', plan: 'black', num: 'CF-00219', until: now - 1 * DAY, status: 'ACTIVE' },
+  { email: 'socio5@rirhub.mx', name: 'Iván Paredes', branch: 'xpress', plan: 'xpress', num: 'CF-01540', until: now - 40 * DAY, status: 'EXPIRED' },
 ];
 const memberIds = [];
 for (const m of members) {
@@ -210,7 +210,7 @@ const coupons = [
   { id: 'c1', title: 'Proteína X-Treme -25%', desc: 'En suplementos de recepción', badge: '-25%', code: 'CF-PRO25', plans: ['plus', 'black'] },
   { id: 'c2', title: 'Invita a un amigo', desc: 'Clase grupal gratis para un acompañante', badge: '1 FREE', code: 'CF-GUEST1', plans: ['black'] },
   { id: 'c3', title: 'Bebidas 2x1', desc: 'Bebidas de recepción después de las 18:00', badge: '2x1', code: 'CF-BEB2X1', plans: ['classic', 'plus', 'select', 'xpress'] },
-  { id: 'c4', title: 'Merch Capital -15%', desc: 'Camisetas, guantes y accesorios', badge: '-15%', code: 'CF-MERCH15', plans: ['classic', 'select', 'xpress'] },
+  { id: 'c4', title: 'Merch RIR-HUB -15%', desc: 'Camisetas, guantes y accesorios', badge: '-15%', code: 'CF-MERCH15', plans: ['classic', 'select', 'xpress'] },
 ];
 for (const c of coupons) {
   await db.collection('promotions').doc(c.id).set({
@@ -252,7 +252,7 @@ await db.collection('pushLogs').add({
 const products = [
   { name: 'Whey Protein 2lb', category: 'Suplementos', price: 899, tag: 'POPULAR' },
   { name: 'Guantes de entrenamiento', category: 'Accesorios', price: 349, tag: null },
-  { name: 'Playera Capital', category: 'Ropa', price: 299, tag: 'NUEVO' },
+  { name: 'Playera RIR-HUB', category: 'Ropa', price: 299, tag: 'NUEVO' },
   { name: 'Creatina 300g', category: 'Suplementos', price: 549, tag: null },
 ];
 for (const p of products) {
@@ -302,8 +302,8 @@ for (const b of branches) {
 console.log('✓ dailyStats (14d × 4 sedes) + forecasts');
 
 console.log('\nListo. Accesos demo (password demo1234):');
-console.log('  admin@capitalfitness.mx      → ADMIN');
-console.log('  gerente@capitalfitness.mx    → MANAGER (Select)');
-console.log('  recepcion@capitalfitness.mx  → RECEPTIONIST (Select)');
-console.log('  socio1..5@capitalfitness.mx  → socios');
+console.log('  admin@rirhub.mx      → ADMIN');
+console.log('  gerente@rirhub.mx    → MANAGER (Select)');
+console.log('  recepcion@rirhub.mx  → RECEPTIONIST (Select)');
+console.log('  socio1..5@rirhub.mx  → socios');
 process.exit(0);

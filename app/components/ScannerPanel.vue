@@ -15,7 +15,7 @@ const usbCode = ref('');
 const usbInputRef = ref<HTMLInputElement | null>(null);
 
 const modes = [
-  { id: 'member' as const, label: 'Socio Capital', logo: null },
+  { id: 'member' as const, label: 'Socio RIR-HUB', logo: null },
   {
     id: 'wellhub' as const,
     label: 'Wellhub',
