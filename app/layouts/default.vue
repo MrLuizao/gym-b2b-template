@@ -6,6 +6,7 @@ import {
   CreditCard,
   DoorClosed,
   Dumbbell,
+  Gift,
   Handshake,
   LayoutDashboard,
   LogOut,
@@ -140,6 +141,12 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
         label: 'Membresías',
         icon: CreditCard,
         // Recepción ve el catálogo (read-only) para cotizar altas.
+        roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
+      },
+      {
+        to: '/recompensas',
+        label: 'Recompensas',
+        icon: Gift,
         roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
       },
       {

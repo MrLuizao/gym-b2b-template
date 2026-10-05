@@ -87,6 +87,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Recompensas de lealtad — catálogo global; hoy se siembra con
+    // Admin SDK. El socio lo lee para canjear puntos.
+    match /rewards/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
     // ═══════════════ SEDES ═══════════════
 
     match /branches/{id} {
@@ -163,7 +170,7 @@ service cloud.firestore {
                  .hasOnly(['photo_url', 'avatar', 'phone', 'first_name',
                            'middle_name', 'paternal_last_name',
                            'maternal_last_name', 'sex', 'birth_date',
-                           'branch_id']));
+                           'branch_id', 'weekly_goal']));
 
       allow delete: if isAdmin();
 
@@ -173,6 +180,18 @@ service cloud.firestore {
         allow read: if isSelfDoc(uid) || isStaff();
         allow create, update: if isSelfDoc(uid);
         allow delete: if isAdmin();
+      }
+
+      // Lealtad: historial de visitas y canjes — escritura solo
+      // functions (checkin.post / rewards/redeem). El socio lee lo suyo.
+      match /visits/{dateId} {
+        allow read: if isSelfDoc(uid) || isStaff();
+        allow create, update, delete: if false;
+      }
+
+      match /redemptions/{redemptionId} {
+        allow read: if isSelfDoc(uid) || isStaff();
+        allow create, update, delete: if false;
       }
     }
 

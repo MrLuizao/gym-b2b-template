@@ -1,6 +1,6 @@
 /// Genera los avatares de coach — ilustración flat paramétrica:
 /// cara andrógina compartida, torso M/F, variantes de piel/cabello/top.
-/// Emite a ../prototipo-gym/assets/avatars/coaches/ (bundle de la app)
+/// Emite a ../rirhub-app/assets/avatars/coaches/ (bundle de la app)
 /// y ./public/avatars/coaches/ (preview del picker en B2B).
 ///
 /// Uso: node scripts/generate-coach-avatars.mjs
@@ -12,7 +12,7 @@ import { dirname, resolve } from 'node:path';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUTS = [
   resolve(repoRoot, 'public/avatars/coaches'),
-  resolve(repoRoot, '../prototipo-gym/assets/avatars/coaches'),
+  resolve(repoRoot, '../rirhub-app/assets/avatars/coaches'),
 ];
 
 const HAIR_STYLES = {

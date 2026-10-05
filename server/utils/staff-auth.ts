@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3';
 
+import { verifyAppCheck } from './app-check';
 import { useAdmin } from './firebase-admin';
 
 export type StaffRole = 'ADMIN' | 'MANAGER' | 'RECEPTIONIST';
@@ -14,6 +15,7 @@ export interface StaffContext {
 /// Verifica el Bearer token de Firebase Auth y carga /staff/{uid}.
 /// Misma fuente de verdad que firestore.rules.
 export async function requireStaff(event: H3Event): Promise<StaffContext> {
+  await verifyAppCheck(event);
   const header = getHeader(event, 'authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!token) {
@@ -49,6 +51,7 @@ export async function requireStaff(event: H3Event): Promise<StaffContext> {
 export async function requireUser(
   event: H3Event,
 ): Promise<{ uid: string; email: string }> {
+  await verifyAppCheck(event);
   const header = getHeader(event, 'authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!token) {

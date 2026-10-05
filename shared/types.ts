@@ -395,3 +395,33 @@ export interface SupportMessage {
   createdAt: number;
   read: boolean;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Lealtad — recompensas y canjes
+// ─────────────────────────────────────────────────────────────────────
+
+export interface Reward {
+  id: string;
+  name: string;
+  description: string;
+  pointsCost: number;
+  /// Id de icono — la app lo mapea a Material, el B2B a Lucide.
+  icon: string;
+  active: boolean;
+  createdAt: number;
+}
+
+export interface RewardRedemption {
+  id: string;
+  memberId: string;
+  memberName: string;
+  branchId: string;
+  rewardId: string;
+  rewardName: string;
+  pointsSpent: number;
+  code: string;
+  status: 'active' | 'used' | 'expired';
+  createdAt: number;
+  expiresAt: number;
+  usedAt: number | null;
+}

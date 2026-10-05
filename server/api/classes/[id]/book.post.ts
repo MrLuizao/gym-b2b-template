@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 
 import { db } from '../../../utils/db';
+import { rateLimit } from '../../../utils/rate-limit';
 import { requireUser } from '../../../utils/staff-auth';
 
 /// Reserva de clase por OCURRENCIA (fecha CDMX). El doc queda en
@@ -36,6 +37,7 @@ function addDays(date: string, days: number): string {
 
 export default defineEventHandler(async (event) => {
   const { uid } = await requireUser(event);
+  rateLimit(`book:${uid}`, 20, 60_000);
   const classId = getRouterParam(event, 'id') ?? '';
   const body = await readBody<{ date?: string; branchId?: string }>(event);
 

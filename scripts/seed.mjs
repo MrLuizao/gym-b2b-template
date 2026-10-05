@@ -169,10 +169,47 @@ for (const m of members) {
     phone: null, id_number: null,
     stripe_customer_id: null, last_checkin_at: null,
     active_checkin_id: null, active_checkin_branch: null,
+    weekly_goal: 4, points: 0,
     created_at: FieldValue.serverTimestamp(),
   });
 }
 console.log('✓ members:', members.length);
+
+// ═══ visits (historial de lealtad, 14 días) ═══
+// Patrón por socio: socio1 constante (6/sem), socio3 medio (3/sem).
+const visitPatterns = [6, 0, 3, 5, 0];
+for (let i = 0; i < memberIds.length; i++) {
+  const daysAgo = visitPatterns[i];
+  if (!daysAgo) continue;
+  for (let d = 1; d <= 14; d++) {
+    /// salta domingos y ~cada 3er día según el patrón del socio
+    const date = new Date(now - d * DAY);
+    if (date.getDay() === 0 || (d + i) % Math.max(2, 8 - daysAgo) !== 0) continue;
+    await db.collection('users').doc(memberIds[i]).collection('visits')
+      .doc(localDate(date)).set({
+        branch_id: members[i].branch, checkin_id: null,
+        at: Timestamp.fromMillis(date.getTime()),
+      });
+  }
+}
+console.log('✓ visits (lealtad)');
+
+// ═══ rewards (catálogo fijo) ═══
+const rewards = [
+  { id: 'smoothie', name: 'Smoothie gratis', desc: 'Un smoothie del bar al terminar tu entrenamiento', cost: 50, icon: 'cup' },
+  { id: 'guest-pass', name: 'Pase de invitado', desc: 'Un día gratis para un acompañante', cost: 100, icon: 'users' },
+  { id: 'pt-session', name: 'Sesión con entrenador', desc: '30 minutos de sesión personalizada', cost: 200, icon: 'dumbbell' },
+  { id: 'week-free', name: 'Semana gratis', desc: '7 días de extensión en tu membresía', cost: 350, icon: 'calendar' },
+  { id: 'merch', name: 'Kit merch RIR-HUB', desc: 'Playera + shaker de la marca del gym', cost: 500, icon: 'shirt' },
+];
+for (const r of rewards) {
+  await db.collection('rewards').doc(r.id).set({
+    name: r.name, description: r.desc, points_cost: r.cost,
+    icon: r.icon, image_url: '', active: true,
+    created_at: FieldValue.serverTimestamp(),
+  });
+}
+console.log('✓ rewards:', rewards.length);
 
 // ═══ payments (historial) ═══
 const paySeeds = [

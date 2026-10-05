@@ -4,6 +4,7 @@ import type { CheckInAlert, CheckInResult } from '#shared/types';
 
 import { closeExpiry } from '../utils/checkin-shared';
 import { db, toCheckIn } from '../utils/db';
+import { recordVisitAndReward } from '../utils/loyalty';
 import { verifyQrToken } from '../utils/qr';
 import { requireBranchScope, requireStaff } from '../utils/staff-auth';
 
@@ -224,6 +225,14 @@ export default defineEventHandler(async (event): Promise<CheckInResult> => {
     current_capacity: FieldValue.increment(1),
   });
   await batch.commit();
+
+  /// Lealtad: visita del día + premio por meta semanal. Si falla no debe
+  /// tumbar la respuesta del check-in (la entrada ya quedó registrada).
+  try {
+    await recordVisitAndReward(memberSnap.id, branchId, recordRef.id);
+  } catch (err) {
+    console.error('[loyalty] recordVisitAndReward falló:', err);
+  }
 
   return {
     granted: true,

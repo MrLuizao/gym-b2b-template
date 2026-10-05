@@ -4,10 +4,12 @@ import type { Conversation } from '#shared/types';
 
 import { db } from '../../utils/db';
 import { requireMember } from '../../utils/member-auth';
+import { rateLimit } from '../../utils/rate-limit';
 
 /// El socio crea o recupera su conversación abierta.
 export default defineEventHandler(async (event): Promise<Conversation> => {
   const member = await requireMember(event);
+  rateLimit(`support-conv:${member.id}`, 5, 60_000);
 
   // Buscar conversación abierta existente
   const existing = await db()

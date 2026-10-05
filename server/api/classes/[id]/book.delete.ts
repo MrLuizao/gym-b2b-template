@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 
 import { db } from '../../../utils/db';
+import { rateLimit } from '../../../utils/rate-limit';
 import { requireUser } from '../../../utils/staff-auth';
 
 /// Cancela la reserva confirmada del socio en esta clase para la fecha
@@ -8,6 +9,7 @@ import { requireUser } from '../../../utils/staff-auth';
 /// classes.booked (inscritos de hoy) sincronizados.
 export default defineEventHandler(async (event) => {
   const { uid } = await requireUser(event);
+  rateLimit(`book:${uid}`, 20, 60_000);
   const classId = getRouterParam(event, 'id') ?? '';
   const body = await readBody<{ date?: string; branchId?: string }>(event);
   const query = getQuery(event);

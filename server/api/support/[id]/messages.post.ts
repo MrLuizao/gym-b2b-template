@@ -5,6 +5,7 @@ import type { SupportMessage } from '#shared/types';
 import { db } from '../../../utils/db';
 import { useAdmin } from '../../../utils/firebase-admin';
 import { requireMember } from '../../../utils/member-auth';
+import { rateLimit } from '../../../utils/rate-limit';
 import { requireStaff } from '../../../utils/staff-auth';
 
 /// Envía un mensaje a la conversación — socio o staff según auth.
@@ -46,6 +47,7 @@ export default defineEventHandler(async (event): Promise<SupportMessage> => {
     unreadField = 'unread_member';
   } catch {
     const member = await requireMember(event);
+    rateLimit(`support-msg:${member.id}`, 20, 60_000);
     if (member.id !== conv.member_id) {
       throw createError({ statusCode: 403, message: 'No es tu conversación' });
     }

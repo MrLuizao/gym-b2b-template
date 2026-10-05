@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3';
 
+import { verifyAppCheck } from './app-check';
 import { useAdmin } from './firebase-admin';
 
 export interface MemberContext {
@@ -12,6 +13,7 @@ export interface MemberContext {
 /// Verifica el Bearer token de Firebase Auth y carga el doc del socio
 /// vinculado a ese auth_uid. Rechaza si no hay doc vinculado.
 export async function requireMember(event: H3Event): Promise<MemberContext> {
+  await verifyAppCheck(event);
   const header = getHeader(event, 'authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!token) {

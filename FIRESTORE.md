@@ -143,11 +143,17 @@ que llegó por correo).
 | `contact_email` | string | functions | Correo capturado en recepción — recibe el PIN; **independiente** del `email` de login |
 | `email` | string | functions | Email de la cuenta de login (Google/Apple) — se escribe al reclamar |
 | `claim_pin` | string | functions | PIN de activación de 6 díg — **se borra al reclamar** (single-use) |
+| `claim_attempts` | int | functions | Fallos consecutivos de PIN — a los **3** se bloquea 15 min |
+| `claim_locked_until` | timestamp | functions | Fin del lockout de claim — se borra al reclamar |
 | `id_number` | string | staff | Identificación |
 | `stripe_customer_id` | string | functions | Customer de Stripe (lazy) |
 | `last_checkin_at` | timestamp | functions | Última entrada — la app la muestra |
 | `active_checkin_id` | string \| null | functions | Check-in abierto — evita doble entrada |
 | `active_checkin_branch` | string \| null | functions | Sede del check-in abierto |
+| `weekly_goal` | int | socio | Meta de visitas por semana (default 4) — editable desde la app (whitelist en rules) |
+| `points` | int | functions | Balance de puntos de lealtad — `+50` al cumplir la meta semanal, se descuenta al canjear |
+| `goal_awarded_week` | string | functions | Lunes `yyyy-mm-dd` de la semana ya premiada — evita doble premio |
+| `goal_awarded_at` | timestamp | functions | Cuándo se otorgó el último premio |
 | `created_at` | timestamp | functions | |
 
 Lectura: el socio (su doc), staff según sede. Escritura de perfil: el socio
@@ -163,6 +169,41 @@ Cupones que el socio genera desde un anuncio de aliado.
 | `code` | string | Código canjeable |
 | `plan_ids` | string[] | Restricción de planes heredada |
 | `expires_at` | timestamp | |
+
+#### `/users/{userId}/visits/{yyyy-mm-dd}` — lealtad
+
+Historial durable de asistencias (los `checkins` se borran en el cierre
+de día — este es el registro que sobrevive). Doc id = fecha CDMX → un
+doc por día = dedupe gratis. Lo escribe `checkin.post` vía
+`recordVisitAndReward` (transacción) solo cuando el check-in es
+concedido. La app lo lee para la racha semanal y objetivos.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `branch_id` | string | Sede de la visita |
+| `checkin_id` | string \| null | → `checkins/{id}` (null en seed) |
+| `at` | timestamp | Hora de la visita |
+
+#### `/users/{userId}/redemptions/{redemptionId}` — lealtad
+
+Canjes de recompensas — los crea `POST /api/rewards/redeem` en
+transacción con la deducción de `points`. El socio muestra `code` en
+recepción; staff lo marca `used` (pendiente UI B2B).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `reward_id` | string | → `rewards/{id}` |
+| `reward_name` | string | Snapshot para display |
+| `points_spent` | int | Costo al momento del canje |
+| `member_id` | string | → `users/{id}` del socio |
+| `member_name` | string | Snapshot display (B2B lo lista) |
+| `branch_id` | string | Sede del socio — scope del listado staff |
+| `code` | string | `RWR-XXXXXX` — se muestra en recepción |
+| `status` | string | `active` \| `used` \| `expired` |
+| `created_at` | timestamp | |
+| `expires_at` | timestamp | +30 días del canje |
+| `used_at` | timestamp \| null | |
+| `used_by` | string \| null | uid de staff que validó el código |
 
 ---
 
@@ -413,6 +454,23 @@ Escritura: solo ADMIN. Contadores: functions vía `FieldValue.increment()`.
 
 ---
 
+### `/adEvents/{eventId}` — dedupe de métricas publicitarias
+
+Un doc por (anuncio, socio, evento, día): id `"{adId}_{uid}_{yyyy-mm-dd}_{evento}"`.
+`POST /api/ads/track` intenta `create()` — si ya existe, se omite el
+incremento de `sponsorAds.impressions/taps`. Así un socio no puede
+inflar métricas repitiendo el evento el mismo día. Escritura solo API
+(reglas: deny por default — no hay match explícito). Sin TTL por ahora;
+si crece, barrer docs >90 días en close-day.
+
+| Campo | Tipo |
+|---|---|
+| `ad_id` | string |
+| `uid` | string |
+| `event` | `impression` \| `tap` |
+| `date` | string `yyyy-mm-dd` CDMX |
+| `created_at` | timestamp |
+
 ### `/pushLogs/{logId}` — notificaciones
 
 | Campo | Tipo | Notas |
@@ -442,6 +500,25 @@ Escritura: solo ADMIN.
 | `tag` | string |
 
 Escritura: solo ADMIN.
+
+---
+
+### `/rewards/{rewardId}` — catálogo de lealtad
+
+Recompensas canjeables con puntos. Catálogo fijo sembrado por seed
+(`scripts/seed.mjs`) — administración B2B pendiente.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `name` | string | |
+| `description` | string | |
+| `points_cost` | int | |
+| `icon` | string | Id de icono — la app lo mapea a Material |
+| `image_url` | string | Vacío por ahora |
+| `active` | bool | La app solo lee `active == true` |
+| `created_at` | timestamp | |
+
+Escritura: ADMIN (o Admin SDK). Lectura: cualquier usuario firmado.
 
 ---
 
@@ -497,6 +574,8 @@ payments.plan_id           → plans.id
 plans.stripe_price_id      → Stripe Price
 users.stripe_customer_id   → Stripe Customer
 users/{id}/coupons.ad_id   → sponsorAds.id
+users/{id}/visits.{date}   → checkins.id (checkin_id) + branches.id
+users/{id}/redemptions.reward_id → rewards.id
 promotions.branch_id       → branches.id | null
 promotions.plan_ids[]      → plans.id | 'ALL'
 sponsorAds.branch_id       → branches.id | null
@@ -507,11 +586,11 @@ pushLogs.branch_id         → branches.id | null
 
 | Escritor | Colecciones / campos |
 |---|---|
-| **Solo Cloud Functions** | `payments`, `checkins`, `webhookEvents`; `users.membership_*`, `member_number`, `qr_code`, `stripe_customer_id`, `claim_pin`, `contact_email`; `branches.current_capacity`; `sponsorAds.impressions/taps`; `classes.booked` |
+| **Solo Cloud Functions** | `payments`, `checkins`, `webhookEvents`; `users.membership_*`, `member_number`, `qr_code`, `stripe_customer_id`, `claim_pin`, `contact_email`, `points`, `goal_awarded_*`; `users/{id}/visits`, `users/{id}/redemptions`; `branches.current_capacity`; `sponsorAds.impressions/taps`; `classes.booked` |
 | **ADMIN** | `config`, `plans`, `promotions`, `sponsorAds`, `pushLogs`, `store/products`, `staff`, `branches` (todas), `classes` (global), `trainers` (todo) |
 | **MANAGER** (su sede) | `branches[suSede]`, `users` (edita los de su sede), `trainers` (`shift`, `is_on_duty`, `branch_ids`), `classes.branch_times[suSede]` |
 | **RECEPTIONIST** (su sede) | `users` (crear en su sede); operación de check-in/pagos vía callables |
-| **Socio (app)** | su `users/{uid}` (campos de perfil), sus `coupons` |
+| **Socio (app)** | su `users/{uid}` (campos de perfil + `weekly_goal`), sus `coupons` |
 
 ## Flujos escritos por functions (implementadas en `functions/src/`)
 
@@ -553,8 +632,9 @@ pushLogs.branch_id         → branches.id | null
       real; el historial individual de entradas no aporta y cada reporte
       pagaría una lectura por doc. `dailyStats` da los mismos reportes a
       1 doc/día y `users.last_checkin_at` preserva retargeting de
-      inactivos. Costo de lo perdido: sin trazabilidad individual por
-      día (disputas se resuelven contra `payments`, que es permanente).
+      inactivos. La trazabilidad individual **por día** se restauró con
+      `users/{id}/visits` (lealtad — 1 doc/socio/día concedido); lo que
+      sigue sin existir es el detalle de múltiples entradas por día.
 
 ## Decisiones pendientes
 

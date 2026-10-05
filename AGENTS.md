@@ -1,4 +1,4 @@
-# Prototipo Gym B2B — Consola de administración
+# RIR-HUB B2B — Consola de administración
 
 Nuxt 3 + Vue 3 (`<script setup lang="ts">`) + Nuxt UI + Tailwind + Lucide.
 **Firebase activo** — Auth + Firestore + FCM son reales (ya no hay mock);
@@ -6,7 +6,7 @@ los endpoints en `server/api/**` escriben con firebase-admin y validan
 rol/sede server-side (`server/utils/staff-auth.ts`).
 
 Repo hermano — app del socio (Flutter):
-`/Users/luis/Develop/Personal/prototipo-gym` (tiene su propio `AGENTS.md`).
+`/Users/luis/Develop/Personal/rirhub-app` (tiene su propio `AGENTS.md`).
 
 **Modelo de negocio**: un proyecto Firebase = un negocio con varias sedes.
 No existe `brand_id` operativo; el branding vive en `/config/brand`.
@@ -148,6 +148,27 @@ Sin vínculo no ve datos del gym.
   menú + toast: `useSupportUnread` (singleton, escucha `unread_staff`,
   beep via Web Audio — el browser lo permite tras el primer click).
 
+### Lealtad (objetivos + recompensas)
+
+- `checkin.post` concedido → `recordVisitAndReward`
+  (`server/utils/loyalty.ts`, transacción): escribe
+  `users/{id}/visits/{yyyy-mm-dd}` (doc id = fecha CDMX → dedupe) y, si
+  el socio llegó a su `weekly_goal` esta semana (lunes-domingo CDMX),
+  suma `GOAL_BONUS_POINTS` (50) a `users.points` marcando
+  `goal_awarded_week` — una vez por semana. Fallo de lealtad NO tumba
+  el check-in (try/catch).
+- `users.weekly_goal` (default 4) lo edita el socio desde la app —
+  whitelisted en rules. `points` y `goal_awarded_*` solo functions.
+- `POST /api/rewards/redeem` `{rewardId}` (socio): transacción —
+  valida `rewards.active` + saldo → descuenta `points` y crea
+  `users/{id}/redemptions` (`code` `RWR-XXXXXX`, `active`, expira 30d).
+- Panel B2B `/recompensas`: catálogo CRUD (solo admin;
+  `GET/POST /api/rewards` + `PUT /api/rewards/:id`), KPIs de canje,
+  listado de canjes (`GET /api/rewards/redemptions`, scope por sede vía
+  `branch_id` embebido en el doc — collectionGroup query) y validación
+  del código en recepción (`POST /api/rewards/redemptions {code}` →
+  marca `used`, verifica vigencia + sede).
+
 ### Push / CMS
 
 - `pushLogs`: `status` draft/sent/failed + `target` (`auto|home|explore|
@@ -160,7 +181,33 @@ Sin vínculo no ve datos del gym.
   `expired_members`. `log.sent` = 1 por envío exitoso al topic (FCM no
   expone suscriptores); el KPI "Tasa de entrega" es SENT/(SENT+FAILED).
 
-## Matriz de permisos por perfil
+### Seguridad anti-abuso
+
+- **`server/utils/rate-limit.ts`** — ventana deslizante en memoria por
+  uid/endpoint (por instancia serverless). Aplicado a `members/claim`
+  (10/10min), `ads/track` (30/min), `support` conv+msg (5 y 20/min),
+  `rewards/redeem` (10/min), `classes/*/book` (20/min),
+  `payments/intent` (10/min).
+- **Lockout del claim PIN** — `users.claim_attempts`/`claim_locked_until`:
+  **3 fallos → 15 min bloqueado**; se resetean al reclamar bien.
+- **Dedupe de ads** — `/adEvents/{adId}_{uid}_{fecha}_{evento}` con
+  `create()`: 1 impresión/tap por socio por anuncio por día.
+- **App Check** — preparado en ambos clientes: app móvil con Play
+  Integrity / App Attest (iOS ya registrada), B2B web con reCAPTCHA
+  Enterprise ("Fraud Defense") en `useFirebase` — **requiere plan
+  Blaze**; en Spark el registro en consola falla y Google ya no acepta
+  reCAPTCHA Classic. Mientras `NUXT_PUBLIC_RECAPTCHA_SITE_KEY` esté
+  vacía App Check web no se inicializa (seguro: tokens inválidos darían
+  401). Tras migrar a Blaze: registrar la web app con Fraud Defense →
+  site key a la env → verificar que `X-Firebase-AppCheck` viaja en los
+  requests → `APP_CHECK_ENFORCE=1` + enforcement en Firestore/Auth. El `$api` web y el `ApiClient` de
+  Flutter mandan `X-Firebase-AppCheck`; `verifyAppCheck` corre en los
+  tres gates (`requireStaff`/`requireMember`/`requireUser`) +
+  `ads/track`: token inválido → 401 siempre; token ausente → tolerado
+  hasta que `APP_CHECK_ENFORCE=1` (env) lo haga obligatorio. Falta en
+  Console: registrar la app web con reCAPTCHA Enterprise (genera el
+  site key), los providers móviles, y prender enforcement por producto
+  (Firestore/Auth) + la env cuando todos los clientes manden token.
 
 ## Matriz de permisos por perfil
 
@@ -180,6 +227,7 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 | Entrenadores (`/entrenadores`) | ver | ver todo; crear auto-asignado a su sede; gestionar turno de coaches asignados | editar todo + asignar sedes |
 | Sedes (`/sedes`) | sin acceso | ver todas; editar solo la suya | editar todas + crear |
 | Membresías (`/membresias`) | sin acceso | ver catálogo — **NO puede editar ni crear** | editar + crear |
+| Recompensas (`/recompensas`) | ver + validar códigos de su sede | ver + validar códigos de su sede | editar catálogo + validar |
 | Publicidad (`/publicidad`) | sin acceso | ver (detalle solo lectura) | editar + crear + pausar + eliminar |
 | CMS (`/cms`) | sin acceso | ver (detalle solo lectura) | editar + crear + enviar + eliminar |
 | Reportes (`/reportes`) | sin acceso | todos los tipos, siempre filtrado a su sede | todos, cualquier sede |
