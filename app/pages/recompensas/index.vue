@@ -10,15 +10,27 @@ import {
   PlayCircle,
   Plus,
   Shirt,
+  Sparkles,
+  Target,
   Ticket,
   Trophy,
   Users,
+  Wallet,
 } from '@lucide/vue';
 
 import type { Reward } from '#shared/types';
 
-const { rewards, redemptions, pending, load, createReward, updateReward, useCode } =
-  useRewards();
+const {
+  rewards,
+  redemptions,
+  stats,
+  redemptionsByBranch,
+  pending,
+  load,
+  createReward,
+  updateReward,
+  useCode,
+} = useRewards();
 const { session } = useAuth();
 /// El catálogo es global — solo admin crea/edita. Gerente y recepción
 /// ven la lista y validan códigos de su sede.
@@ -194,6 +206,92 @@ onMounted(load);
         </p>
       </div>
     </div>
+
+    <!-- Analytics del programa -->
+    <section v-if="stats" class="space-y-3">
+      <h2
+        class="text-sm font-black uppercase tracking-widest text-text-muted"
+      >
+        Tracción del programa
+      </h2>
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="rounded-2xl border border-stroke bg-surface p-4">
+          <div class="flex items-center gap-2">
+            <Sparkles class="h-4 w-4 text-accent" />
+            <p
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Puntos emitidos
+            </p>
+          </div>
+          <p class="mt-2 text-xl font-black text-text-primary">
+            {{ stats.pointsIssued }}
+          </p>
+          <p class="text-[10px] font-semibold text-text-dim">
+            por metas semanales cumplidas
+          </p>
+        </div>
+        <div class="rounded-2xl border border-stroke bg-surface p-4">
+          <div class="flex items-center gap-2">
+            <Wallet class="h-4 w-4 text-accent" />
+            <p
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Saldo vivo
+            </p>
+          </div>
+          <p class="mt-2 text-xl font-black text-text-primary">
+            {{ stats.pointsOutstanding }}
+          </p>
+          <p class="text-[10px] font-semibold text-text-dim">
+            pts en manos de socios
+          </p>
+        </div>
+        <div class="rounded-2xl border border-stroke bg-surface p-4">
+          <div class="flex items-center gap-2">
+            <Target class="h-4 w-4 text-accent" />
+            <p
+              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+            >
+              Metas esta semana
+            </p>
+          </div>
+          <p class="mt-2 text-xl font-black text-text-primary">
+            {{ stats.goalsThisWeek }}
+          </p>
+          <p class="text-[10px] font-semibold text-text-dim">
+            socios que ya cumplieron
+          </p>
+        </div>
+        <div class="rounded-2xl border border-stroke bg-surface p-4">
+          <p
+            class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+          >
+            Canjes por sede
+          </p>
+          <div class="mt-2 space-y-1">
+            <p
+              v-if="!redemptionsByBranch.length"
+              class="text-[11px] text-text-dim"
+            >
+              Sin canjes aún
+            </p>
+            <div
+              v-for="row in redemptionsByBranch"
+              :key="row.branchId"
+              class="flex items-center justify-between text-[12px]"
+            >
+              <span class="font-semibold text-text-primary">{{
+                row.branchName
+              }}</span>
+              <span class="font-black text-accent"
+                >{{ row.count }} · {{ row.points }} pts</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Validación de código -->
     <section class="rounded-2xl border border-stroke bg-surface p-5">

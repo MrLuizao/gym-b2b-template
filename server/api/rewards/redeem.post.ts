@@ -16,7 +16,7 @@ function redemptionCode(): string {
 /// veces con el mismo saldo.
 export default defineEventHandler(async (event) => {
   const member = await requireMember(event);
-  rateLimit(`redeem:${member.id}`, 10, 60_000);
+  await rateLimit(`redeem:${member.id}`, 10, 60_000);
   const body = await readBody<{ rewardId?: string }>(event);
   const rewardId = body?.rewardId ?? '';
   if (!rewardId) {

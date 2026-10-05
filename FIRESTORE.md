@@ -35,11 +35,12 @@ otro proyecto Firebase, no otro tenant.
 /classes/{classId}               clases (definición + overrides por sede)
 
 /users/{userId}                  socios
-/users/{userId}/coupons/{id}     cupones generados del socio
+/users/{userId}/coupons/{id}     cupones generados del socio (rules: solo lectura)
 /staff/{uid}                     personal (rol + sede)
 
 /checkins/{checkinId}            entradas del día (TTL — se borran solas)
 /bookings/{bookingId}            reservas de clase por ocurrencia (class_date)
+/bookings_archive/{id}            reservas archivadas por el close-day (solo staff)
 /dailyStats/{statId}             agregado diario por sede (historia de reportes)
 /forecasts/{branchId}            aforo típico por hora/día de semana (app)
 /payments/{paymentId}            pagos (solo functions escribe)
@@ -47,6 +48,8 @@ otro proyecto Firebase, no otro tenant.
 
 /promotions/{promotionId}        banners + cupones CMS
 /sponsorAds/{adId}               anuncios de aliados + métricas
+/adEvents/{id}                    dedupe 1 evento/socio/anuncio/día
+/adStats/{adId}_{fecha}           serie diaria única por anuncio (reportes)
 /pushLogs/{logId}                notificaciones push enviadas
 /store/products/{productId}      tienda de la app
 ```
@@ -152,6 +155,7 @@ que llegó por correo).
 | `active_checkin_branch` | string \| null | functions | Sede del check-in abierto |
 | `weekly_goal` | int | socio | Meta de visitas por semana (default 4) — editable desde la app (whitelist en rules) |
 | `points` | int | functions | Balance de puntos de lealtad — `+50` al cumplir la meta semanal, se descuenta al canjear |
+| `points_earned` | int | functions | Acumulado histórico de puntos emitidos (KPI `/api/rewards/stats`) |
 | `goal_awarded_week` | string | functions | Lunes `yyyy-mm-dd` de la semana ya premiada — evita doble premio |
 | `goal_awarded_at` | timestamp | functions | Cuándo se otorgó el último premio |
 | `created_at` | timestamp | functions | |
@@ -267,8 +271,10 @@ reservas simultáneas no rebasan `capacity` de esa sede. `DELETE` toma
 ### `/bookings/{bookingId}` — reservas de clase
 
 Escritura solo vía API (functions); el socio lee las suyas
-(`auth_uid == uid`). Historial persistente — el roster del día filtra
-`class_date == hoy`.
+(`auth_uid == uid`, stream acotado a `class_date >= hoy`). Las reservas
+con `class_date < hoy` se archivan a `/bookings_archive` en el close-day
+(`archivePastBookings`, lotes de 400) — ahí quedan como historial para
+reportes; lectura solo staff.
 
 | Campo | Tipo | Notas |
 |---|---|---|
@@ -470,6 +476,20 @@ si crece, barrer docs >90 días en close-day.
 | `event` | `impression` \| `tap` |
 | `date` | string `yyyy-mm-dd` CDMX |
 | `created_at` | timestamp |
+
+### `/adStats/{adId}_{yyyy-mm-dd}` — serie diaria por anuncio
+
+Se incrementa en `track.post` SOLO cuando el evento pasó el dedupe
+(`adEvents` recién creado) → conteo de eventos únicos reales por día.
+Lo lee `GET /api/ads/{id}/stats` (admin/gerente) para la gráfica de 30
+días en `/publicidad/[id]`.
+
+| Campo | Tipo |
+|---|---|
+| `ad_id` | string |
+| `date` | string `yyyy-mm-dd` CDMX |
+| `impressions` | int |
+| `taps` | int |
 
 ### `/pushLogs/{logId}` — notificaciones
 

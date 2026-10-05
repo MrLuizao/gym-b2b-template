@@ -7,7 +7,7 @@ import { useStripe } from '../../utils/stripe';
 /// El doc en /payments lo escribe el webhook al confirmarse el cobro.
 export default defineEventHandler(async (event) => {
   const { uid, email } = await requireUser(event);
-  rateLimit(`intent:${uid}`, 10, 60_000);
+  await rateLimit(`intent:${uid}`, 10, 60_000);
   const body = await readBody<{ planId?: string }>(event);
   const planId = body?.planId;
   if (typeof planId !== 'string' || !planId) {

@@ -25,7 +25,7 @@ export default defineEventHandler(async (event): Promise<{ ok: true }> => {
   } catch {
     throw createError({ statusCode: 401, statusMessage: 'Token inválido' });
   }
-  rateLimit(`track:${uid}`, 30, 60_000);
+  await rateLimit(`track:${uid}`, 30, 60_000);
 
   const body = await readBody<{ adId?: string; event?: 'impression' | 'tap' }>(
     event,
@@ -61,10 +61,26 @@ export default defineEventHandler(async (event): Promise<{ ok: true }> => {
     return { ok: true };
   }
 
-  await ref.update(
-    kind === 'tap'
-      ? { taps: FieldValue.increment(1) }
-      : { impressions: FieldValue.increment(1) },
-  );
+  await Promise.all([
+    ref.update(
+      kind === 'tap'
+        ? { taps: FieldValue.increment(1) }
+        : { impressions: FieldValue.increment(1) },
+    ),
+    /// Serie diaria para reportes — `adStats/{adId}_{fecha}` solo se toca
+    /// en eventos únicos reales (tras pasar el dedupe).
+    db()
+      .collection('adStats')
+      .doc(`${adId}_${today}`)
+      .set(
+        {
+          ad_id: adId,
+          date: today,
+          impressions: FieldValue.increment(kind === 'impression' ? 1 : 0),
+          taps: FieldValue.increment(kind === 'tap' ? 1 : 0),
+        },
+        { merge: true },
+      ),
+  ]);
   return { ok: true };
 });

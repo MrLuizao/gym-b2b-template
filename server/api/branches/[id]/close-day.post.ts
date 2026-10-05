@@ -1,5 +1,9 @@
 import { db } from '../../../utils/db';
-import { sweepCheckins, sweepClassBookings } from '../../../utils/close-day';
+import {
+  archivePastBookings,
+  sweepCheckins,
+  sweepClassBookings,
+} from '../../../utils/close-day';
 import { requireStaff } from '../../../utils/staff-auth';
 
 /// Cierre manual de una sede: barre SUS check-ins vivos a dailyStats
@@ -32,7 +36,8 @@ export default defineEventHandler(async (event) => {
     .get();
   const days = await sweepCheckins(snap.docs);
   const classes = await sweepClassBookings(branchId);
+  const archived = await archivePastBookings(branchId);
   await branchRef.update({ current_capacity: 0 });
 
-  return { swept: snap.size, days, classes };
+  return { swept: snap.size, days, classes, archived };
 });

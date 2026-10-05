@@ -1,5 +1,9 @@
 import { db } from '../../utils/db';
-import { sweepCheckins, sweepClassBookings } from '../../utils/close-day';
+import {
+  archivePastBookings,
+  sweepCheckins,
+  sweepClassBookings,
+} from '../../utils/close-day';
 
 const CRON_SECRET = process.env.CRON_SECRET ?? '';
 
@@ -24,10 +28,12 @@ export default defineEventHandler(async (event) => {
   /// Reset de aforo y cupo de clases en todas las sedes.
   const branches = await db().collection('branches').get();
   let classes = 0;
+  let archived = 0;
   for (const branchDoc of branches.docs) {
     await branchDoc.ref.update({ current_capacity: 0 });
     classes += await sweepClassBookings(branchDoc.id);
+    archived += await archivePastBookings(branchDoc.id);
   }
 
-  return { swept: snap.size, days: results, classes };
+  return { swept: snap.size, days: results, classes, archived };
 });

@@ -1,6 +1,7 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 
 import { db } from './db';
+import { useAdmin } from './firebase-admin';
 
 const TZ = 'America/Mexico_City';
 
@@ -32,7 +33,9 @@ export function weekBounds(now = new Date()): {
 /// Registra la visita del día (`users/{id}/visits/{yyyy-mm-dd}`) y premia
 /// con GOAL_BONUS_POINTS si el socio alcanzó su meta semanal — una sola
 /// vez por semana (`goal_awarded_week` lo marca). Transacción para no
-/// duplicar el premio ni la visita.
+/// duplicar el premio ni la visita. Al premiar, dispara push FCM al
+/// topic personal del socio (`data.type='loyalty'` → la app abre
+/// Recompensas al tocarla).
 export async function recordVisitAndReward(
   userId: string,
   branchId: string,
@@ -43,7 +46,7 @@ export async function recordVisitAndReward(
   const visitsCol = userRef.collection('visits');
   const visitRef = visitsCol.doc(today);
 
-  await db().runTransaction(async (tx) => {
+  const awarded = await db().runTransaction(async (tx) => {
     const [userDoc, visitDoc, weekSnap] = await Promise.all([
       tx.get(userRef),
       tx.get(visitRef),
@@ -64,16 +67,33 @@ export async function recordVisitAndReward(
 
     const data = userDoc.data() ?? {};
     const goal = Number(data.weekly_goal ?? 4);
-    if (
+    const award =
       goal > 0 &&
       data.goal_awarded_week !== weekKey &&
-      weekSnap.size + (visitDoc.exists ? 0 : 1) >= goal
-    ) {
+      weekSnap.size + (visitDoc.exists ? 0 : 1) >= goal;
+    if (award) {
       tx.update(userRef, {
         points: FieldValue.increment(GOAL_BONUS_POINTS),
+        points_earned: FieldValue.increment(GOAL_BONUS_POINTS),
         goal_awarded_week: weekKey,
         goal_awarded_at: FieldValue.serverTimestamp(),
       });
     }
+    return award;
   });
+
+  if (awarded) {
+    try {
+      await useAdmin().messaging.send({
+        topic: `member_${userId}`,
+        notification: {
+          title: '¡Meta semanal cumplida!',
+          body: `Ganaste ${GOAL_BONUS_POINTS} puntos — canjéalos por recompensas`,
+        },
+        data: { type: 'loyalty' },
+      });
+    } catch {
+      /// Push best-effort — el premio ya quedó en Firestore.
+    }
+  }
 }

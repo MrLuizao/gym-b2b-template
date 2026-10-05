@@ -177,9 +177,11 @@ service cloud.firestore {
       match /coupons/{couponId} {
         // El doc padre puede estar bajo auth_uid (reclamo) — por eso
         // va por get() y no por resource.
+        // Escritura cerrada al cliente: el self-write ilimitado era
+        // superficie de spam sin uso real (el claim de cupón irá por API
+        // con contador server-side — cap de cupones activos por socio).
         allow read: if isSelfDoc(uid) || isStaff();
-        allow create, update: if isSelfDoc(uid);
-        allow delete: if isAdmin();
+        allow create, update, delete: if false;
       }
 
       // Lealtad: historial de visitas y canjes — escritura solo
@@ -237,6 +239,13 @@ service cloud.firestore {
     match /bookings/{id} {
       allow read: if isStaff()
         || (signedIn() && resource.data.auth_uid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    // Historial de reservas archivadas en el cierre de día — solo
+    // lectura staff (reportes); escritura exclusiva del backend.
+    match /bookings_archive/{id} {
+      allow read: if isStaff();
       allow create, update, delete: if false;
     }
 

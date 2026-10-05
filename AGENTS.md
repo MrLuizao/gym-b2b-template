@@ -156,9 +156,16 @@ Sin vínculo no ve datos del gym.
   el socio llegó a su `weekly_goal` esta semana (lunes-domingo CDMX),
   suma `GOAL_BONUS_POINTS` (50) a `users.points` marcando
   `goal_awarded_week` — una vez por semana. Fallo de lealtad NO tumba
-  el check-in (try/catch).
+  el check-in (try/catch). También mantiene `points_earned`
+  (acumulado histórico — `points` solo es saldo) y al premiar manda
+  push FCM a `member_{userId}` con `data.type='loyalty'` (la app abre
+  Recompensas al tocarla).
 - `users.weekly_goal` (default 4) lo edita el socio desde la app —
   whitelisted en rules. `points` y `goal_awarded_*` solo functions.
+- `GET /api/rewards/stats` — KPIs vía agregaciones: `points_earned`
+  emitidos, saldo vivo `points`, socios con meta cumplida esta semana
+  (scope por sede para no-admin). La página los muestra junto al
+  desglose de canjes por sede.
 - `POST /api/rewards/redeem` `{rewardId}` (socio): transacción —
   valida `rewards.active` + saldo → descuenta `points` y crea
   `users/{id}/redemptions` (`code` `RWR-XXXXXX`, `active`, expira 30d).
@@ -183,15 +190,21 @@ Sin vínculo no ve datos del gym.
 
 ### Seguridad anti-abuso
 
-- **`server/utils/rate-limit.ts`** — ventana deslizante en memoria por
-  uid/endpoint (por instancia serverless). Aplicado a `members/claim`
+- **`server/utils/rate-limit.ts`** — async; doble nivel: memoria por
+  instancia (siempre) + Upstash Redis si `UPSTASH_REDIS_REST_URL`/`TOKEN`
+  están (ventana fija `SET NX PX`+`INCR` — conteo real entre lambdas;
+  fail-open al límite local si Redis cae). Ventana deslizante local por
+  uid/endpoint. Aplicado a `members/claim`
   (10/10min), `ads/track` (30/min), `support` conv+msg (5 y 20/min),
   `rewards/redeem` (10/min), `classes/*/book` (20/min),
   `payments/intent` (10/min).
 - **Lockout del claim PIN** — `users.claim_attempts`/`claim_locked_until`:
   **3 fallos → 15 min bloqueado**; se resetean al reclamar bien.
 - **Dedupe de ads** — `/adEvents/{adId}_{uid}_{fecha}_{evento}` con
-  `create()`: 1 impresión/tap por socio por anuncio por día.
+  `create()`: 1 impresión/tap por socio por anuncio por día. Además
+  `/adStats/{adId}_{fecha}` acumula la serie diaria (solo eventos que
+  pasaron el dedupe) — la lee `GET /api/ads/{id}/stats` (admin/gerente)
+  para la gráfica de 30d en `/publicidad/[id]`.
 - **App Check** — preparado en ambos clientes: app móvil con Play
   Integrity / App Attest (iOS ya registrada), B2B web con reCAPTCHA
   Enterprise ("Fraud Defense") en `useFirebase` — **requiere plan
@@ -299,9 +312,17 @@ su propia sede (`session.branchId`), el admin cualquier sede.
   sin deploy a producción + env `CRON_SECRET`. Hoy el cierre es manual
   (botón header) o vía cron-job.org. `auto-checkout` sí corre en
   cron-job.org cada 15 min.
-- **`bookings` sin TTL**: crecen como historial; si el volumen molesta,
-  archivar en el close-day.
+- **`bookings` archivadas**: el close-day mueve las de `class_date <
+  hoy` a `/bookings_archive` (lectura solo staff — índice
+  `branch_id + class_date` deployado). La colección viva queda acotada.
 - `html5-qrcode` está en `package.json` sin uso (recepción usa lector USB).
+- **Rate limit in-memory en serverless**: `rate-limit.ts` cuenta por
+  instancia — en Vercel cada lambda tiene su propia ventana y un bot
+  distribuido la diluye. Suficiente contra abuso casual; si hay abuso
+  real migrar a Upstash Redis (`@upstash/redis`, free tier 10k
+  comandos/día) — INCR+EXPIRE reemplaza el `Map`, la firma de
+  `rateLimit()` no cambia. Alternativa: Vercel WAF (Pro) o Cloudflare
+  delante del dominio.
 - **Wellhub/TotalPass reales**: `validatePartnerToken` es mock — falta
   el convenio del gym (Partner Portal) para obtener API keys, base URL
   y saber qué artefacto valida cada agregador (QR, token, lookup por

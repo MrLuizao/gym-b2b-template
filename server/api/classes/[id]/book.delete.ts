@@ -9,7 +9,7 @@ import { requireUser } from '../../../utils/staff-auth';
 /// classes.booked (inscritos de hoy) sincronizados.
 export default defineEventHandler(async (event) => {
   const { uid } = await requireUser(event);
-  rateLimit(`book:${uid}`, 20, 60_000);
+  await rateLimit(`book:${uid}`, 20, 60_000);
   const classId = getRouterParam(event, 'id') ?? '';
   const body = await readBody<{ date?: string; branchId?: string }>(event);
   const query = getQuery(event);

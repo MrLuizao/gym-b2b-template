@@ -174,14 +174,27 @@ const preview = computed(() => {
 
 const onAlly = computed(() => readableOn(preview.value.brandColor));
 
+/// Serie diaria 30d desde `adStats` (eventos únicos deduplicados).
+interface AdDailyStat {
+  date: string;
+  impressions: number;
+  taps: number;
+}
+const dailyStats = ref<AdDailyStat[]>([]);
+const maxImpressions = computed(() =>
+  Math.max(1, ...dailyStats.value.map((d) => d.impressions)),
+);
+
 onMounted(async () => {
   try {
-    const [branchList, data] = await Promise.all([
+    const [branchList, data, stats] = await Promise.all([
       $api<Branch[]>('/api/branches'),
       $api<SponsorAd>(`/api/cms/ads/${route.params.id}`),
+      $api<{ days: AdDailyStat[] }>(`/api/ads/${route.params.id}/stats`),
     ]);
     branches.value = branchList;
     ad.value = data;
+    dailyStats.value = stats.days;
   } catch {
     ad.value = null;
   } finally {
@@ -510,6 +523,50 @@ async function removeAd(): Promise<void> {
         </p>
       </div>
     </div>
+
+    <!-- Rendimiento diario — eventos únicos por socio/día -->
+    <section
+      v-if="dailyStats.length"
+      class="rounded-2xl border border-stroke bg-surface p-5"
+    >
+      <div class="flex items-center justify-between">
+        <h2 class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+          Rendimiento · últimos 30 días
+        </h2>
+        <div class="flex items-center gap-3 text-[10px] font-bold text-text-dim">
+          <span class="flex items-center gap-1">
+            <i class="inline-block h-2 w-2 rounded-full bg-text-dim" />
+            Impresiones
+          </span>
+          <span class="flex items-center gap-1">
+            <i class="inline-block h-2 w-2 rounded-full bg-accent" />
+            Taps
+          </span>
+        </div>
+      </div>
+      <div class="mt-4 flex h-24 items-end gap-[3px]">
+        <div
+          v-for="d in dailyStats"
+          :key="d.date"
+          class="relative flex-1 rounded-t-[3px] bg-stroke/60"
+          :style="{
+            height: `${Math.max(4, (d.impressions / maxImpressions) * 100)}%`,
+          }"
+          :title="`${d.date} — ${d.impressions} imp · ${d.taps} taps`"
+        >
+          <div
+            class="absolute inset-x-0 bottom-0 rounded-t-[3px] bg-accent"
+            :style="{
+              height: `${Math.min(100, (d.taps / Math.max(1, d.impressions)) * 100)}%`,
+            }"
+          />
+        </div>
+      </div>
+      <p class="mt-2 text-[10px] font-semibold text-text-dim">
+        Una impresión/tap por socio por día — métrica honesta para el
+        patrocinador.
+      </p>
+    </section>
 
     <section class="rounded-2xl border border-stroke bg-surface p-5">
       <div class="flex items-center justify-between">

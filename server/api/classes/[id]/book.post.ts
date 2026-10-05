@@ -37,7 +37,7 @@ function addDays(date: string, days: number): string {
 
 export default defineEventHandler(async (event) => {
   const { uid } = await requireUser(event);
-  rateLimit(`book:${uid}`, 20, 60_000);
+  await rateLimit(`book:${uid}`, 20, 60_000);
   const classId = getRouterParam(event, 'id') ?? '';
   const body = await readBody<{ date?: string; branchId?: string }>(event);
 

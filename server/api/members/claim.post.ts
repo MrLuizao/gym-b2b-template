@@ -14,7 +14,7 @@ import { requireUser } from '../../utils/staff-auth';
 export default defineEventHandler(async (event): Promise<{ member: Member }> => {
   const user = await requireUser(event);
   /// Freno contra enumeración de member_number/PIN por bots.
-  rateLimit(`claim:${user.uid}`, 10, 10 * 60_000);
+  await rateLimit(`claim:${user.uid}`, 10, 10 * 60_000);
   const body = await readBody<{ memberNumber?: string; pin?: string }>(event);
 
   const memberNumber = body?.memberNumber?.trim().toUpperCase() ?? '';

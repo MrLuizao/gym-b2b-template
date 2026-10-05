@@ -194,3 +194,32 @@ export async function sweepClassBookings(branchId: string): Promise<number> {
   if (touched > 0) await batch.commit();
   return touched;
 }
+
+/// Mueve reservas con `class_date < hoy` a `/bookings_archive` — la
+/// colección viva queda acotada a reservas presentes/futuras; el archivo
+/// queda para reportes históricos. En lotes de 400 (tope 500/batch).
+export async function archivePastBookings(branchId: string): Promise<number> {
+  const today = localDateString(new Date());
+  let moved = 0;
+  for (;;) {
+    const snap = await db()
+      .collection('bookings')
+      .where('branch_id', '==', branchId)
+      .where('class_date', '<', today)
+      .limit(400)
+      .get();
+    if (snap.empty) break;
+    const batch = db().batch();
+    for (const doc of snap.docs) {
+      batch.set(db().collection('bookings_archive').doc(doc.id), {
+        ...doc.data(),
+        archived_at: FieldValue.serverTimestamp(),
+      });
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
+    moved += snap.size;
+    if (snap.size < 400) break;
+  }
+  return moved;
+}

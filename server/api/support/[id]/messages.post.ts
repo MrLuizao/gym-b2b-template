@@ -47,7 +47,7 @@ export default defineEventHandler(async (event): Promise<SupportMessage> => {
     unreadField = 'unread_member';
   } catch {
     const member = await requireMember(event);
-    rateLimit(`support-msg:${member.id}`, 20, 60_000);
+    await rateLimit(`support-msg:${member.id}`, 20, 60_000);
     if (member.id !== conv.member_id) {
       throw createError({ statusCode: 403, message: 'No es tu conversación' });
     }
