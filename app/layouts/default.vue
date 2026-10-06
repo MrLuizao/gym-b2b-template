@@ -282,6 +282,12 @@ onMounted(() => {
             <LogOut class="h-4 w-4" />
           </button>
         </div>
+        <NuxtLink
+          to="/legal/aviso-privacidad"
+          class="mt-3 block text-center text-[10px] text-text-dim underline underline-offset-2 transition hover:text-text-primary"
+        >
+          Aviso de privacidad
+        </NuxtLink>
       </div>
     </aside>
 

@@ -114,6 +114,15 @@ async function submit(): Promise<void> {
             : 'Modo demo: cualquier email válido y contraseña de 4+ caracteres.' }}
         </p>
       </form>
+
+      <p class="mt-6 text-center text-[10px] text-text-dim">
+        <NuxtLink
+          to="/legal/aviso-privacidad"
+          class="underline underline-offset-2 transition hover:text-text-primary"
+        >
+          Aviso de privacidad
+        </NuxtLink>
+      </p>
     </div>
   </div>
 </template>

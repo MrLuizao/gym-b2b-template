@@ -6,6 +6,7 @@ export default defineNuxtRouteMiddleware((to) => {
       : undefined;
   }
   if (!isAuthenticated.value) {
+    if (to.path.startsWith('/legal')) return;
     return navigateTo('/login');
   }
   if (!canAccess(session.value?.role, to.path)) {
