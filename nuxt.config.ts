@@ -4,6 +4,11 @@ export default defineNuxtConfig({
 
   modules: ['@nuxt/ui'],
 
+  /* App dark-only: el color-mode module prioriza localStorage sobre
+     preference y cualquier valor viejo deja los componentes Nuxt UI en
+     light — se desactiva y la clase `dark` va fija en htmlAttrs */
+  ui: { colorMode: false },
+
   css: ['~/assets/css/main.css'],
 
   app: {
@@ -23,10 +28,6 @@ export default defineNuxtConfig({
         },
       ],
     },
-  },
-
-  colorMode: {
-    preference: 'dark',
   },
 
   runtimeConfig: {

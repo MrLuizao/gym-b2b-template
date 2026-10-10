@@ -56,6 +56,8 @@ const socialsOpen = ref(false);
 /// True cuando el usuario movió el pin a mano — la auto-geocodificación
 /// de la dirección deja de tocar lat/lng para no pisar su ajuste.
 const pinTouched = ref(false);
+const geocoding = ref(false);
+let geocodeTimer: ReturnType<typeof setTimeout> | null = null;
 
 /// Centro del mapa: la sede elegida (o la primera con coords); CDMX
 /// como último recurso.
@@ -71,12 +73,22 @@ const mapCenter = computed(() => {
     : { lat: 19.4326, lng: -99.1332 };
 });
 
-/// Al salir del campo dirección intentamos ubicar el texto — si el
-/// usuario ya movió el pin a mano no se toca. Fallo silencioso: el
-/// mapa sigue permitiendo marcar el punto manualmente.
+/// Ubicamos la dirección automáticamente ~1s después de que el usuario
+/// deja de escribir — no depende de blur/TAB. Si ya movió el pin a mano
+/// no se toca. Fallo silencioso: el mapa sigue permitiendo marcar a mano.
+watch(
+  () => form.value.address,
+  () => {
+    if (geocodeTimer) clearTimeout(geocodeTimer);
+    if (pinTouched.value || form.value.address.trim().length < 8) return;
+    geocodeTimer = setTimeout(geocodeDraft, 900);
+  },
+);
+
 async function geocodeDraft(): Promise<void> {
   const q = form.value.address.trim();
   if (q.length < 8 || pinTouched.value) return;
+  geocoding.value = true;
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=mx`,
@@ -90,6 +102,8 @@ async function geocodeDraft(): Promise<void> {
     }
   } catch {
     /// El mapa queda para marcar a mano.
+  } finally {
+    geocoding.value = false;
   }
 }
 
@@ -559,10 +573,9 @@ onMounted(async () => {
                     type="text"
                     placeholder="Calle, número, colonia, ciudad"
                     class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
-                    @blur="geocodeDraft"
                   />
                   <span class="mt-1 block text-[10px] font-semibold text-text-dim">
-                    Con ella ubicamos tu negocio en el mapa — el botón
+                    El mapa ubica tu negocio mientras escribes — el botón
                     "Cómo llegar" de la app lleva a los socios a tu puerta.
                   </span>
                 </label>
@@ -573,7 +586,12 @@ onMounted(async () => {
                       >Confirma tu ubicación</span
                     >
                     <span
-                      v-if="form.lat != null"
+                      v-if="geocoding"
+                      class="text-[10px] font-bold text-text-dim"
+                      >Buscando en el mapa…</span
+                    >
+                    <span
+                      v-else-if="form.lat != null"
                       class="text-[10px] font-bold text-emerald-400"
                       >Ubicación marcada ✓</span
                     >

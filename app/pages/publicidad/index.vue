@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   Check,
-  Copy,
   Hourglass,
   Layers,
   PauseCircle,
@@ -12,7 +11,7 @@ import {
   Undo2,
 } from '@lucide/vue';
 
-import type { AdOrder, AdSelfServeConfig, Branch, SponsorAd } from '#shared/types';
+import type { AdOrder, Branch, SponsorAd } from '#shared/types';
 
 const {
   ads,
@@ -24,7 +23,6 @@ const {
   loadAdsConfig,
   approveOrder,
   rejectOrder,
-  saveAdsConfig,
 } = useCms();
 const { session } = useAuth();
 /// El inventario publicitario es comercial/global — solo el admin lo edita.
@@ -121,74 +119,13 @@ function formatDay(ts: number): string {
   });
 }
 
-// ── Venta directa (self-serve) ──
+// ── Revisión de órdenes self-serve ──
 
-const configDraft = ref<AdSelfServeConfig | null>(null);
-const configOpen = ref(false);
-const savingConfig = ref(false);
-const linkCopied = ref(false);
 const orderError = ref<string | null>(null);
 const processingOrder = ref<string | null>(null);
 const rejectTarget = ref<AdOrder | null>(null);
 const rejectReason = ref('');
 const rejecting = ref(false);
-
-const selfServeUrl = computed(() =>
-  import.meta.client ? `${window.location.origin}/anuncia` : '/anuncia',
-);
-
-function openConfig(): void {
-  const c = adsConfig.value;
-  configDraft.value = c
-    ? JSON.parse(JSON.stringify(c))
-    : {
-        enabled: false,
-        slots: {
-          carousel: { enabled: true, pricePerWeek: 500 },
-          list: { enabled: true, pricePerWeek: 250 },
-          both: { enabled: true, pricePerWeek: 650 },
-        },
-      };
-  /// Docs viejos de /config/ads no tienen el bloque notify.
-  configDraft.value!.notify ??= { global: [], byBranch: {} };
-  configOpen.value = true;
-}
-
-/// Correos globales como texto — el modelo guarda un arreglo.
-const globalNotifyText = computed({
-  get: () => configDraft.value?.notify.global.join(', ') ?? '',
-  set: (v: string) => {
-    if (configDraft.value) {
-      configDraft.value.notify.global = v
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-  },
-});
-
-async function saveConfig(): Promise<void> {
-  if (!configDraft.value || savingConfig.value) return;
-  savingConfig.value = true;
-  try {
-    await saveAdsConfig(configDraft.value);
-    configOpen.value = false;
-  } finally {
-    savingConfig.value = false;
-  }
-}
-
-async function copyLink(): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(selfServeUrl.value);
-    linkCopied.value = true;
-    setTimeout(() => {
-      linkCopied.value = false;
-    }, 2000);
-  } catch {
-    /// Portapapeles bloqueado — el texto queda a la vista para copiar.
-  }
-}
 
 async function approve(order: AdOrder): Promise<void> {
   if (processingOrder.value) return;
@@ -233,12 +170,6 @@ function placementName(p: AdOrder['placement']): string {
   if (p === 'both') return 'Home + Aliados';
   return p === 'carousel' ? 'Carrusel del Home' : 'Directorio de Aliados';
 }
-
-const slotMeta: Record<SponsorAd['placement'], { label: string; hint: string }> = {
-  carousel: { label: 'Carrusel del Home', hint: 'Banner premium del Home' },
-  list: { label: 'Directorio de Aliados', hint: 'Listado en Aliados' },
-  both: { label: 'Home + Aliados', hint: 'Combo — sale en ambas superficies' },
-};
 
 onMounted(async () => {
   await Promise.all([load(), loadOrders(), loadAdsConfig()]);
@@ -475,7 +406,7 @@ onMounted(async () => {
           <button
             v-if="isAdmin"
             class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-4 py-1.5 text-[11px] font-black text-text-muted transition hover:border-accent/50 hover:text-text-primary"
-            @click="openConfig"
+            @click="navigateTo('/publicidad/venta-directa')"
           >
             <Settings2 class="h-3.5 w-3.5" />
             Venta directa
@@ -636,141 +567,6 @@ onMounted(async () => {
         </p>
       </div>
     </section>
-
-    <!-- Config de venta directa — precios por espacio y liga pública -->
-    <UModal
-      v-model:open="configOpen"
-      title="Venta directa de publicidad"
-      :description="'Cualquier negocio puede comprar su anuncio en ' + selfServeUrl + ' — sube su creativo, paga y tú solo apruebas.'"
-    >
-      <template #body>
-        <div v-if="configDraft" class="space-y-4">
-          <div
-            class="flex items-center justify-between rounded-xl border border-stroke bg-base px-4 py-3"
-          >
-            <div>
-              <p class="text-xs font-black text-text-primary">
-                Venta directa activa
-              </p>
-              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
-                Apágala si no quieres recibir solicitudes nuevas
-              </p>
-            </div>
-            <button
-              type="button"
-              class="relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition"
-              :class="
-                configDraft.enabled
-                  ? 'bg-accent'
-                  : 'border border-stroke bg-base'
-              "
-              @click="configDraft.enabled = !configDraft.enabled"
-            >
-              <span
-                class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
-                :class="
-                  configDraft.enabled ? 'left-[22px] bg-base' : 'left-0.5 bg-white'
-                "
-              />
-            </button>
-          </div>
-          <div
-            v-for="slot in (['carousel', 'list', 'both'] as const)"
-            :key="slot"
-            class="flex items-center justify-between gap-3 rounded-xl border border-stroke bg-base px-4 py-3"
-          >
-            <div class="min-w-0">
-              <p class="text-xs font-black text-text-primary">
-                {{ slotMeta[slot].label }}
-              </p>
-              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
-                {{ slotMeta[slot].hint }}
-              </p>
-            </div>
-            <div class="flex shrink-0 items-center gap-2">
-              <input
-                v-model.number="configDraft.slots[slot].pricePerWeek"
-                type="number"
-                min="0"
-                step="50"
-                class="w-24 rounded-lg border border-stroke bg-surface px-2 py-1.5 text-right text-xs font-bold text-text-primary outline-none focus:border-accent"
-              />
-              <span class="text-[10px] font-bold text-text-dim">
-                MXN/semana/sede
-              </span>
-            </div>
-          </div>
-          <div
-            class="space-y-3 rounded-xl border border-stroke bg-base px-4 py-3"
-          >
-            <div>
-              <p class="text-xs font-black text-text-primary">
-                Avisos por correo
-              </p>
-              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
-                Además del admin, ¿quién recibe el aviso de cada solicitud
-                pagada? Si compran una sede avisa solo a su correo; si
-                compran todas, avisa a todos.
-              </p>
-            </div>
-            <input
-              v-model="globalNotifyText"
-              type="text"
-              placeholder="Correos globales, separados por coma"
-              class="w-full rounded-lg border border-stroke bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary outline-none placeholder:text-text-dim/60 focus:border-accent"
-            />
-            <div
-              v-for="b in branches"
-              :key="b.id"
-              class="flex items-center gap-2"
-            >
-              <span
-                class="w-24 shrink-0 truncate text-[10px] font-black text-text-muted"
-                :title="b.name"
-              >
-                {{ b.name }}
-              </span>
-              <input
-                v-model="configDraft.notify.byBranch[b.id]"
-                type="email"
-                placeholder="correo de la sede"
-                class="min-w-0 flex-1 rounded-lg border border-stroke bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary outline-none placeholder:text-text-dim/60 focus:border-accent"
-              />
-            </div>
-          </div>
-          <div
-            class="flex items-center justify-between gap-3 rounded-xl border border-stroke bg-base px-4 py-3"
-          >
-            <p class="min-w-0 truncate font-mono text-[11px] text-text-muted">
-              {{ selfServeUrl }}
-            </p>
-            <button
-              type="button"
-              class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1.5 text-[10px] font-black text-text-muted transition hover:border-accent/50 hover:text-text-primary"
-              @click="copyLink"
-            >
-              <Copy class="h-3 w-3" />
-              {{ linkCopied ? 'Copiado' : 'Copiar' }}
-            </button>
-          </div>
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton
-            label="Cancelar"
-            color="neutral"
-            variant="outline"
-            @click="configOpen = false"
-          />
-          <UButton
-            label="Guardar"
-            :loading="savingConfig"
-            @click="saveConfig"
-          />
-        </div>
-      </template>
-    </UModal>
 
     <!-- Rechazo de orden — con reembolso automático -->
     <UModal
