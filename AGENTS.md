@@ -216,6 +216,14 @@ Sin vínculo no ve datos del gym.
   SMTP: admins de staff + `config/ads.notify` (global siempre; por sede
   solo si la orden es de esa sede — "todas" avisa a todos, dedupe) +
   confirmación al anunciante.
+- **Ubicación**: `/anuncia` muestra un mapa OSM (`LocationPicker.vue` —
+  Leaflet, tiles Carto dark). Al salir del campo dirección se
+  geocodifica (Nominatim client-side, `countrycodes=mx`) y se propone
+  el pin; el anunciante lo confirma o lo arrastra (`manual` marca que
+  ya no se re-geocodifica). El pin viaja en la orden y gana sobre el
+  geocoding server-side del webhook (`server/utils/geo.ts` — respaldo
+  cuando no hubo pin). Si nada resuelve quedan null y el admin los
+  fija a mano en el detalle (lat/lng editables).
 - El admin revisa en `/publicidad` (cola de solicitudes) o en el
   detalle: **aprobar** pone ACTIVE + `ends_at = hoy + weeks` (la vigencia
   arranca en la aprobación); **rechazar** reembolsa automático por

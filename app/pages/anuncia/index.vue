@@ -35,6 +35,10 @@ const form = ref({
   ctaLabel: 'Ver oferta',
   description: '',
   address: '',
+  /// Pin del mapa — null hasta que se geocodifica la dirección o el
+  /// usuario toca/arrastra el marcador.
+  lat: null as number | null,
+  lng: null as number | null,
   instagram: '',
   website: '',
   whatsapp: '',
@@ -49,6 +53,45 @@ const form = ref({
 const formError = ref<string | null>(null);
 const saving = ref(false);
 const socialsOpen = ref(false);
+/// True cuando el usuario movió el pin a mano — la auto-geocodificación
+/// de la dirección deja de tocar lat/lng para no pisar su ajuste.
+const pinTouched = ref(false);
+
+/// Centro del mapa: la sede elegida (o la primera con coords); CDMX
+/// como último recurso.
+const mapCenter = computed(() => {
+  const branches = info.value?.branches ?? [];
+  const sel = branches.find(
+    (b) => b.id === form.value.branchId && b.lat != null && b.lng != null,
+  );
+  const any = branches.find((b) => b.lat != null && b.lng != null);
+  const c = sel ?? any;
+  return c && c.lat != null && c.lng != null
+    ? { lat: c.lat, lng: c.lng }
+    : { lat: 19.4326, lng: -99.1332 };
+});
+
+/// Al salir del campo dirección intentamos ubicar el texto — si el
+/// usuario ya movió el pin a mano no se toca. Fallo silencioso: el
+/// mapa sigue permitiendo marcar el punto manualmente.
+async function geocodeDraft(): Promise<void> {
+  const q = form.value.address.trim();
+  if (q.length < 8 || pinTouched.value) return;
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=mx`,
+      { headers: { 'Accept-Language': 'es' } },
+    );
+    const results = (await res.json()) as { lat: string; lon: string }[];
+    const first = results[0];
+    if (first) {
+      form.value.lat = Number(first.lat);
+      form.value.lng = Number(first.lon);
+    }
+  } catch {
+    /// El mapa queda para marcar a mano.
+  }
+}
 
 const branchItems = computed(() => [
   { label: 'Todas las sedes', value: 'todas' },
@@ -153,6 +196,8 @@ async function pay(): Promise<void> {
           ctaLabel: form.value.ctaLabel.trim() || 'Ver oferta',
           description: form.value.description.trim(),
           address: form.value.address.trim(),
+          lat: form.value.lat,
+          lng: form.value.lng,
           socials: {
             instagram: form.value.instagram.trim(),
             website: form.value.website.trim(),
@@ -512,10 +557,36 @@ onMounted(async () => {
                   <input
                     v-model="form.address"
                     type="text"
-                    placeholder="Calle, número, colonia"
+                    placeholder="Calle, número, colonia, ciudad"
                     class="mt-1 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+                    @blur="geocodeDraft"
                   />
+                  <span class="mt-1 block text-[10px] font-semibold text-text-dim">
+                    Con ella ubicamos tu negocio en el mapa — el botón
+                    "Cómo llegar" de la app lleva a los socios a tu puerta.
+                  </span>
                 </label>
+                <div class="col-span-2">
+                  <div class="mb-1.5 flex items-center justify-between">
+                    <span
+                      class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                      >Confirma tu ubicación</span
+                    >
+                    <span
+                      v-if="form.lat != null"
+                      class="text-[10px] font-bold text-emerald-400"
+                      >Ubicación marcada ✓</span
+                    >
+                  </div>
+                  <ClientOnly>
+                    <LocationPicker
+                      v-model:lat="form.lat"
+                      v-model:lng="form.lng"
+                      :center="mapCenter"
+                      @manual="pinTouched = true"
+                    />
+                  </ClientOnly>
+                </div>
               </div>
               <div class="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>

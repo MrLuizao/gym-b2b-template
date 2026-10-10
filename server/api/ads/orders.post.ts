@@ -40,6 +40,8 @@ export default defineEventHandler(async (event) => {
     ctaLabel?: string;
     description?: string;
     address?: string;
+    lat?: number | null;
+    lng?: number | null;
     socials?: Partial<SponsorAd['socials']>;
     photos?: string[];
     branchId?: string | null;
@@ -116,6 +118,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Sede inválida' });
   }
 
+  /// Coordenadas del pin que el anunciante movió en el mapa — vienen
+  /// juntas o no vienen; si no vienen el webhook geocodifica.
+  const rawLat = Number(body!.lat);
+  const rawLng = Number(body!.lng);
+  const coordsValid =
+    Number.isFinite(rawLat) &&
+    Number.isFinite(rawLng) &&
+    rawLat >= -90 &&
+    rawLat <= 90 &&
+    rawLng >= -180 &&
+    rawLng <= 180;
+  const lat = coordsValid ? rawLat : null;
+  const lng = coordsValid ? rawLng : null;
+
   /// Precio por sede: una sede = tarifa base, todas = tarifa × N sedes.
   const scopeFactor = branchId ? 1 : Math.max(1, branchIds.length);
   const amount = slot.pricePerWeek * weeks * scopeFactor;
@@ -169,6 +185,8 @@ export default defineEventHandler(async (event) => {
     cta_label: cleanStr(body!.ctaLabel, 24) || 'Ver más',
     description: cleanStr(body!.description, 500),
     address: cleanStr(body!.address, 160),
+    lat,
+    lng,
     socials: {
       instagram: cleanStr(body!.socials?.instagram, 200),
       facebook: cleanStr(body!.socials?.facebook, 200),

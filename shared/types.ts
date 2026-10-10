@@ -404,6 +404,10 @@ export interface AdOrder {
   ctaLabel: string;
   description: string;
   address: string;
+  /// Coordenadas que el anunciante confirmó en el mapa de /anuncia —
+  /// null si no las fijó (el webhook geocodifica como respaldo).
+  lat: number | null;
+  lng: number | null;
   socials: SponsorAdSocials;
   photos: string[];
   branchId: string | null;
@@ -432,7 +436,9 @@ export interface AdOrder {
 export interface AdSelfServeInfo {
   enabled: boolean;
   brandName: string;
-  branches: { id: string; name: string }[];
+  /// lat/lng de cada sede para centrar el mapa de /anuncia cerca del
+  /// gym (el anunciante suele estar cerca de donde compra).
+  branches: { id: string; name: string; lat: number | null; lng: number | null }[];
   slots: AdSelfServeConfig['slots'];
 }
 

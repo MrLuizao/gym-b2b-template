@@ -23,6 +23,8 @@ export default defineEventHandler(async (event): Promise<AdSelfServeInfo> => {
     branches: branchesSnap.docs.map((d) => ({
       id: d.id,
       name: (d.data().name as string | undefined) ?? d.id,
+      lat: typeof d.data().lat === 'number' ? d.data().lat : null,
+      lng: typeof d.data().lng === 'number' ? d.data().lng : null,
     })),
     slots: config.slots,
   };

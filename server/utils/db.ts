@@ -262,6 +262,8 @@ export function toAdOrder(s: DocumentSnapshot): AdOrder {
     ctaLabel: d.cta_label ?? '',
     description: d.description ?? '',
     address: d.address ?? '',
+    lat: typeof d.lat === 'number' ? d.lat : null,
+    lng: typeof d.lng === 'number' ? d.lng : null,
     socials: d.socials ?? {
       instagram: '',
       facebook: '',

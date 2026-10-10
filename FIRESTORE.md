@@ -518,6 +518,7 @@ el admin aprueba (`ends_at = hoy + weeks`, anuncio ACTIVE) o rechaza
 |---|---|---|
 | `business_name` / `contact_name` / `email` / `phone` | string | Contacto del anunciante |
 | `title` / `subtitle` / `badge` / `image_url` / `cta_label` / `description` / `address` / `socials` / `photos` / `brand_color` | | Creativo — se copia al sponsorAd al pagar |
+| `lat` / `lng` | number \| null | Pin que el anunciante confirmó en el mapa de `/anuncia`; null → el webhook geocodifica `address` como respaldo |
 | `branch_id` | string \| null | `null` = todas las sedes |
 | `placement` | string | `carousel` \| `list` \| `both` |
 | `weeks` | int | 1–12 |

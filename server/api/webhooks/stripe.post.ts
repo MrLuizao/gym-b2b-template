@@ -2,6 +2,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import Stripe from 'stripe';
 
 import { db, toAdSelfServeConfig } from '../../utils/db';
+import { geocodeAddress } from '../../utils/geo';
 import { useAdmin } from '../../utils/firebase-admin';
 import {
   sendAdOrderPaidEmail,
@@ -81,6 +82,14 @@ async function fulfillAdOrder(opts: {
   const order = orderSnap.data()!;
   if (order.status !== 'AWAITING_PAYMENT') return;
 
+  /// Coordenadas: el pin que el anunciante confirmó en el mapa gana;
+  /// si no lo movió, geocodificamos su dirección como respaldo. Si
+  /// nada resuelve, el admin las fija a mano en el detalle.
+  const coords =
+    typeof order.lat === 'number' && typeof order.lng === 'number'
+      ? { lat: order.lat, lng: order.lng }
+      : await geocodeAddress(String(order.address ?? ''));
+
   const adRef = db().collection('sponsorAds').doc();
   const batch = db().batch();
   batch.set(adRef, {
@@ -105,8 +114,8 @@ async function fulfillAdOrder(opts: {
     created_at: Timestamp.now(),
     description: order.description ?? '',
     address: order.address ?? '',
-    lat: null,
-    lng: null,
+    lat: coords?.lat ?? null,
+    lng: coords?.lng ?? null,
     phone: order.phone ?? '',
     socials: order.socials ?? {},
     photos: order.photos ?? [],
