@@ -291,6 +291,10 @@ export interface SponsorAdSocials {
   tiktok: string;
   website: string;
   whatsapp: string;
+  /// Link libre — el anunciante elige la red/plataforma y escribe su
+  /// propia etiqueta (ej. "YouTube", "X", "Catálogo").
+  other_label: string;
+  other_url: string;
 }
 
 export interface SponsorAd {
@@ -303,11 +307,12 @@ export interface SponsorAd {
   imageUrl: string;
   ctaLabel: string;
   branchId: string | null;
-  /// Espacio vendido: 'carousel' = carrusel del Home + Promociones
-  /// (premium), 'list' = solo directorio de Aliados, 'both' = ambas
-  /// superficies (combo con precio propio). Los ads viejos sin el
-  /// campo se tratan como 'carousel' (comportamiento previo).
-  placement: 'carousel' | 'list' | 'both';
+  /// Espacio vendido: 'carousel' = carrusel del Home + Promociones +
+  /// encabezado del directorio Aliados (premium, máx. CAROUSEL_SLOTS
+  /// simultáneos — el excedente espera en la lista), 'list' = solo
+  /// directorio de Aliados en orden aleatorio. Docs viejos con 'both'
+  /// o sin el campo se leen como 'carousel'.
+  placement: 'carousel' | 'list';
   /// PENDING = comprado por self-serve, esperando aprobación del gym —
   /// la app solo muestra ACTIVE, así que nunca se cuela a producción.
   status: 'PENDING' | 'ACTIVE' | 'PAUSED';
@@ -327,14 +332,19 @@ export interface SponsorAd {
   orderId: string | null;
 }
 
+/// Espacios simultáneos del carrusel — el producto premium. Cuando se
+/// llenan, el comprador igual puede pagar pero su anuncio solo aparece
+/// en el directorio de Aliados hasta que se libere un lugar (entra por
+/// orden de compra: salen primero los que se vendieron antes).
+export const CAROUSEL_SLOTS = 5;
+
 /// Superficies que compra cada placement — usado para detectar
 /// "downgrade" en anuncios ligados a una orden pagada: bajar de rank
-/// (p.ej. both → list) requiere razón obligatoria + registro en
+/// (p.ej. carousel → list) requiere razón obligatoria + registro en
 /// /auditLogs. Subir de rank es un upgrade gratis del gym.
 export const PLACEMENT_RANK: Record<SponsorAd['placement'], number> = {
   list: 1,
   carousel: 2,
-  both: 3,
 };
 
 /// /auditLogs/{id} — evidencia de cambios excepcionales sobre anuncios
@@ -357,8 +367,8 @@ export interface AdAuditEntry {
 }
 
 /// Precio semanal por espacio publicitario — lo configura el admin en
-/// /publicidad (doc /config/ads). `pricePerWeek` en pesos MXN y es la
-/// tarifa por sede: elegir "todas las sedes" multiplica por N sedes.
+/// /publicidad/venta-directa (doc /config/ads). `pricePerWeek` en MXN,
+/// cobertura global (todos los socios).
 export interface AdSlotConfig {
   enabled: boolean;
   pricePerWeek: number;
@@ -366,19 +376,27 @@ export interface AdSlotConfig {
 
 export interface AdSelfServeConfig {
   enabled: boolean;
+  /// Solo dos productos: 'carousel' (premium — top del directorio +
+  /// carrusel, cupo de CAROUSEL_SLOTS) y 'list' (solo directorio,
+  /// orden aleatorio). Ya no hay 'both'.
   slots: {
     carousel: AdSlotConfig;
     list: AdSlotConfig;
-    /// 'both' = el anuncio sale en el carrusel del Home/Promociones Y
-    /// en el directorio de Aliados — el gym define el precio del combo
-    /// (suele ser menor que la suma de ambos, como gancho de venta).
-    both: AdSlotConfig;
+  };
+  /// Add-on "paquete de pushes" — cobro único. Toda compra YA incluye
+  /// 1 push gratis que sale al aprobarse; el paquete agrega `count`
+  /// pushes extra enviados uno por semana (pushLogs programados que
+  /// despacha /api/cron/push-dispatch). price en MXN; enabled=false o
+  /// count=0 no se ofrece en /anuncia.
+  push: {
+    enabled: boolean;
+    count: number;
+    price: number;
   };
   /// Destinatarios del aviso "llegó una solicitud pagada" (además de
   /// los admins de staff, que siempre se notifican por su correo de
-  /// login). `global` = siempre; `byBranch` = solo si la orden compró
-  /// esa sede — compra de "todas las sedes" → avisa a TODOS los
-  /// correos configurados.
+  /// login). `global` = siempre; como toda orden es global, todos los
+  /// correos de `byBranch` reciben aviso en cada compra.
   notify: {
     global: string[];
     byBranch: Record<string, string>;
@@ -425,6 +443,15 @@ export interface AdOrder {
   stripePaymentIntentId: string | null;
   sponsorAdId: string | null;
   rejectionReason: string | null;
+  /// Add-on pagado: paquete de `pushPack` pushes extra (1/semana,
+  /// programados al aprobar). El push incluido gratis sale igual al
+  /// aprobar — `pushLogIds` liga TODOS los pushLogs (inmediato +
+  /// programados) para trazabilidad/reintento.
+  wantsPush: boolean;
+  pushPack: number;
+  pushLogIds: string[];
+  pushSentAt: number | null;
+  pushError: string | null;
   createdAt: number;
   paidAt: number | null;
   reviewedAt: number | null;
@@ -432,7 +459,9 @@ export interface AdOrder {
 }
 
 /// Respuesta pública de /api/ads/self-serve — lo mínimo para pintar el
-/// formulario de compra (nombre de marca, sedes y precios).
+/// formulario de compra (nombre de marca, sedes, precios y ocupación
+/// del carrusel para avisar "los espacios están llenos, próximo libre
+/// el {nextFreeAt}" — la venta sigue abierta aunque haya fila).
 export interface AdSelfServeInfo {
   enabled: boolean;
   brandName: string;
@@ -440,6 +469,17 @@ export interface AdSelfServeInfo {
   /// gym (el anunciante suele estar cerca de donde compra).
   branches: { id: string; name: string; lat: number | null; lng: number | null }[];
   slots: AdSelfServeConfig['slots'];
+  /// Paquete de pushes extra (toda compra ya trae 1 push gratis).
+  push: { enabled: boolean; count: number; price: number };
+  /// Ocupación del carrusel: `occupied` cuenta anuncios ACTIVE +
+  /// órdenes PENDING_APPROVAL compradas (ya pagaron su lugar).
+  /// `nextFreeAt` = fecha aprox. en que entraría al carrusel un nuevo
+  /// comprador cuando occupied >= CAROUSEL_SLOTS; null = hay lugar ya.
+  carousel: {
+    slots: number;
+    occupied: number;
+    nextFreeAt: number | null;
+  };
 }
 
 /// Tab de la app al tocar el push — 'auto' usa el mapping por kind

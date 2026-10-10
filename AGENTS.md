@@ -191,15 +191,41 @@ Sin vínculo no ve datos del gym.
 ### Publicidad self-serve (/anuncia)
 
 - Página pública `/anuncia` (sin login — middleware la exime como
-  `/legal`): el negocio sube su creativo, elige espacio, sede (una o
-  todas) y semanas, y paga por **Stripe Checkout** (hosted). Precio
-  server-side: `price_per_week × semanas × sedes` desde `/config/ads`
-  (lo edita el admin en `/publicidad` → "Venta directa").
-- **`placement`** (sponsorAds): `carousel` = carrusel del Home +
-  Promociones, `list` = solo directorio Aliados, `both` = ambas
-  superficies (combo con precio propio en `config/ads.slots.both`).
-  Docs viejos sin el campo = `carousel`. Ranking `PLACEMENT_RANK`
-  (list<carousel<both) en shared/types.
+  `/legal`): el negocio sube su creativo, elige espacio y semanas, y
+  paga por **Stripe Checkout** (hosted). **Los anuncios ya no se
+  segmentan por sede** — todo anuncio lo ven todos los socios;
+  `branch_id` queda siempre null. Precio server-side:
+  `price_per_week × semanas` desde `/config/ads` (lo edita el admin en
+  `/publicidad/venta-directa`).
+- **`placement`** (sponsorAds): solo dos valores nuevos — `carousel`
+  (premium: carrusel del Home + Promociones + tope del directorio
+  Aliados) y `list` (solo directorio, orden aleatorio). Docs viejos con
+  `both` o sin el campo se normalizan a `carousel` al leerse. Ranking
+  `PLACEMENT_RANK` (list<carousel) en shared/types.
+- **Carrusel = 5 espacios** (`CAROUSEL_SLOTS`). Ocupan los ads
+  `carousel` más antiguos por `created_at`; si hay más de 5 activos el
+  excedente espera en la lista y sube cuando venza alguno. En `/anuncia`
+  el comprador ve "X de 5 espacios libres" o, si está lleno, el aviso
+  de que aparecerá solo en Aliados hasta liberarse el próximo lugar
+  (fecha aprox. que calcula `self-serve.get` con ACTIVE + órdenes
+  PENDING_APPROVAL).
+- **Directorio Aliados** (app): primero los 5 del carrusel fijados,
+  después TODOS los demás en orden aleatorio — sin favoritismo
+  (`alliesAdsProvider` en la app; `carouselAdsProvider` alimenta Home
+  y Promociones).
+- **Pushes — gancho + paquete** (`config/ads.push {enabled, count,
+  price}`): TODA compra incluye **1 push gratis** que sale al APROBAR
+  la orden (nunca al pagar — pasa por el filtro humano). El paquete
+  (`wants_push`) agrega `push_pack` pushes extra que quedan como
+  `pushLogs` DRAFT con `scheduled_at` semanal (+7d, +14d…) — los
+  despacha **`GET/POST /api/cron/push-dispatch`** (Vercel cron diario
+  ~10:00 CDMX en vercel.json, o cron externo con Bearer CRON_SECRET;
+  mismo motor `dispatchDuePushLogs` que también reactiva los pushes
+  programados manuales del CMS). Todos los logs llevan kind SPONSOR,
+  audience ALL → topic `all_members`, target `allies`. La orden guarda
+  `push_log_ids[]`/`push_sent_at`/`push_error` para trazabilidad y
+  reintento desde /cms. En Stripe el paquete viaja como segundo
+  line_item.
 - **Anuncios comprados** (`order_id != null`) — integridad del
   inventario pagado: upgrade de placement libre, pero **downgrade /
   pausa / borrado vigente requieren `overrideReason`** y dejan
@@ -213,9 +239,9 @@ Sin vínculo no ve datos del gym.
   `payment_intent.succeeded` por `ad_order_id` en metadata) crea el
   `sponsorAds` con **status PENDING** — la app solo consulta ACTIVE, no
   se cuela — y la orden `/adOrders` pasa a `PENDING_APPROVAL`. Correos
-  SMTP: admins de staff + `config/ads.notify` (global siempre; por sede
-  solo si la orden es de esa sede — "todas" avisa a todos, dedupe) +
-  confirmación al anunciante.
+  SMTP: admins de staff + `config/ads.notify` (global siempre; como
+  toda orden es de "todas las sedes", todos los `by_branch` reciben
+  aviso — dedupe) + confirmación al anunciante.
 - **Ubicación**: `/anuncia` muestra un mapa OSM (`LocationPicker.vue` —
   Leaflet, tiles Carto dark). Al salir del campo dirección se
   geocodifica (Nominatim client-side, `countrycodes=mx`) y se propone
@@ -285,7 +311,7 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 | Sedes (`/sedes`) | sin acceso | ver todas; editar solo la suya | editar todas + crear |
 | Membresías (`/membresias`) | sin acceso | ver catálogo — **NO puede editar ni crear** | editar + crear |
 | Recompensas (`/recompensas`) | ver + validar códigos de su sede | ver + validar códigos de su sede | editar catálogo + validar |
-| Publicidad (`/publicidad`) | sin acceso | ver todo + **aprobar/rechazar órdenes de SU sede** (las de "todas las sedes" son admin-only); anuncios en solo lectura | editar + crear + pausar + eliminar |
+| Publicidad (`/publicidad`) | sin acceso | ver (anuncios en solo lectura; las órdenes son globales → aprobar/rechazar es admin-only) | editar + crear + pausar + eliminar + aprobar órdenes |
 | CMS (`/cms`) | sin acceso | ver (detalle solo lectura) | editar + crear + enviar + eliminar |
 | Reportes (`/reportes`) | sin acceso | todos los tipos, siempre filtrado a su sede | todos, cualquier sede |
 

@@ -6,7 +6,9 @@ import { db, toAdSelfServeConfig } from '../../utils/db';
 import { rateLimit } from '../../utils/rate-limit';
 import { useStripe } from '../../utils/stripe';
 
-const MAX_WEEKS = 12;
+/// Tope de campaña — 4 semanas para que el paquete de pushes semanales
+/// (1/semana) siempre quepa dentro de la vigencia comprada.
+const MAX_WEEKS = 4;
 /// Tope del creativo — mismo límite práctico que el ImagePicker deja
 /// pasar al comprimir (una imagen ~300 KB + una portada).
 const MAX_IMAGE_CHARS = 400_000;
@@ -21,8 +23,8 @@ function cleanStr(v: unknown, max: number): string {
 /// Público — compra self-serve de publicidad. El negocio sube su
 /// creativo y paga por Stripe Checkout; el webhook convierte la orden
 /// en sponsorAds PENDING para que el gym la apruebe o reembolse.
-/// El monto se calcula AQUÍ (precio/semana × semanas × sedes) — el
-/// cliente nunca dicta el precio.
+/// El monto se calcula AQUÍ (precio/semana × semanas) — el cliente
+/// nunca dicta el precio.
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'anon';
   await rateLimit(`ads-order:${ip}`, 5, 10 * 60_000);
@@ -44,9 +46,9 @@ export default defineEventHandler(async (event) => {
     lng?: number | null;
     socials?: Partial<SponsorAd['socials']>;
     photos?: string[];
-    branchId?: string | null;
     placement?: string;
     weeks?: number;
+    wantsPush?: boolean;
     /// Honeypot — los bots lo llenan, los humanos no lo ven.
     company?: string;
   }>(event);
@@ -89,10 +91,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const [configSnap, branchesSnap] = await Promise.all([
-    db().collection('config').doc('ads').get(),
-    db().collection('branches').get(),
-  ]);
+  const configSnap = await db().collection('config').doc('ads').get();
   const config = toAdSelfServeConfig(configSnap);
   if (!config.enabled) {
     throw createError({
@@ -101,9 +100,10 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const raw = String(body!.placement ?? '');
+  /// Solo dos productos: 'list' o 'carousel' (cualquier otra cosa,
+  /// incluido el 'both' legacy, cae a carousel).
   const placement: SponsorAd['placement'] =
-    raw === 'list' || raw === 'both' ? raw : 'carousel';
+    String(body!.placement ?? '') === 'list' ? 'list' : 'carousel';
   const slot = config.slots[placement];
   if (!slot.enabled || slot.pricePerWeek <= 0) {
     throw createError({
@@ -112,11 +112,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const branchIds = branchesSnap.docs.map((d) => d.id);
-  const branchId = body!.branchId ? String(body!.branchId) : null;
-  if (branchId && !branchIds.includes(branchId)) {
-    throw createError({ statusCode: 400, statusMessage: 'Sede inválida' });
-  }
+  /// Paquete de pushes — solo cuenta si la config lo ofrece con
+  /// cantidad y precio >0. Toda compra ya incluye 1 push gratis.
+  const wantsPush =
+    body!.wantsPush === true &&
+    config.push.enabled &&
+    config.push.count > 0 &&
+    config.push.price > 0;
+  const pushPack = wantsPush ? config.push.count : 0;
 
   /// Coordenadas del pin que el anunciante movió en el mapa — vienen
   /// juntas o no vienen; si no vienen el webhook geocodifica.
@@ -132,37 +135,50 @@ export default defineEventHandler(async (event) => {
   const lat = coordsValid ? rawLat : null;
   const lng = coordsValid ? rawLng : null;
 
-  /// Precio por sede: una sede = tarifa base, todas = tarifa × N sedes.
-  const scopeFactor = branchId ? 1 : Math.max(1, branchIds.length);
-  const amount = slot.pricePerWeek * weeks * scopeFactor;
+  /// Tarifa plana por semana — los anuncios siempre se muestran en
+  /// todas las sedes (la segmentación por sede se eliminó). El push
+  /// es cobro único adicional.
+  const amount = slot.pricePerWeek * weeks + (wantsPush ? config.push.price : 0);
 
   const ref = db().collection('adOrders').doc();
   const origin = getRequestURL(event).origin;
   const stripe = useStripe();
 
   const slotLabel =
-    placement === 'both'
-      ? 'Carrusel del Home + Directorio de Aliados'
-      : placement === 'list'
-        ? 'Directorio de Aliados'
-        : 'Carrusel del Home';
-  const scopeLabel = branchId ? '1 sede' : 'todas las sedes';
+    placement === 'list' ? 'Directorio de Aliados' : 'Carrusel destacado';
+  const lineItems = [
+    {
+      quantity: 1,
+      price_data: {
+        currency: 'mxn',
+        unit_amount: Math.round(slot.pricePerWeek * weeks * 100),
+        product_data: {
+          name: `Publicidad — ${slotLabel}`,
+          description: `${weeks} semana(s) · todas las sedes · sujeto a aprobación del gym`,
+        },
+      },
+    },
+    ...(wantsPush
+      ? [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'mxn',
+              unit_amount: Math.round(config.push.price * 100),
+              product_data: {
+                name: `Paquete de ${pushPack} notificaciones push`,
+                description:
+                  'Una por semana a todos los socios (además del push incluido)',
+              },
+            },
+          },
+        ]
+      : []),
+  ];
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     customer_email: cleanStr(body!.email, 120),
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: 'mxn',
-          unit_amount: Math.round(amount * 100),
-          product_data: {
-            name: `Publicidad — ${slotLabel}`,
-            description: `${weeks} semana(s) · ${scopeLabel} · sujeto a aprobación del gym`,
-          },
-        },
-      },
-    ],
+    line_items: lineItems,
     metadata: { ad_order_id: ref.id },
     payment_intent_data: { metadata: { ad_order_id: ref.id } },
     success_url: `${origin}/anuncia/exito?order=${ref.id}`,
@@ -193,9 +209,12 @@ export default defineEventHandler(async (event) => {
       tiktok: cleanStr(body!.socials?.tiktok, 200),
       website: cleanStr(body!.socials?.website, 200),
       whatsapp: cleanStr(body!.socials?.whatsapp, 30),
+      other_label: cleanStr(body!.socials?.other_label, 60),
+      other_url: cleanStr(body!.socials?.other_url, 200),
     },
     photos,
-    branch_id: branchId,
+    /// Los anuncios ya no se segmentan por sede — siempre null.
+    branch_id: null,
     placement,
     weeks,
     amount,
@@ -205,6 +224,11 @@ export default defineEventHandler(async (event) => {
     stripe_payment_intent_id: null,
     sponsor_ad_id: null,
     rejection_reason: null,
+    wants_push: wantsPush,
+    push_pack: pushPack,
+    push_log_ids: [],
+    push_sent_at: null,
+    push_error: null,
     created_at: Timestamp.now(),
     paid_at: null,
     reviewed_at: null,

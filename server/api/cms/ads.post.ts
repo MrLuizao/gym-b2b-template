@@ -64,10 +64,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
     image_url: String(body!.imageUrl),
     cta_label: String(body!.ctaLabel ?? 'Ver más').slice(0, 24),
     branch_id: body!.branchId || null,
-    placement:
-      body!.placement === 'list' || body!.placement === 'both'
-        ? body!.placement
-        : 'carousel',
+    placement: body!.placement === 'list' ? 'list' : 'carousel',
     status: body!.status === 'PAUSED' ? 'PAUSED' : 'ACTIVE',
     ends_at: Timestamp.fromMillis(Number(body!.endsAt)),
     impressions: 0,
@@ -84,6 +81,8 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
       tiktok: String(body!.socials?.tiktok ?? '').slice(0, 200),
       website: String(body!.socials?.website ?? '').slice(0, 200),
       whatsapp: String(body!.socials?.whatsapp ?? '').slice(0, 30),
+      other_label: String(body!.socials?.other_label ?? '').slice(0, 60),
+      other_url: String(body!.socials?.other_url ?? '').slice(0, 200),
     },
     photos: Array.isArray(body!.photos)
       ? body!.photos.filter((p) => typeof p === 'string').slice(0, 1)

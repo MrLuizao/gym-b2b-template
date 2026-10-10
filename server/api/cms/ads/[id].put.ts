@@ -23,9 +23,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   /// el anunciante PAGÓ; degradarlo requiere razón + evidencia en auditLogs.
   const orderId = (before.order_id as string | null) ?? null;
   const beforePlacement: SponsorAd['placement'] =
-    before.placement === 'list' || before.placement === 'both'
-      ? before.placement
-      : 'carousel';
+    before.placement === 'list' ? 'list' : 'carousel';
 
   const body = await readBody<Record<string, unknown>>(event) ?? {};
   const overrideReason =
@@ -43,7 +41,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   if (typeof body.imageUrl === 'string') update.image_url = body.imageUrl.trim();
   if (typeof body.ctaLabel === 'string') update.cta_label = body.ctaLabel.trim().slice(0, 24) || 'Ver más';
   if (body.branchId !== undefined) update.branch_id = body.branchId || null;
-  if (body.placement === 'carousel' || body.placement === 'list' || body.placement === 'both') update.placement = body.placement;
+  if (body.placement === 'carousel' || body.placement === 'list') update.placement = body.placement;
   if (typeof body.endsAt === 'number' && body.endsAt > 0) update.ends_at = Timestamp.fromMillis(body.endsAt);
   if (typeof body.description === 'string') update.description = body.description.trim().slice(0, 500);
   if (typeof body.address === 'string') update.address = body.address.trim().slice(0, 160);
@@ -58,6 +56,8 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
       tiktok: String(s.tiktok ?? '').slice(0, 200),
       website: String(s.website ?? '').slice(0, 200),
       whatsapp: String(s.whatsapp ?? '').slice(0, 30),
+      other_label: String(s.other_label ?? '').slice(0, 60),
+      other_url: String(s.other_url ?? '').slice(0, 200),
     };
   }
   if (body.photos !== undefined) {

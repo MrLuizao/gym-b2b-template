@@ -217,10 +217,9 @@ export function toSponsorAd(s: DocumentSnapshot): SponsorAd {
     imageUrl: d.image_url ?? '',
     ctaLabel: d.cta_label ?? '',
     branchId: d.branch_id ?? null,
-    placement:
-      d.placement === 'list' || d.placement === 'both'
-        ? d.placement
-        : 'carousel',
+    /// 'both' y ads viejos sin campo → 'carousel' (el carrusel ahora
+    /// implica también el encabezado del directorio).
+    placement: d.placement === 'list' ? 'list' : 'carousel',
     status: d.status ?? 'PAUSED',
     endsAt: toMs(d.ends_at) ?? 0,
     impressions: d.impressions ?? 0,
@@ -231,12 +230,15 @@ export function toSponsorAd(s: DocumentSnapshot): SponsorAd {
     lat: d.lat ?? null,
     lng: d.lng ?? null,
     phone: d.phone ?? '',
-    socials: d.socials ?? {
+    socials: {
       instagram: '',
       facebook: '',
       tiktok: '',
       website: '',
       whatsapp: '',
+      other_label: '',
+      other_url: '',
+      ...(d.socials ?? {}),
     },
     photos: d.photos ?? [],
     orderId: d.order_id ?? null,
@@ -264,19 +266,19 @@ export function toAdOrder(s: DocumentSnapshot): AdOrder {
     address: d.address ?? '',
     lat: typeof d.lat === 'number' ? d.lat : null,
     lng: typeof d.lng === 'number' ? d.lng : null,
-    socials: d.socials ?? {
+    socials: {
       instagram: '',
       facebook: '',
       tiktok: '',
       website: '',
       whatsapp: '',
+      other_label: '',
+      other_url: '',
+      ...(d.socials ?? {}),
     },
     photos: d.photos ?? [],
     branchId: d.branch_id ?? null,
-    placement:
-      d.placement === 'list' || d.placement === 'both'
-        ? d.placement
-        : 'carousel',
+    placement: d.placement === 'list' ? 'list' : 'carousel',
     weeks: d.weeks ?? 1,
     amount: d.amount ?? 0,
     currency: d.currency ?? 'mxn',
@@ -285,6 +287,17 @@ export function toAdOrder(s: DocumentSnapshot): AdOrder {
     stripePaymentIntentId: d.stripe_payment_intent_id ?? null,
     sponsorAdId: d.sponsor_ad_id ?? null,
     rejectionReason: d.rejection_reason ?? null,
+    wantsPush: d.wants_push === true,
+    /// Órdenes viejas con wants_push pero sin push_pack compraron 1
+    /// push suelto — cuentan como paquete de 1.
+    pushPack: Number(d.push_pack ?? (d.wants_push === true ? 1 : 0)),
+    pushLogIds: Array.isArray(d.push_log_ids)
+      ? d.push_log_ids.filter((x): x is string => typeof x === 'string')
+      : typeof d.push_log_id === 'string'
+        ? [d.push_log_id]
+        : [],
+    pushSentAt: toMs(d.push_sent_at),
+    pushError: d.push_error ?? null,
     createdAt: toMs(d.created_at) ?? 0,
     paidAt: toMs(d.paid_at),
     reviewedAt: toMs(d.reviewed_at),
@@ -322,10 +335,19 @@ export function toAdSelfServeConfig(
         enabled: slots.list?.enabled !== false,
         pricePerWeek: Number(slots.list?.price_per_week ?? 250),
       },
-      both: {
-        enabled: slots.both?.enabled !== false,
-        pricePerWeek: Number(slots.both?.price_per_week ?? 650),
-      },
+    },
+    /// Paquete de pushes — apagado por default (el admin lo prende y
+    /// pone cantidad + precio en /publicidad/venta-directa). Docs
+    /// viejos sin `count` caen al default de 5.
+    push: {
+      enabled:
+        (d.push as Record<string, unknown> | undefined)?.enabled === true,
+      count: Number(
+        (d.push as Record<string, unknown> | undefined)?.count ?? 4,
+      ),
+      price: Number(
+        (d.push as Record<string, unknown> | undefined)?.price ?? 300,
+      ),
     },
   };
 }

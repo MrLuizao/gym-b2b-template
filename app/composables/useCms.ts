@@ -211,9 +211,11 @@ export function useCms() {
     ads.value = ads.value.filter((a) => a.id !== order.sponsorAdId);
   }
 
-  /// Precios de venta directa — /config/ads (solo admin).
+  /// Precios de venta directa — /config/ads (staff). El GET público
+  /// /api/ads/self-serve NO incluye notify — este endpoint staff sí,
+  /// de lo contrario guardar pisaría los correos con vacío.
   async function loadAdsConfig(): Promise<void> {
-    adsConfig.value = await $api<AdSelfServeConfig>('/api/ads/self-serve');
+    adsConfig.value = await $api<AdSelfServeConfig>('/api/ads/config');
   }
 
   async function saveAdsConfig(draft: AdSelfServeConfig): Promise<void> {

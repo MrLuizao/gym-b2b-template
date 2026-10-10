@@ -11,7 +11,7 @@ import {
   Undo2,
 } from '@lucide/vue';
 
-import type { AdOrder, Branch, SponsorAd } from '#shared/types';
+import type { AdOrder, SponsorAd } from '#shared/types';
 
 const {
   ads,
@@ -28,19 +28,11 @@ const { session } = useAuth();
 /// El inventario publicitario es comercial/global — solo el admin lo edita.
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
-/// Revisión de órdenes pagadas: el admin aprueba cualquiera; el gerente
-/// solo las de SU sede — las de "todas las sedes" (branchId null) son
-/// admin-only (el server valida igual con requireBranchScope).
-function canReviewOrder(order: AdOrder): boolean {
-  if (isAdmin.value) return true;
-  return (
-    session.value?.role === 'MANAGER' &&
-    order.branchId !== null &&
-    order.branchId === session.value?.branchId
-  );
+/// Revisión de órdenes pagadas — los anuncios ya no se venden por sede,
+/// toda orden es global (branchId null) → aprobar es admin-only.
+function canReviewOrder(_order: AdOrder): boolean {
+  return isAdmin.value;
 }
-
-const branches = ref<Branch[]>([]);
 
 type AdFilter = 'todas' | 'PENDING' | 'ACTIVE' | 'PAUSED' | 'expiring';
 const adFilter = ref<AdFilter>('todas');
@@ -107,10 +99,6 @@ function adCtr(ad: SponsorAd): string {
   return `${((ad.taps / ad.impressions) * 100).toFixed(1)}%`;
 }
 
-function branchName(id: string | null): string {
-  if (!id) return 'Todas las sedes';
-  return branches.value.find((b) => b.id === id)?.name ?? '—';
-}
 
 function formatDay(ts: number): string {
   return new Date(ts).toLocaleDateString('es-MX', {
@@ -167,17 +155,11 @@ function formatMoney(amount: number): string {
 }
 
 function placementName(p: AdOrder['placement']): string {
-  if (p === 'both') return 'Home + Aliados';
-  return p === 'carousel' ? 'Carrusel del Home' : 'Directorio de Aliados';
+  return p === 'carousel' ? 'Carrusel destacado' : 'Directorio de Aliados';
 }
 
 onMounted(async () => {
   await Promise.all([load(), loadOrders(), loadAdsConfig()]);
-  try {
-    branches.value = await $api<Branch[]>('/api/branches');
-  } catch {
-    branches.value = [];
-  }
 });
 </script>
 
@@ -359,10 +341,16 @@ onMounted(async () => {
             <p class="mt-1 text-[10px] font-bold text-text-muted">
               {{ placementName(order.placement) }} ·
               {{ order.weeks }} semana{{ order.weeks > 1 ? 's' : '' }} ·
-              {{ order.branchId ? branchName(order.branchId) : 'Todas las sedes' }}
-              ·
+              todas las sedes ·
               <span class="text-emerald-400">
                 pagó {{ formatMoney(order.amount) }}
+              </span>
+              <span
+                v-if="order.wantsPush"
+                class="ml-1.5 inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-accent"
+                title="Compró paquete de pushes extra — el incluido sale al aprobar y los extra van 1 por semana"
+              >
+                + Push ×{{ order.pushPack || 1 }}
               </span>
             </p>
           </div>
@@ -439,7 +427,6 @@ onMounted(async () => {
             >
               <th class="px-5 py-3 font-bold">Anuncio</th>
               <th class="px-5 py-3 font-bold">Espacio</th>
-              <th class="px-5 py-3 font-bold">Sede</th>
               <th class="px-5 py-3 font-bold">Vigencia</th>
               <th class="px-5 py-3 font-bold">Estado</th>
               <th class="px-5 py-3 font-bold">Impresiones</th>
@@ -491,17 +478,8 @@ onMounted(async () => {
                       : 'border-stroke bg-base text-text-muted'
                   "
                 >
-                  {{
-                    ad.placement === 'carousel'
-                      ? 'CARRUSEL'
-                      : ad.placement === 'both'
-                        ? 'AMBOS'
-                        : 'DIRECTORIO'
-                  }}
+                  {{ ad.placement === 'carousel' ? 'CARRUSEL' : 'DIRECTORIO' }}
                 </span>
-              </td>
-              <td class="px-5 py-3 text-[11px] text-text-muted">
-                {{ branchName(ad.branchId) }}
               </td>
               <td
                 class="px-5 py-3 font-mono text-[10px]"

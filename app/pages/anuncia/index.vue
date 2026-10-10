@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import {
+  Bell,
   Building2,
   Check,
-  ChevronDown,
+
   Dumbbell,
   ImageUp,
   Loader2,
@@ -40,34 +41,33 @@ const form = ref({
   lat: null as number | null,
   lng: null as number | null,
   instagram: '',
+  facebook: '',
+  tiktok: '',
   website: '',
   whatsapp: '',
+  otherUrl: '',
   photos: [] as string[],
-  branchId: 'todas',
   placement: 'carousel' as SponsorAd['placement'],
   weeks: 1,
+  wantsPush: false,
   /// Honeypot — invisible para humanos, los bots lo llenan.
   company: '',
 });
 
 const formError = ref<string | null>(null);
 const saving = ref(false);
-const socialsOpen = ref(false);
+
 /// True cuando el usuario movió el pin a mano — la auto-geocodificación
 /// de la dirección deja de tocar lat/lng para no pisar su ajuste.
 const pinTouched = ref(false);
 const geocoding = ref(false);
 let geocodeTimer: ReturnType<typeof setTimeout> | null = null;
 
-/// Centro del mapa: la sede elegida (o la primera con coords); CDMX
-/// como último recurso.
+/// Centro del mapa: la primera sede con coords; CDMX como último
+/// recurso (los anuncios ya no se segmentan por sede).
 const mapCenter = computed(() => {
   const branches = info.value?.branches ?? [];
-  const sel = branches.find(
-    (b) => b.id === form.value.branchId && b.lat != null && b.lng != null,
-  );
-  const any = branches.find((b) => b.lat != null && b.lng != null);
-  const c = sel ?? any;
+  const c = branches.find((b) => b.lat != null && b.lng != null);
   return c && c.lat != null && c.lng != null
     ? { lat: c.lat, lng: c.lng }
     : { lat: 19.4326, lng: -99.1332 };
@@ -107,38 +107,49 @@ async function geocodeDraft(): Promise<void> {
   }
 }
 
-const branchItems = computed(() => [
-  { label: 'Todas las sedes', value: 'todas' },
-  ...(info.value?.branches ?? []).map((b) => ({ label: b.name, value: b.id })),
-]);
-
 const slotLabels: Record<SponsorAd['placement'], string> = {
-  carousel: 'Carrusel del Home',
+  carousel: 'Carrusel destacado',
   list: 'Directorio de Aliados',
-  both: 'Home + Aliados',
 };
 
 const slotDescriptions: Record<SponsorAd['placement'], string> = {
-  carousel: 'Banner destacado en la pantalla principal de la app',
+  carousel:
+    'Banner en la pantalla principal + primeros lugares del directorio Aliados',
   list: 'Tu negocio en el directorio que exploran los socios',
-  both: 'Máxima exposición — sales en las dos superficies',
 };
 
-const slotEnabled = computed(
-  () => info.value?.slots[form.value.placement]?.enabled !== false,
+/// Ocupación del carrusel — el server cuenta ads ACTIVE + órdenes
+/// pagadas en revisión. Lleno no bloquea la venta: el anuncio entra a
+/// la lista y sube al carrusel cuando se libere lugar.
+const carouselFull = computed(
+  () =>
+    (info.value?.carousel.occupied ?? 0) >=
+    (info.value?.carousel.slots ?? 5),
 );
+const nextFreeLabel = computed(() => {
+  const at = info.value?.carousel.nextFreeAt;
+  if (!at) return null;
+  return new Date(at).toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'long',
+  });
+});
 
-/// Precio por semana y por sede — "todas" multiplica por N sedes.
-const scopeFactor = computed(() =>
-  form.value.branchId === 'todas'
-    ? Math.max(1, info.value?.branches.length ?? 1)
-    : 1,
-);
+/// Precio por semana, cobertura siempre nacional (todas las sedes) —
+/// la segmentación por sede se eliminó: el anuncio lo ve toda la app.
+/// El push es un cobro único adicional.
 const weeklyPrice = computed(
   () => info.value?.slots[form.value.placement]?.pricePerWeek ?? 0,
 );
+const pushPrice = computed(() =>
+  form.value.wantsPush &&
+  info.value?.push.enabled &&
+  (info.value?.push.count ?? 0) > 0
+    ? (info.value?.push.price ?? 0)
+    : 0,
+);
 const total = computed(
-  () => weeklyPrice.value * form.value.weeks * scopeFactor.value,
+  () => weeklyPrice.value * form.value.weeks + pushPrice.value,
 );
 
 const preview = computed(() => ({
@@ -155,8 +166,11 @@ const preview = computed(() => ({
   phone: form.value.phone,
   socials: {
     instagram: form.value.instagram,
+    facebook: form.value.facebook,
+    tiktok: form.value.tiktok,
     website: form.value.website,
     whatsapp: form.value.whatsapp,
+    other_url: form.value.otherUrl,
   },
   photos: form.value.photos,
 }));
@@ -214,14 +228,16 @@ async function pay(): Promise<void> {
           lng: form.value.lng,
           socials: {
             instagram: form.value.instagram.trim(),
+            facebook: form.value.facebook.trim(),
+            tiktok: form.value.tiktok.trim(),
             website: form.value.website.trim(),
             whatsapp: form.value.whatsapp.trim(),
+            other_url: form.value.otherUrl.trim(),
           },
           photos: form.value.photos,
-          branchId:
-            form.value.branchId === 'todas' ? null : form.value.branchId,
           placement: form.value.placement,
           weeks: form.value.weeks,
+          wantsPush: form.value.wantsPush,
           company: form.value.company,
         },
       },
@@ -247,7 +263,7 @@ onMounted(async () => {
     info.value = await $fetch<AdSelfServeInfo>('/api/ads/self-serve');
     /// Si el slot default está apagado, cae al primero que sí esté a la venta.
     if (info.value.slots.carousel.enabled === false) {
-      const fallback = (['both', 'list'] as const).find(
+      const fallback = (['list'] as const).find(
         (s) => info.value!.slots[s]?.enabled !== false,
       );
       form.value.placement = fallback ?? 'carousel';
@@ -329,9 +345,9 @@ onMounted(async () => {
                 <span class="h-4 w-1 rounded-full bg-accent" />
                 Elige tu espacio
               </h2>
-              <div class="mt-4 grid gap-3 sm:grid-cols-3">
+              <div class="mt-4 grid gap-3 sm:grid-cols-2">
                 <button
-                  v-for="slot in (['carousel', 'list', 'both'] as const)"
+                  v-for="slot in (['carousel', 'list'] as const)"
                   :key="slot"
                   type="button"
                   :disabled="info.slots[slot]?.enabled === false"
@@ -358,8 +374,25 @@ onMounted(async () => {
                   <p class="mt-2 text-sm font-black text-accent">
                     ${{ info.slots[slot]?.pricePerWeek.toLocaleString('es-MX') }}
                     <span class="text-[10px] font-bold text-text-dim">
-                      MXN/semana por sede
+                      MXN/semana
                     </span>
+                  </p>
+                  <p
+                    v-if="slot === 'carousel'"
+                    class="mt-1 text-[10px] font-bold uppercase tracking-widest"
+                    :class="carouselFull ? 'text-amber-400' : 'text-emerald-400'"
+                  >
+                    <template v-if="carouselFull">Espacios llenos</template>
+                    <template v-else>
+                      {{ info.carousel.slots - info.carousel.occupied }} de
+                      {{ info.carousel.slots }} espacios libres
+                    </template>
+                  </p>
+                  <p
+                    v-else-if="slot === 'list'"
+                    class="mt-1 text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                  >
+                    Orden aleatorio — sin favoritismo
                   </p>
                   <p
                     v-if="info.slots[slot]?.enabled === false"
@@ -370,19 +403,103 @@ onMounted(async () => {
                 </button>
               </div>
 
-              <div class="mt-4 grid grid-cols-2 gap-3">
-                <label class="block">
-                  <span
-                    class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-                    >Cobertura</span
+              <div
+                v-if="form.placement === 'carousel' && carouselFull"
+                class="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3"
+              >
+                <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                <p class="text-[11px] font-semibold leading-relaxed text-amber-300">
+                  Los {{ info.carousel.slots }} espacios del carrusel están
+                  ocupados. Tu anuncio aparecerá en el directorio de Aliados
+                  desde la aprobación y subirá al carrusel cuando se libere el
+                  próximo espacio<template v-if="nextFreeLabel">
+                    (aprox. el {{ nextFreeLabel }})</template
+                  >.
+                </p>
+              </div>
+
+              <div
+                class="mt-3 flex items-center gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3"
+              >
+                <Bell class="h-4 w-4 shrink-0 text-emerald-400" />
+                <p class="text-[11px] font-bold leading-snug text-emerald-300">
+                  Tu compra incluye 1 notificación push
+                  <span class="text-emerald-400">GRATIS</span> a todos los
+                  socios el día que se publique tu anuncio.
+                </p>
+              </div>
+
+              <div v-if="info.push.enabled && info.push.count > 0" class="mt-4">
+                <p
+                  class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                >
+                  ¿Cuántos pushes quieres? *
+                </p>
+                <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    class="cursor-pointer rounded-2xl border p-4 text-left transition"
+                    :class="
+                      !form.wantsPush
+                        ? 'border-accent bg-accent/10'
+                        : 'border-stroke bg-base hover:border-accent/50'
+                    "
+                    @click="form.wantsPush = false"
                   >
-                  <USelectMenu
-                    v-model="form.branchId"
-                    :items="branchItems"
-                    value-key="value"
-                    class="mt-1 w-full"
-                  />
-                </label>
+                    <div class="flex items-center justify-between gap-2">
+                      <p class="text-xs font-black text-text-primary">
+                        Solo el incluido
+                      </p>
+                      <Check
+                        v-if="!form.wantsPush"
+                        class="h-4 w-4 shrink-0 text-accent"
+                      />
+                    </div>
+                    <p class="mt-1 text-[11px] leading-snug text-text-muted">
+                      1 notificación a todos los socios el día que se publique
+                      tu anuncio.
+                    </p>
+                    <p class="mt-2 text-sm font-black text-emerald-400">
+                      $0
+                      <span class="text-[10px] font-bold text-text-dim">
+                        incluido
+                      </span>
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    class="cursor-pointer rounded-2xl border p-4 text-left transition"
+                    :class="
+                      form.wantsPush
+                        ? 'border-accent bg-accent/10'
+                        : 'border-stroke bg-base hover:border-accent/50'
+                    "
+                    @click="form.wantsPush = true"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <p class="text-xs font-black text-text-primary">
+                        Paquete de {{ info.push.count }} pushes
+                      </p>
+                      <Check
+                        v-if="form.wantsPush"
+                        class="h-4 w-4 shrink-0 text-accent"
+                      />
+                    </div>
+                    <p class="mt-1 text-[11px] leading-snug text-text-muted">
+                      Además del incluido: 1 notificación por semana al celular
+                      de todos los socios.
+                    </p>
+                    <p class="mt-2 text-sm font-black text-accent">
+                      +${{ info.push.price.toLocaleString('es-MX') }}
+                      <span class="text-[10px] font-bold text-text-dim">
+                        MXN · cobro único
+                      </span>
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              <div class="mt-4 grid grid-cols-2 gap-3">
                 <label class="block">
                   <span
                     class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
@@ -391,7 +508,7 @@ onMounted(async () => {
                   <USelectMenu
                     v-model="form.weeks"
                     :items="
-                      [1, 2, 4, 8, 12].map((w) => ({
+                      [1, 2, 4].map((w) => ({
                         label: `${w} semana${w > 1 ? 's' : ''}`,
                         value: w,
                       }))
@@ -408,11 +525,9 @@ onMounted(async () => {
                 <p class="text-[11px] font-bold text-text-muted">
                   {{ slotLabels[form.placement] }} ·
                   {{ form.weeks }} semana{{ form.weeks > 1 ? 's' : '' }} ·
-                  {{
-                    form.branchId === 'todas'
-                      ? `${scopeFactor} sedes`
-                      : '1 sede'
-                  }}
+                  todas las sedes<template v-if="pushPrice > 0">
+                    + paquete push</template
+                  >
                 </p>
                 <p class="text-lg font-black text-accent">
                   ${{ total.toLocaleString('es-MX') }}
@@ -636,32 +751,32 @@ onMounted(async () => {
             </section>
 
             <section class="rounded-2xl border border-stroke bg-surface p-5">
-              <button
-                type="button"
-                class="flex w-full cursor-pointer items-center justify-between"
-                @click="socialsOpen = !socialsOpen"
+              <h2
+                class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
               >
-                <div class="text-left">
-                  <h2
-                    class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
-                  >
-                    <span class="h-4 w-1 rounded-full bg-accent" />
-                    Redes y contacto
-                  </h2>
-                  <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
-                    Opcionales — adónde lleva tu anuncio
-                  </p>
-                </div>
-                <ChevronDown
-                  class="h-4 w-4 shrink-0 text-text-muted transition-transform duration-200"
-                  :class="socialsOpen ? 'rotate-180' : ''"
-                />
-              </button>
-              <div v-if="socialsOpen" class="mt-4 grid grid-cols-2 gap-3">
+                <span class="h-4 w-1 rounded-full bg-accent" />
+                Redes y contacto
+              </h2>
+              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                Opcionales — adónde lleva tu anuncio
+              </p>
+              <div class="mt-4 grid grid-cols-2 gap-3">
                 <input
                   v-model="form.instagram"
                   type="text"
                   placeholder="Instagram (URL)"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+                />
+                <input
+                  v-model="form.facebook"
+                  type="text"
+                  placeholder="Facebook (URL)"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+                />
+                <input
+                  v-model="form.tiktok"
+                  type="text"
+                  placeholder="TikTok (URL)"
                   class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
                 />
                 <input
@@ -674,49 +789,61 @@ onMounted(async () => {
                   v-model="form.whatsapp"
                   type="tel"
                   placeholder="WhatsApp (ej. +52 722 555 0101)"
-                  class="col-span-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+                />
+                <input
+                  v-model="form.otherUrl"
+                  type="text"
+                  placeholder="Otra red (ej. YouTube, X…)"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
                 />
               </div>
             </section>
           </div>
 
-          <AdPreview :preview="preview" :brand-name="info.brandName || 'RIR-HUB'">
-            <div
-              class="mt-4 flex items-start gap-2 rounded-xl border border-stroke bg-base px-3 py-2.5"
-            >
-              <Lock class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-              <p class="text-[10px] font-semibold leading-snug text-text-dim">
-                Pago seguro con Stripe. Tu anuncio entra a revisión y el equipo
-                de {{ info.brandName }} lo aprueba antes de publicarse — si no
-                se aprueba, el reembolso es automático.
-              </p>
-            </div>
-            <p
-              v-if="formError"
-              class="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-medium leading-snug text-red-400"
-            >
-              {{ formError }}
+          <AdPreview
+            :preview="preview"
+            :brand-name="info.brandName || 'RIR-HUB'"
+            show-push
+          />
+        </div>
+
+        <div class="mt-8 border-t border-stroke pt-6">
+          <div
+            class="flex items-start gap-2 rounded-xl border border-stroke bg-base px-3 py-2.5"
+          >
+            <Lock class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+            <p class="text-[10px] font-semibold leading-snug text-text-dim">
+              Pago seguro con Stripe. Tu anuncio entra a revisión y el equipo
+              de {{ info.brandName }} lo aprueba antes de publicarse — si no
+              se aprueba, el reembolso es automático.
             </p>
-            <p
-              v-if="missingFields.length"
-              class="mt-2 text-[10px] font-semibold text-text-dim"
-            >
-              Pendiente: {{ missingFields.join(', ') }}
-            </p>
-            <button
-              class="mt-4 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
-              :disabled="saving || !slotEnabled"
-              @click="pay"
-            >
-              <Loader2 v-if="saving" class="h-4 w-4 animate-spin" />
-              <Check v-else class="h-4 w-4" />
-              {{
-                saving
-                  ? 'Abriendo pago seguro…'
-                  : `Pagar $${total.toLocaleString('es-MX')} MXN`
-              }}
-            </button>
-          </AdPreview>
+          </div>
+          <p
+            v-if="formError"
+            class="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-medium leading-snug text-red-400"
+          >
+            {{ formError }}
+          </p>
+          <p
+            v-if="missingFields.length"
+            class="mt-2 text-[10px] font-semibold text-text-dim"
+          >
+            Pendiente: {{ missingFields.join(', ') }}
+          </p>
+          <button
+            class="mt-4 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
+            :disabled="saving || info.slots[form.placement]?.enabled === false"
+            @click="pay"
+          >
+            <Loader2 v-if="saving" class="h-4 w-4 animate-spin" />
+            <Check v-else class="h-4 w-4" />
+            {{
+              saving
+                ? 'Abriendo pago seguro…'
+                : `Pagar $${total.toLocaleString('es-MX')} MXN`
+            }}
+          </button>
         </div>
 
         <p

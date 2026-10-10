@@ -449,13 +449,13 @@ Escritura: solo ADMIN.
 | `image_url` | string | |
 | `cta_label` | string | |
 | `branch_id` | string \| null | `null` = global |
-| `placement` | string | `carousel` (Home + Promociones) \| `list` (solo Aliados) \| `both` (ambas). Sin campo → `carousel` |
+| `placement` | string | `carousel` (Home + Promociones + tope de Aliados, cupo 5) \| `list` (solo Aliados aleatorio). `both`/sin campo → `carousel` |
 | `status` | string | `PENDING` \| `ACTIVE` \| `PAUSED` — PENDING = comprado por self-serve, esperando aprobación (la app solo consulta ACTIVE) |
 | `ends_at` | timestamp \| null | `null` en PENDING — la vigencia arranca al aprobarse |
 | `impressions` / `taps` | number | **Contadores** — solo functions (increment) |
 | `description` / `address` / `phone` | string | Perfil del aliado |
 | `lat` / `lng` | number | |
-| `socials` | map | `{ instagram, facebook, tiktok, website, whatsapp }` |
+| `socials` | map | `{ instagram, facebook, tiktok, website, whatsapp, other_label, other_url }` — `other_*` es el link libre del anunciante (elige la red) |
 | `photos` | string[] | Galería |
 | `order_id` | string \| null | → `adOrders/{id}` si vino de self-serve |
 | `created_at` | timestamp | |
@@ -502,8 +502,9 @@ Un solo documento — lo edita el admin en `/publicidad` → "Venta directa".
 | Campo | Tipo | Notas |
 |---|---|---|
 | `enabled` | bool | Apagado → `/anuncia` muestra "no disponible" |
-| `slots` | map | `{ carousel: {enabled, price_per_week}, list: {…}, both: {…} }` — precio MXN por semana **por sede**; "todas las sedes" multiplica por N. `both` = combo de ambas superficies |
-| `notify` | map | `{ global: string[], by_branch: {branchId: email} }` — avisos de solicitud pagada: `global` siempre se notifica; `by_branch` solo si la orden compró esa sede ("todas las sedes" avisa a todos). Los ADMIN de staff siempre reciben aviso además de estos |
+| `slots` | map | `{ carousel: {enabled, price_per_week}, list: {…} }` — precio MXN por semana, cobertura global. `carousel` = premium (carrusel + tope de Aliados, cupo 5); `list` = solo directorio aleatorio |
+| `push` | map | `{enabled, count, price}` — paquete de pushes extra (1/semana, cobro único). Toda compra ya incluye 1 push gratis al aprobarse |
+| `notify` | map | `{ global: string[], by_branch: {branchId: email} }` — avisos de solicitud pagada: `global` siempre se notifica; como toda orden es global, **todos** los `by_branch` reciben aviso (dedupe). Los ADMIN de staff siempre reciben aviso además de estos |
 
 ### `/adOrders/{orderId}` — compras self-serve de anuncios
 
@@ -519,10 +520,12 @@ el admin aprueba (`ends_at = hoy + weeks`, anuncio ACTIVE) o rechaza
 | `business_name` / `contact_name` / `email` / `phone` | string | Contacto del anunciante |
 | `title` / `subtitle` / `badge` / `image_url` / `cta_label` / `description` / `address` / `socials` / `photos` / `brand_color` | | Creativo — se copia al sponsorAd al pagar |
 | `lat` / `lng` | number \| null | Pin que el anunciante confirmó en el mapa de `/anuncia`; null → el webhook geocodifica `address` como respaldo |
-| `branch_id` | string \| null | `null` = todas las sedes |
-| `placement` | string | `carousel` \| `list` \| `both` |
-| `weeks` | int | 1–12 |
-| `amount` / `currency` | number / string | Calculado server-side (precio×semanas×sedes) |
+| `branch_id` | string \| null | Siempre `null` — la segmentación por sede se eliminó (todo anuncio es global) |
+| `placement` | string | `carousel` \| `list` (docs viejos con `both` se leen como `carousel`) |
+| `weeks` | int | 1–4 (tope pensado para que el paquete de pushes semanales quepa en la campaña) |
+| `amount` / `currency` | number / string | Calculado server-side (precio×semanas + push si aplica) |
+| `wants_push` / `push_pack` | bool / int | Compró el paquete y cuántos pushes extra trae (1/semana desde la aprobación — el push incluido sale igual) |
+| `push_log_ids` / `push_sent_at` / `push_error` | string[] / timestamp / string | → `pushLogs/{ids}` (el inmediato + los programados), cuándo salió el incluido o por qué falló |
 | `status` | string | `AWAITING_PAYMENT` \| `PENDING_APPROVAL` \| `APPROVED` \| `REJECTED` \| `EXPIRED` (checkout expirado) |
 | `stripe_session_id` / `stripe_payment_intent_id` | string | Checkout Session / PI (para el reembolso) |
 | `sponsor_ad_id` | string \| null | → `sponsorAds/{id}` tras el pago |
@@ -560,12 +563,14 @@ opcional). Notificaciones por SMTP a admins + anunciante.
 | `audience` | string | `ALL` \| `BRANCH` \| `EXPIRED` |
 | `branch_id` | string \| null | Si `audience == 'BRANCH'` |
 | `kind` | string | `BRAND` \| `SPONSOR` |
-| `status` | string | `DRAFT` \| `SENT` |
+| `status` | string | `DRAFT` \| `SENDING` \| `SENT` \| `FAILED` |
 | `scheduled_at` | timestamp \| null | |
 | `sent` | number | Destinatarios alcanzados |
+| `sponsor_ad_id` / `ad_order_id` | string \| null | Solo en pushes del add-on pagado — trazabilidad al anuncio/orden |
 | `created_at` | timestamp | |
 
-Escritura: solo ADMIN.
+Escritura: solo ADMIN (y server — el add-on push se crea al aprobar una
+orden pagada).
 
 ---
 

@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { Check, Dumbbell, Hourglass, Mail, RefreshCcw } from '@lucide/vue';
+import {
+  Bell,
+  Check,
+  Dumbbell,
+  Hourglass,
+  Mail,
+  RefreshCcw,
+} from '@lucide/vue';
 
 definePageMeta({ layout: false });
 </script>
@@ -28,6 +35,13 @@ definePageMeta({ layout: false });
           <p class="text-xs font-semibold leading-snug text-text-muted">
             La revisión suele tomar menos de 48 horas — tu vigencia empieza a
             contar cuando el anuncio se publica, no desde hoy.
+          </p>
+        </div>
+        <div class="flex items-start gap-3">
+          <Bell class="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <p class="text-xs font-semibold leading-snug text-text-muted">
+            El día que se publique, todos los socios recibirán tu oferta
+            como notificación en su celular — va incluida en tu compra.
           </p>
         </div>
         <div class="flex items-start gap-3">

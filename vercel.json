@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/close-day",
       "schedule": "55 5 * * *"
+    },
+    {
+      "path": "/api/cron/push-dispatch",
+      "schedule": "0 16 * * *"
     }
   ]
 }

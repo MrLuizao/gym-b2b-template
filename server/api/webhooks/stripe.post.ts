@@ -101,10 +101,7 @@ async function fulfillAdOrder(opts: {
     image_url: order.image_url ?? '',
     cta_label: order.cta_label ?? 'Ver más',
     branch_id: order.branch_id ?? null,
-    placement:
-      order.placement === 'list' || order.placement === 'both'
-        ? order.placement
-        : 'carousel',
+    placement: order.placement === 'list' ? 'list' : 'carousel',
     /// PENDING hasta que el admin apruebe — la vigencia (ends_at)
     /// arranca en la aprobación, no en el pago.
     status: 'PENDING',
@@ -135,11 +132,9 @@ async function fulfillAdOrder(opts: {
       ((await db().collection('config').doc('brand').get()).data()
         ?.name as string | undefined) ?? 'el gimnasio';
     const placementLabel =
-      order.placement === 'both'
-        ? 'Carrusel del Home + Directorio de Aliados'
-        : order.placement === 'list'
-          ? 'Directorio de Aliados'
-          : 'Carrusel del Home';
+      order.placement === 'list'
+        ? 'Directorio de Aliados'
+        : 'Carrusel destacado + Aliados';
     const branchLabel = order.branch_id
       ? (((await db().collection('branches').doc(String(order.branch_id)).get()).data()
           ?.name as string | undefined) ?? 'Sede')
@@ -193,15 +188,19 @@ async function fulfillAdOrder(opts: {
     }
     for (const to of extra) {
       if (notified.has(to.toLowerCase())) continue;
-      await sendAdOrderStaffNotice({
-        to,
-        businessName: String(order.business_name ?? ''),
-        placementLabel,
-        branchLabel,
-        weeks: Number(order.weeks ?? 1),
-        amount: Number(order.amount ?? 0),
-        reviewUrl,
-      });
+      try {
+        await sendAdOrderStaffNotice({
+          to,
+          businessName: String(order.business_name ?? ''),
+          placementLabel,
+          branchLabel,
+          weeks: Number(order.weeks ?? 1),
+          amount: Number(order.amount ?? 0),
+          reviewUrl,
+        });
+      } catch {
+        /// Un destinatario que falle no bloquea a los demás.
+      }
     }
   } catch (error) {
     console.warn('[webhook] aviso de orden de anuncio falló:', error);

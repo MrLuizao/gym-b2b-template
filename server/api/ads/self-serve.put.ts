@@ -7,8 +7,8 @@ import { requireAdmin, requireStaff } from '../../utils/staff-auth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/// Guarda /config/ads — precios de venta directa por espacio y correos
-/// de aviso (globales + por sede). Solo admin.
+/// Guarda /config/ads — precios de venta directa por espacio, el
+/// add-on push y correos de aviso (globales + por sede). Solo admin.
 export default defineEventHandler(async (event): Promise<AdSelfServeConfig> => {
   const staff = await requireStaff(event);
   requireAdmin(staff);
@@ -18,8 +18,8 @@ export default defineEventHandler(async (event): Promise<AdSelfServeConfig> => {
     slots?: {
       carousel?: { enabled?: boolean; pricePerWeek?: number };
       list?: { enabled?: boolean; pricePerWeek?: number };
-      both?: { enabled?: boolean; pricePerWeek?: number };
     };
+    push?: { enabled?: boolean; count?: number; price?: number };
     notify?: {
       global?: string[];
       byBranch?: Record<string, string>;
@@ -47,19 +47,31 @@ export default defineEventHandler(async (event): Promise<AdSelfServeConfig> => {
   );
 
   const ref = db().collection('config').doc('ads');
-  await ref.set(
-    {
-      enabled: Boolean(body?.enabled),
-      slots: {
-        carousel: clean(body?.slots?.carousel),
-        list: clean(body?.slots?.list),
-        both: clean(body?.slots?.both),
-      },
-      notify: { global: notifyGlobal, by_branch: notifyByBranch },
-      updated_at: FieldValue.serverTimestamp(),
-      updated_by: staff.uid,
+  const update: Record<string, unknown> = {
+    enabled: Boolean(body?.enabled),
+    slots: {
+      carousel: clean(body?.slots?.carousel),
+      list: clean(body?.slots?.list),
     },
-    { merge: true },
-  );
+    updated_at: FieldValue.serverTimestamp(),
+    updated_by: staff.uid,
+  };
+  /// Defensivo — solo se pisa notify/push cuando el cliente lo manda;
+  /// un guardado sin esos bloques nunca borra lo ya configurado.
+  if (body?.notify) {
+    update.notify = { global: notifyGlobal, by_branch: notifyByBranch };
+  }
+  if (body?.push) {
+    update.push = {
+      enabled: body.push.enabled === true,
+      /// Paquete de pushes extra semanales — 1..52 tope razonable.
+      count: Math.min(
+        52,
+        Math.max(0, Math.round(Number(body.push.count ?? 0))),
+      ),
+      price: Math.max(0, Math.round(Number(body.push.price ?? 0))),
+    };
+  }
+  await ref.set(update, { merge: true });
   return toAdSelfServeConfig(await ref.get());
 });

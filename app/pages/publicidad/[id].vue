@@ -16,7 +16,7 @@ import {
   X,
 } from '@lucide/vue';
 
-import type { Branch, SponsorAd } from '#shared/types';
+import type { SponsorAd } from '#shared/types';
 import { PLACEMENT_RANK } from '#shared/types';
 
 const route = useRoute();
@@ -36,19 +36,10 @@ const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
 /// Revisión de la orden ligada: admin cualquiera; gerente solo si la
 /// orden compró SU sede ("todas las sedes" sigue siendo admin-only).
-const canReviewLinkedOrder = computed(() => {
-  const o = linkedOrder.value;
-  if (!o) return false;
-  if (isAdmin.value) return true;
-  return (
-    session.value?.role === 'MANAGER' &&
-    o.branchId !== null &&
-    o.branchId === session.value?.branchId
-  );
-});
+/// Como ya no se vende por sede, toda orden es global → admin-only.
+const canReviewLinkedOrder = computed(() => isAdmin.value);
 
 const ad = ref<SponsorAd | null>(null);
-const branches = ref<Branch[]>([]);
 const pending = ref(true);
 const saving = ref(false);
 const editing = ref(false);
@@ -61,7 +52,6 @@ const editForm = ref({
   brandColor: '#f4e701',
   imageUrl: '',
   ctaLabel: 'Ver oferta',
-  branchId: 'todas',
   placement: 'carousel' as SponsorAd['placement'],
   endsAt: '',
   description: '',
@@ -74,6 +64,8 @@ const editForm = ref({
   tiktok: '',
   website: '',
   whatsapp: '',
+  otherLabel: '',
+  otherUrl: '',
   photos: [] as string[],
 });
 
@@ -86,20 +78,15 @@ const overrideReason = ref('');
 const pauseReason = ref('');
 const deleteReason = ref('');
 
-const branchItems = computed(() => [
-  { label: 'Todas las sedes', value: 'todas' },
-  ...branches.value.map((b) => ({ label: b.name, value: b.id })),
-]);
+
 
 const placementItems = [
-  { label: 'Carrusel del Home', value: 'carousel' },
+  { label: 'Carrusel destacado', value: 'carousel' },
   { label: 'Directorio de Aliados', value: 'list' },
-  { label: 'Ambos (Home + Aliados)', value: 'both' },
 ];
 
 function placementLabel(p: SponsorAd['placement']): string {
-  if (p === 'both') return 'Ambos (Home + Aliados)';
-  return p === 'carousel' ? 'Carrusel del Home' : 'Directorio de Aliados';
+  return p === 'carousel' ? 'Carrusel destacado' : 'Directorio de Aliados';
 }
 
 const saveModalOpen = ref(false);
@@ -109,9 +96,9 @@ const actionError = ref<string | null>(null);
 /// Errores del formulario de edición (pickers, validaciones pre-modal).
 const formError = ref<string | null>(null);
 
-function branchName(id: string | null): string {
-  if (!id) return 'Todas las sedes';
-  return branches.value.find((b) => b.id === id)?.name ?? '—';
+function branchName(_id: string | null): string {
+  /// Los anuncios ya no se segmentan por sede — siempre global.
+  return 'Todas las sedes';
 }
 
 function formatDay(ts: number): string {
@@ -190,6 +177,7 @@ const socialLinks = computed(() => {
   if (s.tiktok) entries.tiktok = s.tiktok;
   if (s.website) entries.website = s.website;
   if (s.whatsapp) entries.whatsapp = s.whatsapp;
+  if (s.other_url) entries[s.other_label || 'enlace'] = s.other_url;
   return entries;
 });
 
@@ -215,6 +203,8 @@ const preview = computed(() => {
         tiktok: editForm.value.tiktok,
         website: editForm.value.website,
         whatsapp: editForm.value.whatsapp,
+        other_label: editForm.value.otherLabel,
+        other_url: editForm.value.otherUrl,
       },
       photos: editForm.value.photos,
     };
@@ -250,12 +240,10 @@ const maxImpressions = computed(() =>
 
 onMounted(async () => {
   try {
-    const [branchList, data, stats] = await Promise.all([
-      $api<Branch[]>('/api/branches'),
+    const [data, stats] = await Promise.all([
       $api<SponsorAd>(`/api/cms/ads/${route.params.id}`),
       $api<{ days: AdDailyStat[] }>(`/api/ads/${route.params.id}/stats`),
     ]);
-    branches.value = branchList;
     ad.value = data;
     dailyStats.value = stats.days;
     /// Órdenes self-serve — para ligar PENDING ↔ pago del anunciante.
@@ -325,7 +313,6 @@ function startEdit(): void {
     brandColor: argbToHex(ad.value.brandColor) ?? '#f4e701',
     imageUrl: ad.value.imageUrl,
     ctaLabel: ad.value.ctaLabel,
-    branchId: ad.value.branchId ?? 'todas',
     placement: ad.value.placement,
     endsAt: toInputDate(ad.value.endsAt),
     description: ad.value.description,
@@ -338,6 +325,8 @@ function startEdit(): void {
     tiktok: ad.value.socials.tiktok,
     website: ad.value.socials.website,
     whatsapp: ad.value.socials.whatsapp,
+    otherLabel: ad.value.socials.other_label,
+    otherUrl: ad.value.socials.other_url,
     photos: [...ad.value.photos],
   };
   editing.value = true;
@@ -377,9 +366,6 @@ function confirmSave(): void {
     changes.push(`Botón: '${a.ctaLabel}' → '${editForm.value.ctaLabel}'`);
   if (editForm.value.imageUrl !== a.imageUrl)
     changes.push('Se actualizará la imagen del anuncio');
-  const newBranch = editForm.value.branchId === 'todas' ? null : editForm.value.branchId;
-  if (newBranch !== a.branchId)
-    changes.push(`Sede: ${branchName(a.branchId)} → ${branchName(newBranch)}`);
   if (editForm.value.placement !== a.placement)
     changes.push(
       `Espacio: ${placementLabel(a.placement)} → ${placementLabel(editForm.value.placement)}` +
@@ -407,7 +393,9 @@ function confirmSave(): void {
     editForm.value.facebook !== a.socials.facebook ||
     editForm.value.tiktok !== a.socials.tiktok ||
     editForm.value.website !== a.socials.website ||
-    editForm.value.whatsapp !== a.socials.whatsapp;
+    editForm.value.whatsapp !== a.socials.whatsapp ||
+    editForm.value.otherLabel !== a.socials.other_label ||
+    editForm.value.otherUrl !== a.socials.other_url;
   if (socialsChanged) changes.push('Se actualizarán las redes sociales');
   if (JSON.stringify(editForm.value.photos) !== JSON.stringify(a.photos))
     changes.push('Se actualizará la portada del aliado');
@@ -432,8 +420,8 @@ async function saveAd(): Promise<void> {
       brandColor: hexToArgb(editForm.value.brandColor),
       imageUrl: editForm.value.imageUrl.trim(),
       ctaLabel: editForm.value.ctaLabel.trim() || 'Ver oferta',
-      branchId:
-        editForm.value.branchId === 'todas' ? null : editForm.value.branchId,
+      /// Los anuncios ya no se segmentan por sede — siempre global.
+      branchId: null,
       placement: editForm.value.placement,
       endsAt,
       description: editForm.value.description.trim(),
@@ -447,6 +435,8 @@ async function saveAd(): Promise<void> {
         tiktok: editForm.value.tiktok.trim(),
         website: editForm.value.website.trim(),
         whatsapp: editForm.value.whatsapp.trim(),
+        other_label: editForm.value.otherLabel.trim(),
+        other_url: editForm.value.otherUrl.trim(),
       },
       photos: editForm.value.photos,
       overrideReason: overrideReason.value.trim() || undefined,
@@ -1052,18 +1042,6 @@ async function removeAd(): Promise<void> {
           <label class="block">
             <span
               class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-              >Sede</span
-            >
-            <USelectMenu
-              v-model="editForm.branchId"
-              :items="branchItems"
-              value-key="value"
-              class="mt-1 w-full"
-            />
-          </label>
-          <label class="block">
-            <span
-              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
               >Espacio</span
             >
             <USelectMenu
@@ -1209,6 +1187,20 @@ async function removeAd(): Promise<void> {
               placeholder="WhatsApp (ej. +52 722 555 0101)"
               class="col-span-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
             />
+            <div class="col-span-2 flex gap-3">
+              <input
+                v-model="editForm.otherLabel"
+                type="text"
+                placeholder="Otra red (ej. YouTube, X…)"
+                class="w-2/5 rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+              <input
+                v-model="editForm.otherUrl"
+                type="text"
+                placeholder="URL del enlace"
+                class="flex-1 rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </div>
           </div>
         </div>
         <div class="grid gap-4 sm:grid-cols-2">

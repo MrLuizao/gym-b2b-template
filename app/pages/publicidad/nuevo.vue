@@ -8,12 +8,11 @@ import {
   X,
 } from '@lucide/vue';
 
-import type { Branch, SponsorAd } from '#shared/types';
+import type { SponsorAd } from '#shared/types';
 
 const { createAd } = useCms();
 const { session } = useAuth();
 
-const branches = ref<Branch[]>([]);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const confirmModalOpen = ref(false);
@@ -31,7 +30,6 @@ const form = ref({
   brandColor: '#f4e701',
   imageUrl: '',
   ctaLabel: 'Ver oferta',
-  branchId: 'todas',
   placement: 'carousel' as SponsorAd['placement'],
   endsAt: '',
   status: 'ACTIVE' as SponsorAd['status'],
@@ -45,20 +43,18 @@ const form = ref({
   tiktok: '',
   website: '',
   whatsapp: '',
+  otherLabel: '',
+  otherUrl: '',
   photos: [] as string[],
 });
 
-const branchItems = computed(() => [
-  { label: 'Todas las sedes', value: 'todas' },
-  ...branches.value.map((b) => ({ label: b.name, value: b.id })),
-]);
 
-/// Espacios publicitarios vendibles — el carrusel del Home es el
-/// premium; el directorio de Aliados es la presencia básica.
+/// Espacios publicitarios vendibles — el carrusel es el premium (sale
+/// también fijado al tope de Aliados); el directorio es la presencia
+/// básica en orden aleatorio.
 const placementItems = [
-  { label: 'Carrusel del Home', value: 'carousel' },
+  { label: 'Carrusel destacado', value: 'carousel' },
   { label: 'Directorio de Aliados', value: 'list' },
-  { label: 'Ambos (Home + Aliados)', value: 'both' },
 ];
 
 const placementLabel = computed(() =>
@@ -83,14 +79,12 @@ const preview = computed(() => ({
     tiktok: form.value.tiktok,
     website: form.value.website,
     whatsapp: form.value.whatsapp,
+    other_label: form.value.otherLabel,
+    other_url: form.value.otherUrl,
   },
   photos: form.value.photos,
 }));
 
-function branchName(id: string | null): string {
-  if (!id) return 'Todas las sedes';
-  return branches.value.find((b) => b.id === id)?.name ?? '—';
-}
 
 function formatDay(ts: number): string {
   return new Date(ts).toLocaleDateString('es-MX', {
@@ -117,7 +111,7 @@ const endsExpired = computed(
 
 const confirmDescription = computed(() => {
   const active = form.value.status === 'ACTIVE';
-  return `"${form.value.advertiser.trim()}" ${active ? 'aparecerá' : 'quedará pausado sin aparecer'} en ${placementLabel.value} (${branchName(form.value.branchId === 'todas' ? null : form.value.branchId)}) hasta el ${formatDay(endsAtTs.value)}.`;
+  return `"${form.value.advertiser.trim()}" ${active ? 'aparecerá' : 'quedará pausado sin aparecer'} en ${placementLabel.value} (todas las sedes) hasta el ${formatDay(endsAtTs.value)}.`;
 });
 
 const missingFields = computed(() => {
@@ -169,7 +163,8 @@ async function publish(): Promise<void> {
       badge: form.value.badge.trim() || 'ALIADO',
       imageUrl: form.value.imageUrl,
       ctaLabel: form.value.ctaLabel.trim() || 'Ver oferta',
-      branchId: form.value.branchId === 'todas' ? null : form.value.branchId,
+      /// Los anuncios ya no se segmentan por sede — siempre global.
+      branchId: null,
       placement: form.value.placement,
       endsAt: endsAtTs.value,
       status: form.value.status,
@@ -185,6 +180,8 @@ async function publish(): Promise<void> {
         tiktok: form.value.tiktok.trim(),
         website: form.value.website.trim(),
         whatsapp: form.value.whatsapp.trim(),
+        other_label: form.value.otherLabel.trim(),
+        other_url: form.value.otherUrl.trim(),
       },
       photos: form.value.photos,
     });
@@ -203,11 +200,6 @@ onMounted(async () => {
   if (session.value?.role !== 'ADMIN') {
     await navigateTo('/publicidad');
     return;
-  }
-  try {
-    branches.value = await $api<Branch[]>('/api/branches');
-  } catch {
-    branches.value = [];
   }
 });
 </script>
@@ -332,18 +324,6 @@ onMounted(async () => {
                   class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
                 />
               </div>
-            </label>
-            <label class="block">
-              <span
-                class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-                >Sede *</span
-              >
-              <USelectMenu
-                v-model="form.branchId"
-                :items="branchItems"
-                value-key="value"
-                class="mt-1 w-full"
-              />
             </label>
             <label class="block">
               <span
@@ -524,6 +504,20 @@ onMounted(async () => {
               placeholder="WhatsApp (ej. +52 722 555 0101)"
               class="col-span-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
             />
+            <div class="col-span-2 flex gap-3">
+              <input
+                v-model="form.otherLabel"
+                type="text"
+                placeholder="Otra red (ej. YouTube, X…)"
+                class="w-2/5 rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+              <input
+                v-model="form.otherUrl"
+                type="text"
+                placeholder="URL del enlace"
+                class="flex-1 rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </div>
           </div>
         </section>
 
