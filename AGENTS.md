@@ -68,9 +68,9 @@ Sin vínculo no ve datos del gym.
   borra los docs, limpia `active_checkin_*` de socios, resetea aforo y
   cupo de clases. Dos entradas: botón "Cerrar sede" del header
   (`POST /api/branches/{id}/close-day`, cualquier rol pero solo su sede
-  salvo admin) y cron global `POST /api/cron/close-day` (vercel.json
-  23:55 CDMX — requiere `CRON_SECRET` en Vercel; hoy NO corre en
-  producción, el cierre real es el botón o cron-job.org).
+  salvo admin) y cron global `/api/cron/close-day` (vercel.json
+  23:55 CDMX — handler sin sufijo: acepta el GET de Vercel cron y el
+  POST con `Bearer CRON_SECRET` de cron-job.org/manual).
 - **Validación de alcance de sede**: `checkin.post` y
   `classes/{id}/book` rechazan si el plan del socio no tiene
   `all_branches` y la sede no es su `branch_id`
