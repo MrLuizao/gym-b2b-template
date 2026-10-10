@@ -72,6 +72,23 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
       // impressions / taps solo functions (Admin SDK ignora reglas).
+      // status PENDING = compra self-serve esperando aprobación — la app
+      // solo consulta ACTIVE, así que no se muestra al socio.
+    }
+
+    // Órdenes de publicidad self-serve (/anuncia → Stripe Checkout).
+    // Escritura solo API (orders.post, webhook, approve/reject); el
+    // contacto del anunciante es dato comercial — solo staff lo lee.
+    match /adOrders/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if false;
+    }
+
+    // Evidencia de cambios excepcionales sobre anuncios comprados
+    // (downgrade de espacio, pausa, borrado). Escritura solo API.
+    match /auditLogs/{id} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     match /pushLogs/{id} {

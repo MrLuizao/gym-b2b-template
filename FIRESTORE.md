@@ -28,6 +28,7 @@ otro proyecto Firebase, no otro tenant.
 
 ```
 /config/brand                    configuración white-label (1 doc)
+/config/ads                      precios de venta directa de publicidad (1 doc)
 
 /branches/{branchId}             sedes
 /plans/{planId}                  planes de membresía (catálogo + Stripe)
@@ -48,6 +49,7 @@ otro proyecto Firebase, no otro tenant.
 
 /promotions/{promotionId}        banners + cupones CMS
 /sponsorAds/{adId}               anuncios de aliados + métricas
+/adOrders/{orderId}              compras self-serve de anuncios (Stripe + aprobación)
 /adEvents/{id}                    dedupe 1 evento/socio/anuncio/día
 /adStats/{adId}_{fecha}           serie diaria única por anuncio (reportes)
 /pushLogs/{logId}                notificaciones push enviadas
@@ -447,13 +449,15 @@ Escritura: solo ADMIN.
 | `image_url` | string | |
 | `cta_label` | string | |
 | `branch_id` | string \| null | `null` = global |
-| `status` | string | `ACTIVE` \| `PAUSED` |
-| `ends_at` | timestamp | |
+| `placement` | string | `carousel` (Home + Promociones) \| `list` (solo Aliados) \| `both` (ambas). Sin campo → `carousel` |
+| `status` | string | `PENDING` \| `ACTIVE` \| `PAUSED` — PENDING = comprado por self-serve, esperando aprobación (la app solo consulta ACTIVE) |
+| `ends_at` | timestamp \| null | `null` en PENDING — la vigencia arranca al aprobarse |
 | `impressions` / `taps` | number | **Contadores** — solo functions (increment) |
 | `description` / `address` / `phone` | string | Perfil del aliado |
 | `lat` / `lng` | number | |
 | `socials` | map | `{ instagram, facebook, tiktok, website, whatsapp }` |
 | `photos` | string[] | Galería |
+| `order_id` | string \| null | → `adOrders/{id}` si vino de self-serve |
 | `created_at` | timestamp | |
 
 Escritura: solo ADMIN. Contadores: functions vía `FieldValue.increment()`.
@@ -490,6 +494,62 @@ días en `/publicidad/[id]`.
 | `date` | string `yyyy-mm-dd` CDMX |
 | `impressions` | int |
 | `taps` | int |
+
+### `/config/ads` — venta directa de publicidad
+
+Un solo documento — lo edita el admin en `/publicidad` → "Venta directa".
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `enabled` | bool | Apagado → `/anuncia` muestra "no disponible" |
+| `slots` | map | `{ carousel: {enabled, price_per_week}, list: {…}, both: {…} }` — precio MXN por semana **por sede**; "todas las sedes" multiplica por N. `both` = combo de ambas superficies |
+| `notify` | map | `{ global: string[], by_branch: {branchId: email} }` — avisos de solicitud pagada: `global` siempre se notifica; `by_branch` solo si la orden compró esa sede ("todas las sedes" avisa a todos). Los ADMIN de staff siempre reciben aviso además de estos |
+
+### `/adOrders/{orderId}` — compras self-serve de anuncios
+
+El flujo: el anunciante llena `/anuncia` (público) → `POST /api/ads/orders`
+crea la orden `AWAITING_PAYMENT` + Stripe Checkout Session → webhook
+(`checkout.session.completed`, con `payment_intent.succeeded` de respaldo)
+crea el `sponsorAds` **PENDING** y pasa la orden a `PENDING_APPROVAL` →
+el admin aprueba (`ends_at = hoy + weeks`, anuncio ACTIVE) o rechaza
+(reembolso Stripe + se borra el creativo).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `business_name` / `contact_name` / `email` / `phone` | string | Contacto del anunciante |
+| `title` / `subtitle` / `badge` / `image_url` / `cta_label` / `description` / `address` / `socials` / `photos` / `brand_color` | | Creativo — se copia al sponsorAd al pagar |
+| `branch_id` | string \| null | `null` = todas las sedes |
+| `placement` | string | `carousel` \| `list` \| `both` |
+| `weeks` | int | 1–12 |
+| `amount` / `currency` | number / string | Calculado server-side (precio×semanas×sedes) |
+| `status` | string | `AWAITING_PAYMENT` \| `PENDING_APPROVAL` \| `APPROVED` \| `REJECTED` \| `EXPIRED` (checkout expirado) |
+| `stripe_session_id` / `stripe_payment_intent_id` | string | Checkout Session / PI (para el reembolso) |
+| `sponsor_ad_id` | string \| null | → `sponsorAds/{id}` tras el pago |
+| `rejection_reason` | string \| null | Opcional — va en el correo al anunciante |
+| `paid_at` / `reviewed_at` / `reviewed_by` | timestamp / string | |
+
+### `/auditLogs/{id}` — evidencia de cambios excepcionales en ads comprados
+
+Un anuncio con `order_id` fue **pagado** por un anunciante: degradar su
+superficie (placement/pausa/borrado) requiere razón obligatoria y queda
+aquí. Escritura solo server (`server/utils/audit.ts`); lectura solo admin.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `entity` / `entity_id` | string | `sponsorAd` + id del anuncio |
+| `order_id` | string \| null | → `adOrders/{id}` |
+| `advertiser` | string | Snapshot para display |
+| `action` | string | `PLACEMENT_DOWNGRADE` \| `PLACEMENT_UPGRADE` \| `PAUSE` \| `DELETE` |
+| `actor_uid` / `actor_email` | string | Staff que forzó el cambio |
+| `reason` | string | Obligatoria en downgrade/pausa/delete |
+| `changes` | map | `{campo: {before, after}}` |
+| `snapshot` | map \| null | Estado del anuncio (sin imágenes) — solo DELETE |
+| `created_at` | timestamp | |
+| `created_at` | timestamp | |
+
+Escritura: solo API (rules: lectura staff). Requiere en el endpoint del
+webhook de Stripe suscrito: `checkout.session.completed` (y `expired`
+opcional). Notificaciones por SMTP a admins + anunciante.
 
 ### `/pushLogs/{logId}` — notificaciones
 

@@ -1,17 +1,10 @@
 <script setup lang="ts">
 import {
   ArrowLeft,
-  BatteryFull,
   Check,
   ChevronDown,
-  ChevronRight,
-  Dumbbell,
   ImageUp,
-  Signal,
-  Star,
-  Store,
   TriangleAlert,
-  Wifi,
   X,
 } from '@lucide/vue';
 
@@ -65,6 +58,7 @@ const branchItems = computed(() => [
 const placementItems = [
   { label: 'Carrusel del Home', value: 'carousel' },
   { label: 'Directorio de Aliados', value: 'list' },
+  { label: 'Ambos (Home + Aliados)', value: 'both' },
 ];
 
 const placementLabel = computed(() =>
@@ -80,9 +74,18 @@ const preview = computed(() => ({
   ctaLabel: form.value.ctaLabel || 'Ver oferta',
   brandColor: form.value.brandColor,
   placement: form.value.placement,
+  description: form.value.description,
+  address: form.value.address,
+  phone: form.value.phone,
+  socials: {
+    instagram: form.value.instagram,
+    facebook: form.value.facebook,
+    tiktok: form.value.tiktok,
+    website: form.value.website,
+    whatsapp: form.value.whatsapp,
+  },
+  photos: form.value.photos,
 }));
-
-const onAlly = computed(() => readableOn(preview.value.brandColor));
 
 function branchName(id: string | null): string {
   if (!id) return 'Todas las sedes';
@@ -618,171 +621,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <section
-        class="flex flex-1 flex-col rounded-2xl border border-stroke bg-surface p-5"
-      >
-        <h2
-          class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
-        >
-          <span class="h-4 w-1 rounded-full bg-accent" />
-          Así se ve en Aliados
-        </h2>
-        <div class="mt-3 flex justify-center">
-          <div class="w-full max-w-[260px]">
-            <div
-              class="flex items-center gap-3 rounded-2xl border border-stroke bg-base p-3"
-            >
-              <div
-                class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface"
-              >
-                <img
-                  v-if="preview.imageUrl"
-                  :src="preview.imageUrl"
-                  :alt="preview.advertiser"
-                  class="h-full w-full object-cover"
-                />
-                <Store v-else class="h-5 w-5 text-text-dim" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1">
-                  <p
-                    class="truncate text-[9px] font-black uppercase tracking-widest text-accent"
-                  >
-                    {{ preview.advertiser }}
-                  </p>
-                  <Star
-                    v-if="preview.placement === 'carousel'"
-                    class="h-3 w-3 shrink-0 fill-accent text-accent"
-                  />
-                </div>
-                <p
-                  class="truncate text-[13px] font-black text-text-primary"
-                >
-                  {{ preview.title }}
-                </p>
-                <p
-                  class="truncate text-[11px] font-semibold text-text-muted"
-                >
-                  {{ preview.subtitle }}
-                </p>
-              </div>
-              <ChevronRight class="h-5 w-5 shrink-0 text-text-dim" />
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-6 border-t border-stroke pt-5">
-          <h3
-            class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
-          >
-            <span class="h-4 w-1 rounded-full bg-accent" />
-            Así se ve en el Home
-          </h3>
-        </div>
-
-        <div class="mt-4 flex flex-1 items-center justify-center">
-          <div
-            class="w-full max-w-[260px] rounded-[2.4rem] border-4 border-stroke bg-black p-1.5 shadow-2xl"
-          >
-            <div
-              class="relative flex h-[420px] flex-col overflow-hidden rounded-[1.9rem] bg-base"
-            >
-              <div
-                class="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black"
-              />
-              <div
-                class="flex items-center justify-between px-6 pt-3 text-[9px] font-bold text-text-primary"
-              >
-                <span>9:41</span>
-                <span class="flex items-center gap-1 text-text-primary">
-                  <Signal class="h-2.5 w-2.5" />
-                  <Wifi class="h-2.5 w-2.5" />
-                  <BatteryFull class="h-3 w-3" />
-                </span>
-              </div>
-              <div class="flex flex-1 flex-col px-3 pt-8">
-                <div class="flex items-center gap-1.5 px-1">
-                  <div
-                    class="flex h-5 w-5 items-center justify-center rounded-md bg-accent"
-                  >
-                    <Dumbbell class="h-3 w-3 text-base" />
-                  </div>
-                  <p
-                    class="text-[9px] font-black uppercase tracking-widest text-text-primary"
-                  >
-                    RIR-HUB
-                  </p>
-                </div>
-                <p
-                  class="mt-3 px-1 text-[8px] font-bold uppercase tracking-widest text-text-dim"
-                >
-                  Aliados
-                </p>
-                <div
-                  class="relative mt-1.5 overflow-hidden rounded-2xl border border-stroke"
-                >
-                  <div class="relative h-32">
-                    <img
-                      v-if="preview.imageUrl"
-                      :src="preview.imageUrl"
-                      :alt="preview.title"
-                      class="h-full w-full object-cover"
-                    />
-                    <div
-                      v-else
-                      class="flex h-full w-full items-center justify-center bg-surface"
-                    >
-                      <ImageUp class="h-5 w-5 text-text-dim" />
-                    </div>
-                    <div
-                      class="absolute inset-x-0 bottom-0 backdrop-blur-md"
-                      :style="{ backgroundColor: `${preview.brandColor}9e` }"
-                    >
-                      <div
-                        class="flex items-center justify-between gap-2 px-2.5 py-2"
-                      >
-                        <div class="min-w-0">
-                          <p
-                            class="text-[7px] font-black uppercase tracking-[0.14em]"
-                            :style="{ color: `${onAlly}bf` }"
-                          >
-                            {{ preview.advertiser }}
-                          </p>
-                          <p
-                            class="truncate text-[10px] font-black"
-                            :style="{ color: onAlly }"
-                          >
-                            {{ preview.title }}
-                          </p>
-                          <p
-                            class="truncate text-[8px] font-semibold"
-                            :style="{ color: `${onAlly}bf` }"
-                          >
-                            {{ preview.subtitle }}
-                          </p>
-                        </div>
-                        <span
-                          class="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black"
-                          :style="{
-                            color: onAlly,
-                            borderColor: `${onAlly}8c`,
-                            backgroundColor: `${onAlly}29`,
-                          }"
-                        >
-                          {{ preview.ctaLabel }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div
-                class="mx-auto mb-2 h-1 w-24 rounded-full bg-text-dim/60"
-              />
-            </div>
-          </div>
-        </div>
-
+      <AdPreview :preview="preview">
         <p
           v-if="formError"
           class="mt-3 text-[11px] font-bold text-red-400"
@@ -805,7 +644,7 @@ onMounted(async () => {
           <X class="h-3.5 w-3.5" />
           Cancelar
         </button>
-      </section>
+      </AdPreview>
     </div>
 
     <UModal

@@ -2,34 +2,50 @@
 import {
   Activity,
   ArrowLeft,
-  BatteryFull,
   Check,
-  ChevronRight,
   CircleCheck,
-  Dumbbell,
   Eye,
-  ImageUp,
+  Hourglass,
   MousePointerClick,
   Pause,
   Pencil,
   Play,
-  Signal,
-  Star,
-  Store,
   Trash2,
   TriangleAlert,
-  Wifi,
+  Undo2,
   X,
 } from '@lucide/vue';
 
 import type { Branch, SponsorAd } from '#shared/types';
+import { PLACEMENT_RANK } from '#shared/types';
 
 const route = useRoute();
 const router = useRouter();
-const { updateAd, updateAdStatus, deleteAd } = useCms();
+const {
+  updateAd,
+  updateAdStatus,
+  deleteAd,
+  orders,
+  loadOrders,
+  approveOrder,
+  rejectOrder,
+} = useCms();
 const { session } = useAuth();
 /// El contenido publicitario es global — solo el admin lo modifica.
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
+
+/// Revisión de la orden ligada: admin cualquiera; gerente solo si la
+/// orden compró SU sede ("todas las sedes" sigue siendo admin-only).
+const canReviewLinkedOrder = computed(() => {
+  const o = linkedOrder.value;
+  if (!o) return false;
+  if (isAdmin.value) return true;
+  return (
+    session.value?.role === 'MANAGER' &&
+    o.branchId !== null &&
+    o.branchId === session.value?.branchId
+  );
+});
 
 const ad = ref<SponsorAd | null>(null);
 const branches = ref<Branch[]>([]);
@@ -64,6 +80,11 @@ const editForm = ref({
 const statusModalOpen = ref(false);
 const deleteModalOpen = ref(false);
 const deleting = ref(false);
+/// Razón obligatoria para degradar/pausar/borrar un anuncio COMPRADO —
+/// queda en /auditLogs como evidencia para el anunciante.
+const overrideReason = ref('');
+const pauseReason = ref('');
+const deleteReason = ref('');
 
 const branchItems = computed(() => [
   { label: 'Todas las sedes', value: 'todas' },
@@ -73,9 +94,11 @@ const branchItems = computed(() => [
 const placementItems = [
   { label: 'Carrusel del Home', value: 'carousel' },
   { label: 'Directorio de Aliados', value: 'list' },
+  { label: 'Ambos (Home + Aliados)', value: 'both' },
 ];
 
 function placementLabel(p: SponsorAd['placement']): string {
+  if (p === 'both') return 'Ambos (Home + Aliados)';
   return p === 'carousel' ? 'Carrusel del Home' : 'Directorio de Aliados';
 }
 
@@ -122,8 +145,34 @@ const daysLeft = computed(() => {
 
 /// La app oculta anuncios vencidos aunque status siga ACTIVE — el panel
 /// lo grita para que nadie guarde una fecha pasada sin darse cuenta.
+/// PENDING tiene ends_at null (arranca al aprobarse), nunca es "vencido".
 const isExpired = computed(
-  () => !!ad.value && ad.value.endsAt < Date.now(),
+  () =>
+    !!ad.value &&
+    ad.value.status !== 'PENDING' &&
+    ad.value.endsAt < Date.now(),
+);
+
+/// Orden self-serve ligada a este anuncio (null = creado por staff).
+const linkedOrder = computed(
+  () => orders.value.find((o) => o.sponsorAdId === ad.value?.id) ?? null,
+);
+const isPendingReview = computed(() => ad.value?.status === 'PENDING');
+/// Anuncio comprado por un anunciante — su superficie pagada no se
+/// degrada sin razón + log (order_id es la fuente, la orden puede
+/// no haber cargado en esta vista).
+const isPaidAd = computed(() => !!ad.value?.orderId);
+/// Borrar un anuncio comprado exige razón solo mientras está vigente —
+/// expirado ya cumplió su pauta y borrarlo es limpieza normal.
+const paidDeleteProtected = computed(
+  () => isPaidAd.value && !isExpired.value,
+);
+const downgradeSelected = computed(
+  () =>
+    isPaidAd.value &&
+    !!ad.value &&
+    PLACEMENT_RANK[editForm.value.placement] <
+      PLACEMENT_RANK[ad.value.placement],
 );
 
 const editEndsExpired = computed(() => {
@@ -157,6 +206,17 @@ const preview = computed(() => {
       ctaLabel: editForm.value.ctaLabel || 'Ver oferta',
       brandColor: editForm.value.brandColor,
       placement: editForm.value.placement,
+      description: editForm.value.description,
+      address: editForm.value.address,
+      phone: editForm.value.phone,
+      socials: {
+        instagram: editForm.value.instagram,
+        facebook: editForm.value.facebook,
+        tiktok: editForm.value.tiktok,
+        website: editForm.value.website,
+        whatsapp: editForm.value.whatsapp,
+      },
+      photos: editForm.value.photos,
     };
   }
   const a = ad.value;
@@ -169,10 +229,13 @@ const preview = computed(() => {
     ctaLabel: a?.ctaLabel ?? '',
     brandColor: argbToHex(a?.brandColor) ?? '#f4e701',
     placement: a?.placement ?? 'carousel',
+    description: a?.description ?? '',
+    address: a?.address ?? '',
+    phone: a?.phone ?? '',
+    socials: a?.socials,
+    photos: a?.photos,
   };
 });
-
-const onAlly = computed(() => readableOn(preview.value.brandColor));
 
 /// Serie diaria 30d desde `adStats` (eventos únicos deduplicados).
 interface AdDailyStat {
@@ -195,12 +258,57 @@ onMounted(async () => {
     branches.value = branchList;
     ad.value = data;
     dailyStats.value = stats.days;
+    /// Órdenes self-serve — para ligar PENDING ↔ pago del anunciante.
+    loadOrders().catch(() => {});
   } catch {
     ad.value = null;
   } finally {
     pending.value = false;
   }
 });
+
+// ── Revisión de orden self-serve (anuncio PENDING) ──
+
+const approving = ref(false);
+const rejectModalOpen = ref(false);
+const rejectReason = ref('');
+
+function orderAmount(): string {
+  return `$${(linkedOrder.value?.amount ?? 0).toLocaleString('es-MX')} MXN`;
+}
+
+async function approvePending(): Promise<void> {
+  const o = linkedOrder.value;
+  if (!o || approving.value) return;
+  approving.value = true;
+  actionError.value = null;
+  try {
+    await approveOrder(o);
+    await reload();
+  } catch (cause) {
+    actionError.value =
+      cause instanceof Error ? cause.message : 'No se pudo aprobar';
+  } finally {
+    approving.value = false;
+  }
+}
+
+async function confirmReject(): Promise<void> {
+  const o = linkedOrder.value;
+  if (!o || approving.value) return;
+  approving.value = true;
+  actionError.value = null;
+  try {
+    await rejectOrder(o, rejectReason.value);
+    rejectModalOpen.value = false;
+    await navigateTo('/publicidad');
+  } catch (cause) {
+    actionError.value =
+      cause instanceof Error ? cause.message : 'No se pudo reembolsar';
+  } finally {
+    approving.value = false;
+  }
+}
 
 function parseCoord(raw: string): number | null {
   const value = Number(raw.trim());
@@ -274,8 +382,14 @@ function confirmSave(): void {
     changes.push(`Sede: ${branchName(a.branchId)} → ${branchName(newBranch)}`);
   if (editForm.value.placement !== a.placement)
     changes.push(
-      `Espacio: ${placementLabel(a.placement)} → ${placementLabel(editForm.value.placement)}`,
+      `Espacio: ${placementLabel(a.placement)} → ${placementLabel(editForm.value.placement)}` +
+        (downgradeSelected.value ? ' — quedará en el log de auditoría' : ''),
     );
+  if (downgradeSelected.value && !overrideReason.value.trim()) {
+    formError.value =
+      'Este anuncio fue comprado — bajar de espacio requiere una razón (queda en el log)';
+    return;
+  }
   if (endsAt !== a.endsAt)
     changes.push(`Vigencia: ${formatDay(a.endsAt)} → ${formatDay(endsAt)}`);
   if (editForm.value.description !== a.description)
@@ -335,6 +449,7 @@ async function saveAd(): Promise<void> {
         whatsapp: editForm.value.whatsapp.trim(),
       },
       photos: editForm.value.photos,
+      overrideReason: overrideReason.value.trim() || undefined,
     });
     await reload();
     saveModalOpen.value = false;
@@ -360,12 +475,21 @@ const statusDescription = computed(() => {
 
 async function toggleStatus(): Promise<void> {
   if (!ad.value || saving.value) return;
+  /// Pausar un anuncio comprado quita la superficie que el anunciante
+  /// pagó — el server exige razón y la registra en /auditLogs.
+  const pausing = ad.value.status === 'ACTIVE';
+  if (pausing && isPaidAd.value && !pauseReason.value.trim()) {
+    actionError.value =
+      'Este anuncio fue comprado — pausarlo requiere una razón (queda en el log)';
+    return;
+  }
   saving.value = true;
   actionError.value = null;
   try {
     await updateAdStatus(
       ad.value,
-      ad.value.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE',
+      pausing ? 'PAUSED' : 'ACTIVE',
+      pausing ? pauseReason.value.trim() : undefined,
     );
     await reload();
     statusModalOpen.value = false;
@@ -379,10 +503,20 @@ async function toggleStatus(): Promise<void> {
 
 async function removeAd(): Promise<void> {
   if (!ad.value || deleting.value) return;
+  /// Borrar un anuncio comprado VIGENTE destruye lo pagado — razón
+  /// obligatoria y snapshot en /auditLogs. Expirado = borrado libre.
+  if (paidDeleteProtected.value && !deleteReason.value.trim()) {
+    actionError.value =
+      'Este anuncio fue comprado — eliminarlo requiere una razón (queda en el log)';
+    return;
+  }
   deleting.value = true;
   actionError.value = null;
   try {
-    await deleteAd(ad.value);
+    await deleteAd(
+      ad.value,
+      paidDeleteProtected.value ? deleteReason.value.trim() : undefined,
+    );
     deleteModalOpen.value = false;
     await navigateTo('/publicidad');
   } catch (cause) {
@@ -429,63 +563,174 @@ async function removeAd(): Promise<void> {
           <span
             class="h-1.5 w-1.5 rounded-full"
             :class="
-              isExpired
-                ? 'bg-red-400'
-                : ad.status === 'ACTIVE'
-                  ? 'bg-emerald-400'
-                  : 'bg-text-dim'
+              isPendingReview
+                ? 'bg-amber-400'
+                : isExpired
+                  ? 'bg-red-400'
+                  : ad.status === 'ACTIVE'
+                    ? 'bg-emerald-400'
+                    : 'bg-text-dim'
             "
           />
           <span
             class="text-[10px] font-bold uppercase tracking-widest"
             :class="
-              isExpired
-                ? 'text-red-400'
-                : ad.status === 'ACTIVE'
-                  ? 'text-emerald-400'
-                  : 'text-text-dim'
+              isPendingReview
+                ? 'text-amber-400'
+                : isExpired
+                  ? 'text-red-400'
+                  : ad.status === 'ACTIVE'
+                    ? 'text-emerald-400'
+                    : 'text-text-dim'
             "
           >
             {{
-              isExpired
-                ? 'Vencido'
-                : ad.status === 'ACTIVE'
-                  ? 'Activo'
-                  : 'Pausado'
+              isPendingReview
+                ? 'En revisión'
+                : isExpired
+                  ? 'Vencido'
+                  : ad.status === 'ACTIVE'
+                    ? 'Activo'
+                    : 'Pausado'
             }}
           </span>
         </p>
       </div>
-      <div v-if="isAdmin" class="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-4 text-[11px] font-black transition"
-          :class="
-            ad.status === 'ACTIVE'
-              ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
-              : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
-          "
-          @click="actionError = null; statusModalOpen = true"
-        >
-          <Pause v-if="ad.status === 'ACTIVE'" class="h-3.5 w-3.5" />
-          <Play v-else class="h-3.5 w-3.5" />
-          {{ ad.status === 'ACTIVE' ? 'Pausar' : 'Activar' }}
-        </button>
-        <button
-          type="button"
-          class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-red-400/40 bg-red-400/10 px-4 text-[11px] font-black text-red-400 transition hover:bg-red-400/20"
-          @click="actionError = null; deleteModalOpen = true"
-        >
-          <Trash2 class="h-3.5 w-3.5" />
-          Eliminar
-        </button>
+      <div
+        v-if="(isPendingReview && linkedOrder && canReviewLinkedOrder) || isAdmin"
+        class="flex shrink-0 items-center gap-2"
+      >
+        <template v-if="isPendingReview && linkedOrder && canReviewLinkedOrder">
+          <button
+            type="button"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-4 text-[11px] font-black text-emerald-400 transition hover:bg-emerald-400/20 disabled:opacity-50"
+            :disabled="approving"
+            @click="approvePending"
+          >
+            <Check class="h-3.5 w-3.5" />
+            {{ approving ? 'Publicando…' : 'Aprobar y publicar' }}
+          </button>
+          <button
+            type="button"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-red-400/40 bg-red-400/10 px-4 text-[11px] font-black text-red-400 transition hover:bg-red-400/20 disabled:opacity-50"
+            :disabled="approving"
+            @click="actionError = null; rejectModalOpen = true"
+          >
+            <Undo2 class="h-3.5 w-3.5" />
+            Rechazar y reembolsar
+          </button>
+        </template>
+        <template v-else-if="isAdmin">
+          <button
+            type="button"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-4 text-[11px] font-black transition"
+            :class="
+              ad.status === 'ACTIVE'
+                ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+                : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
+            "
+            @click="actionError = null; statusModalOpen = true"
+          >
+            <Pause v-if="ad.status === 'ACTIVE'" class="h-3.5 w-3.5" />
+            <Play v-else class="h-3.5 w-3.5" />
+            {{ ad.status === 'ACTIVE' ? 'Pausar' : 'Activar' }}
+          </button>
+          <button
+            type="button"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-red-400/40 bg-red-400/10 px-4 text-[11px] font-black text-red-400 transition hover:bg-red-400/20"
+            @click="actionError = null; deleteModalOpen = true"
+          >
+            <Trash2 class="h-3.5 w-3.5" />
+            Eliminar
+          </button>
+        </template>
       </div>
     </div>
+
+    <p
+      v-if="actionError && !statusModalOpen && !deleteModalOpen && !rejectModalOpen && !saveModalOpen"
+      class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-medium text-red-400"
+    >
+      {{ actionError }}
+    </p>
 
     <div class="grid gap-6 lg:grid-cols-[3fr_2fr]">
       <div class="space-y-6">
 
-    <div v-if="!editing" class="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <!-- Orden self-serve — el negocio ya pagó, espera tu aprobación -->
+    <section
+      v-if="isPendingReview && linkedOrder"
+      class="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5"
+    >
+      <h2
+        class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-amber-400"
+      >
+        <Hourglass class="h-4 w-4" />
+        Solicitud pagada — pendiente de tu aprobación
+      </h2>
+      <div class="mt-4 grid grid-cols-2 gap-4">
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Negocio
+          </p>
+          <p class="mt-1 text-sm font-black text-text-primary">
+            {{ linkedOrder.businessName }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Contacto
+          </p>
+          <p class="mt-1 text-sm font-black text-text-primary">
+            {{ linkedOrder.contactName }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Email
+          </p>
+          <p class="mt-1 truncate text-sm font-bold text-text-primary">
+            {{ linkedOrder.email }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Teléfono
+          </p>
+          <p class="mt-1 text-sm font-bold text-text-primary">
+            {{ linkedOrder.phone }}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Vigencia contratada
+          </p>
+          <p class="mt-1 text-sm font-black text-text-primary">
+            {{ linkedOrder.weeks }} semana{{ linkedOrder.weeks > 1 ? 's' : '' }}
+            <span class="text-[10px] font-bold text-text-dim">
+              desde la aprobación
+            </span>
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Pagado
+          </p>
+          <p class="mt-1 text-sm font-black text-emerald-400">
+            {{ orderAmount() }}
+          </p>
+        </div>
+      </div>
+      <p class="mt-3 text-[10px] font-semibold leading-snug text-text-dim">
+        Aprobar publica el anuncio al instante; rechazar reembolsa el pago
+        completo al anunciante y borra el creativo.
+      </p>
+    </section>
+
+    <div
+      v-if="!editing && !isPendingReview"
+      class="grid grid-cols-2 gap-4 md:grid-cols-4"
+    >
       <div class="rounded-2xl border border-stroke bg-surface p-4 text-center">
         <Eye class="mx-auto h-4 w-4 text-text-dim" />
         <p class="mt-1 text-xl font-black text-text-primary">
@@ -636,12 +881,26 @@ async function removeAd(): Promise<void> {
           </p>
           <p
             class="mt-1 flex items-center gap-1.5 text-sm font-black"
-            :class="isExpired ? 'text-red-400' : 'text-emerald-400'"
+            :class="
+              isPendingReview
+                ? 'text-amber-400'
+                : isExpired
+                  ? 'text-red-400'
+                  : 'text-emerald-400'
+            "
           >
-            <TriangleAlert v-if="isExpired" class="h-3.5 w-3.5 shrink-0" />
+            <Hourglass v-if="isPendingReview" class="h-3.5 w-3.5 shrink-0" />
+            <TriangleAlert v-else-if="isExpired" class="h-3.5 w-3.5 shrink-0" />
             <CircleCheck v-else class="h-3.5 w-3.5 shrink-0" />
-            {{ formatFullDay(ad.endsAt) }}
-            <span class="text-[10px] font-bold uppercase tracking-widest opacity-75">
+            {{
+              isPendingReview
+                ? 'Arranca al aprobar'
+                : formatFullDay(ad.endsAt)
+            }}
+            <span
+              v-if="!isPendingReview"
+              class="text-[10px] font-bold uppercase tracking-widest opacity-75"
+            >
               {{ isExpired ? 'vencido' : 'vigente' }}
             </span>
           </p>
@@ -814,6 +1073,22 @@ async function removeAd(): Promise<void> {
               class="mt-1 w-full"
             />
           </label>
+          <div
+            v-if="downgradeSelected"
+            class="col-span-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5"
+          >
+            <p class="flex items-center gap-1.5 text-[11px] font-bold text-amber-400">
+              <TriangleAlert class="h-3.5 w-3.5 shrink-0" />
+              Este anuncio fue comprado por el anunciante — bajar de
+              espacio quedará en el log de auditoría. Razón obligatoria:
+            </p>
+            <textarea
+              v-model="overrideReason"
+              rows="2"
+              placeholder="ej. Incumplió política de contenido / acuerdo con el anunciante"
+              class="mt-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-amber-400"
+            />
+          </div>
           <label class="block">
             <span
               class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
@@ -963,169 +1238,7 @@ async function removeAd(): Promise<void> {
       </div>
 
       <div class="flex flex-col space-y-4">
-        <section
-          class="flex flex-1 flex-col rounded-2xl border border-stroke bg-surface p-5"
-        >
-          <h2
-            class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
-          >
-            <span class="h-4 w-1 rounded-full bg-accent" />
-            Así se ve en Aliados
-          </h2>
-          <div class="mt-3 flex justify-center">
-            <div class="w-full max-w-[260px]">
-              <div
-                class="flex items-center gap-3 rounded-2xl border border-stroke bg-base p-3"
-              >
-                <div
-                  class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface"
-                >
-                  <img
-                    v-if="preview.imageUrl"
-                    :src="preview.imageUrl"
-                    :alt="preview.advertiser"
-                    class="h-full w-full object-cover"
-                  />
-                  <Store v-else class="h-5 w-5 text-text-dim" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1">
-                    <p
-                      class="truncate text-[9px] font-black uppercase tracking-widest text-accent"
-                    >
-                      {{ preview.advertiser }}
-                    </p>
-                    <Star
-                      v-if="preview.placement === 'carousel'"
-                      class="h-3 w-3 shrink-0 fill-accent text-accent"
-                    />
-                  </div>
-                  <p
-                    class="truncate text-[13px] font-black text-text-primary"
-                  >
-                    {{ preview.title }}
-                  </p>
-                  <p
-                    class="truncate text-[11px] font-semibold text-text-muted"
-                  >
-                    {{ preview.subtitle }}
-                  </p>
-                </div>
-                <ChevronRight class="h-5 w-5 shrink-0 text-text-dim" />
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-6 border-t border-stroke pt-5">
-            <h3
-              class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
-            >
-              <span class="h-4 w-1 rounded-full bg-accent" />
-              Así se ve en el Home
-            </h3>
-          </div>
-
-          <div class="mt-4 flex flex-1 items-center justify-center">
-            <div
-              class="w-full max-w-[260px] rounded-[2.4rem] border-4 border-stroke bg-black p-1.5 shadow-2xl"
-            >
-              <div
-                class="relative flex h-[420px] flex-col overflow-hidden rounded-[1.9rem] bg-base"
-              >
-                <div
-                  class="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black"
-                />
-                <div
-                  class="flex items-center justify-between px-6 pt-3 text-[9px] font-bold text-text-primary"
-                >
-                  <span>9:41</span>
-                  <span class="flex items-center gap-1 text-text-primary">
-                    <Signal class="h-2.5 w-2.5" />
-                    <Wifi class="h-2.5 w-2.5" />
-                    <BatteryFull class="h-3 w-3" />
-                  </span>
-                </div>
-                <div class="flex flex-1 flex-col px-3 pt-8">
-                  <div class="flex items-center gap-1.5 px-1">
-                    <div
-                      class="flex h-5 w-5 items-center justify-center rounded-md bg-accent"
-                    >
-                      <Dumbbell class="h-3 w-3 text-base" />
-                    </div>
-                    <p
-                      class="text-[9px] font-black uppercase tracking-widest text-text-primary"
-                    >
-                      RIR-HUB
-                    </p>
-                  </div>
-                  <p
-                    class="mt-3 px-1 text-[8px] font-bold uppercase tracking-widest text-text-dim"
-                  >
-                    Aliados
-                  </p>
-                  <div
-                    class="relative mt-1.5 overflow-hidden rounded-2xl border border-stroke"
-                  >
-                    <div class="relative h-32">
-                      <img
-                        v-if="preview.imageUrl"
-                        :src="preview.imageUrl"
-                        :alt="preview.title"
-                        class="h-full w-full object-cover"
-                      />
-                      <div
-                        v-else
-                        class="flex h-full w-full items-center justify-center bg-surface"
-                      >
-                        <ImageUp class="h-5 w-5 text-text-dim" />
-                      </div>
-                      <div
-                        class="absolute inset-x-0 bottom-0 backdrop-blur-md"
-                        :style="{ backgroundColor: `${preview.brandColor}9e` }"
-                      >
-                        <div
-                          class="flex items-center justify-between gap-2 px-2.5 py-2"
-                        >
-                          <div class="min-w-0">
-                            <p
-                              class="text-[7px] font-black uppercase tracking-[0.14em]"
-                              :style="{ color: `${onAlly}bf` }"
-                            >
-                              {{ preview.advertiser }}
-                            </p>
-                            <p
-                              class="truncate text-[10px] font-black"
-                              :style="{ color: onAlly }"
-                            >
-                              {{ preview.title }}
-                            </p>
-                            <p
-                              class="truncate text-[8px] font-semibold"
-                              :style="{ color: `${onAlly}bf` }"
-                            >
-                              {{ preview.subtitle }}
-                            </p>
-                          </div>
-                          <span
-                            class="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black"
-                            :style="{
-                              color: onAlly,
-                              borderColor: `${onAlly}8c`,
-                              backgroundColor: `${onAlly}29`,
-                            }"
-                          >
-                            {{ preview.ctaLabel }}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="mx-auto mb-2 h-1 w-24 rounded-full bg-text-dim/60" />
-              </div>
-            </div>
-          </div>
-
+        <AdPreview :preview="preview">
           <template v-if="editing">
             <p
               v-if="formError"
@@ -1149,7 +1262,7 @@ async function removeAd(): Promise<void> {
               Cancelar
             </button>
           </template>
-        </section>
+        </AdPreview>
       </div>
     </div>
 
@@ -1193,6 +1306,25 @@ async function removeAd(): Promise<void> {
       :title="ad.status === 'ACTIVE' ? 'Pausar anuncio' : 'Activar anuncio'"
       :description="statusDescription"
     >
+      <template
+        v-if="ad.status === 'ACTIVE' && isPaidAd"
+        #body
+      >
+        <div
+          class="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5"
+        >
+          <p class="text-[11px] font-bold leading-relaxed text-amber-400">
+            Este anuncio fue comprado — pausarlo quita la superficie
+            pagada y quedará en el log de auditoría. Razón obligatoria:
+          </p>
+          <textarea
+            v-model="pauseReason"
+            rows="2"
+            placeholder="ej. Contenido reportado / acuerdo con el anunciante"
+            class="mt-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-amber-400"
+          />
+        </div>
+      </template>
       <template #footer>
         <div class="flex w-full flex-col gap-2">
           <p
@@ -1219,10 +1351,67 @@ async function removeAd(): Promise<void> {
     </UModal>
 
     <UModal
+      v-model:open="rejectModalOpen"
+      title="Rechazar y reembolsar"
+      :description="`Se reembolsará ${orderAmount()} a ${linkedOrder?.businessName ?? ''} y el anuncio no se publicará.`"
+    >
+      <template #body>
+        <textarea
+          v-model="rejectReason"
+          rows="2"
+          placeholder="Motivo del rechazo (opcional — se envía al anunciante por correo)"
+          class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+        />
+      </template>
+      <template #footer>
+        <div class="flex w-full flex-col gap-2">
+          <p
+            v-if="actionError"
+            class="text-[11px] font-bold text-red-400"
+          >
+            {{ actionError }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton
+              label="Cancelar"
+              color="neutral"
+              variant="outline"
+              @click="rejectModalOpen = false"
+            />
+            <UButton
+              label="Rechazar y reembolsar"
+              color="error"
+              :loading="approving"
+              @click="confirmReject"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
       v-model:open="deleteModalOpen"
       title="Eliminar anuncio"
       :description="`Se eliminará '${ad.advertiser}' y su historial de impresiones. Esta acción no se puede deshacer.`"
     >
+      <template v-if="paidDeleteProtected" #body>
+        <div
+          class="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2.5"
+        >
+          <p class="text-[11px] font-bold leading-relaxed text-red-400">
+            Este anuncio fue comprado por el anunciante — eliminarlo
+            destruye lo que pagó. Se guardará un snapshot de evidencia en
+            el log de auditoría y el reembolso queda a tu criterio.
+            Razón obligatoria:
+          </p>
+          <textarea
+            v-model="deleteReason"
+            rows="2"
+            placeholder="ej. Fraude / incumplimiento grave / acuerdo de cancelación"
+            class="mt-2 w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-red-400"
+          />
+        </div>
+      </template>
       <template #footer>
         <div class="flex w-full flex-col gap-2">
           <p

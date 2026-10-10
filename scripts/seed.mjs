@@ -63,6 +63,19 @@ await db.collection('config').doc('brand').set({
   socials: {},
 });
 
+// ═══ config/ads — venta directa de publicidad (self-serve /anuncia) ═══
+await db.collection('config').doc('ads').set({
+  enabled: true,
+  slots: {
+    carousel: { enabled: true, price_per_week: 500 },
+    list: { enabled: true, price_per_week: 250 },
+    both: { enabled: true, price_per_week: 650 },
+  },
+  /// Avisos de solicitudes pagadas — global siempre; by_branch solo si
+  /// la orden compró esa sede ("todas" avisa a todos).
+  notify: { global: [], by_branch: {} },
+});
+
 // ═══ branches ═══
 const branches = [
   { id: 'select', name: 'VIP', max: 200, open: 360, close: 1320, address: 'Av. Hidalgo · Centro', lat: 19.2926, lng: -99.6572 },

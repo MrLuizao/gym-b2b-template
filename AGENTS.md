@@ -188,6 +188,42 @@ Sin vínculo no ve datos del gym.
   `expired_members`. `log.sent` = 1 por envío exitoso al topic (FCM no
   expone suscriptores); el KPI "Tasa de entrega" es SENT/(SENT+FAILED).
 
+### Publicidad self-serve (/anuncia)
+
+- Página pública `/anuncia` (sin login — middleware la exime como
+  `/legal`): el negocio sube su creativo, elige espacio, sede (una o
+  todas) y semanas, y paga por **Stripe Checkout** (hosted). Precio
+  server-side: `price_per_week × semanas × sedes` desde `/config/ads`
+  (lo edita el admin en `/publicidad` → "Venta directa").
+- **`placement`** (sponsorAds): `carousel` = carrusel del Home +
+  Promociones, `list` = solo directorio Aliados, `both` = ambas
+  superficies (combo con precio propio en `config/ads.slots.both`).
+  Docs viejos sin el campo = `carousel`. Ranking `PLACEMENT_RANK`
+  (list<carousel<both) en shared/types.
+- **Anuncios comprados** (`order_id != null`) — integridad del
+  inventario pagado: upgrade de placement libre, pero **downgrade /
+  pausa / borrado vigente requieren `overrideReason`** y dejan
+  evidencia en `/auditLogs` (server-only; `server/utils/audit.ts`).
+  **Excepciones**: el anuncio EXPIRADO se borra libre (ya cumplió su
+  pauta) y el PENDING no se borra por DELETE — se rechaza desde la
+  orden (reembolso). Activar un PENDING por edición manual también
+  está bloqueado — solo vía approve (define `ends_at` y cierra el
+  ciclo de pago).
+- El webhook (`checkout.session.completed`, respaldo en
+  `payment_intent.succeeded` por `ad_order_id` en metadata) crea el
+  `sponsorAds` con **status PENDING** — la app solo consulta ACTIVE, no
+  se cuela — y la orden `/adOrders` pasa a `PENDING_APPROVAL`. Correos
+  SMTP: admins de staff + `config/ads.notify` (global siempre; por sede
+  solo si la orden es de esa sede — "todas" avisa a todos, dedupe) +
+  confirmación al anunciante.
+- El admin revisa en `/publicidad` (cola de solicitudes) o en el
+  detalle: **aprobar** pone ACTIVE + `ends_at = hoy + weeks` (la vigencia
+  arranca en la aprobación); **rechazar** reembolsa automático por
+  Stripe y borra el creativo. Si el reembolso falla no se toca nada.
+- `checkout.session.expired` marca la orden EXPIRED. Requiere suscribir
+  los eventos `checkout.session.*` en el webhook de Stripe (ver
+  .env.example).
+
 ### Seguridad anti-abuso
 
 - **`server/utils/rate-limit.ts`** — async; doble nivel: memoria por
@@ -241,7 +277,7 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 | Sedes (`/sedes`) | sin acceso | ver todas; editar solo la suya | editar todas + crear |
 | Membresías (`/membresias`) | sin acceso | ver catálogo — **NO puede editar ni crear** | editar + crear |
 | Recompensas (`/recompensas`) | ver + validar códigos de su sede | ver + validar códigos de su sede | editar catálogo + validar |
-| Publicidad (`/publicidad`) | sin acceso | ver (detalle solo lectura) | editar + crear + pausar + eliminar |
+| Publicidad (`/publicidad`) | sin acceso | ver todo + **aprobar/rechazar órdenes de SU sede** (las de "todas las sedes" son admin-only); anuncios en solo lectura | editar + crear + pausar + eliminar |
 | CMS (`/cms`) | sin acceso | ver (detalle solo lectura) | editar + crear + enviar + eliminar |
 | Reportes (`/reportes`) | sin acceso | todos los tipos, siempre filtrado a su sede | todos, cualquier sede |
 

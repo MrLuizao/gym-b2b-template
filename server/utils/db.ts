@@ -2,6 +2,8 @@ import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 import type {
+  AdOrder,
+  AdSelfServeConfig,
   Branch,
   CheckInRecord,
   ClassSchedule,
@@ -215,7 +217,10 @@ export function toSponsorAd(s: DocumentSnapshot): SponsorAd {
     imageUrl: d.image_url ?? '',
     ctaLabel: d.cta_label ?? '',
     branchId: d.branch_id ?? null,
-    placement: d.placement === 'list' ? 'list' : 'carousel',
+    placement:
+      d.placement === 'list' || d.placement === 'both'
+        ? d.placement
+        : 'carousel',
     status: d.status ?? 'PAUSED',
     endsAt: toMs(d.ends_at) ?? 0,
     impressions: d.impressions ?? 0,
@@ -234,6 +239,92 @@ export function toSponsorAd(s: DocumentSnapshot): SponsorAd {
       whatsapp: '',
     },
     photos: d.photos ?? [],
+    orderId: d.order_id ?? null,
+  };
+}
+
+/// /adOrders — orden de compra self-serve (pago Stripe Checkout +
+/// aprobación del gym). El creativo viaja completo para crear el
+/// sponsorAd al confirmarse el pago sin depender de otra colección.
+export function toAdOrder(s: DocumentSnapshot): AdOrder {
+  const d = s.data() ?? {};
+  return {
+    id: s.id,
+    businessName: d.business_name ?? '',
+    contactName: d.contact_name ?? '',
+    email: d.email ?? '',
+    phone: d.phone ?? '',
+    title: d.title ?? '',
+    subtitle: d.subtitle ?? '',
+    badge: d.badge ?? '',
+    brandColor: d.brand_color ?? null,
+    imageUrl: d.image_url ?? '',
+    ctaLabel: d.cta_label ?? '',
+    description: d.description ?? '',
+    address: d.address ?? '',
+    socials: d.socials ?? {
+      instagram: '',
+      facebook: '',
+      tiktok: '',
+      website: '',
+      whatsapp: '',
+    },
+    photos: d.photos ?? [],
+    branchId: d.branch_id ?? null,
+    placement:
+      d.placement === 'list' || d.placement === 'both'
+        ? d.placement
+        : 'carousel',
+    weeks: d.weeks ?? 1,
+    amount: d.amount ?? 0,
+    currency: d.currency ?? 'mxn',
+    status: d.status ?? 'AWAITING_PAYMENT',
+    stripeSessionId: d.stripe_session_id ?? null,
+    stripePaymentIntentId: d.stripe_payment_intent_id ?? null,
+    sponsorAdId: d.sponsor_ad_id ?? null,
+    rejectionReason: d.rejection_reason ?? null,
+    createdAt: toMs(d.created_at) ?? 0,
+    paidAt: toMs(d.paid_at),
+    reviewedAt: toMs(d.reviewed_at),
+    reviewedBy: d.reviewed_by ?? null,
+  };
+}
+
+/// Precios de venta directa — /config/ads. Sin doc: self-serve apagado
+/// y precios default de referencia (el admin los ajusta en /publicidad).
+export function toAdSelfServeConfig(
+  s: DocumentSnapshot,
+): AdSelfServeConfig {
+  const d = s.data() ?? {};
+  const slots = (d.slots ?? {}) as Record<string, Record<string, unknown>>;
+  const notify = (d.notify ?? {}) as Record<string, unknown>;
+  const byBranchRaw = (notify.by_branch ?? {}) as Record<string, unknown>;
+  const byBranch: Record<string, string> = {};
+  for (const [k, v] of Object.entries(byBranchRaw)) {
+    if (typeof v === 'string' && v.trim()) byBranch[k] = v.trim();
+  }
+  return {
+    enabled: Boolean(d.enabled),
+    notify: {
+      global: (Array.isArray(notify.global) ? notify.global : [])
+        .filter((e): e is string => typeof e === 'string' && Boolean(e.trim()))
+        .map((e) => e.trim()),
+      byBranch,
+    },
+    slots: {
+      carousel: {
+        enabled: slots.carousel?.enabled !== false,
+        pricePerWeek: Number(slots.carousel?.price_per_week ?? 500),
+      },
+      list: {
+        enabled: slots.list?.enabled !== false,
+        pricePerWeek: Number(slots.list?.price_per_week ?? 250),
+      },
+      both: {
+        enabled: slots.both?.enabled !== false,
+        pricePerWeek: Number(slots.both?.price_per_week ?? 650),
+      },
+    },
   };
 }
 

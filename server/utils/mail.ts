@@ -21,6 +21,155 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
+/// Remitente: MAIL_FROM admite formato "Nombre <correo>" (el nombre es
+/// lo que ve el destinatario); sin ella se usa la cuenta autenticada.
+function getFrom(): string {
+  return (
+    process.env.MAIL_FROM || process.env.SMTP_USER || 'no-reply@gym.local'
+  );
+}
+
+/// Envío genérico — los correos del flujo self-serve de anuncios lo
+/// usan. Regresa false si SMTP no está configurado (se loguea el
+/// asunto para rastreo en dev).
+export async function sendMail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<boolean> {
+  const from = getFrom();
+  const t = getTransporter();
+  if (!t) {
+    console.warn(`[mail] SMTP no configurado — '${opts.subject}' para ${opts.to}`);
+    return false;
+  }
+  await t.sendMail({ from, to: opts.to, subject: opts.subject, html: opts.html });
+  return true;
+}
+
+/// Carcasa visual común de los correos del flujo de anuncios.
+function mailShell(inner: string): string {
+  return `
+    <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;background:#0d0f14;color:#e8eaf0;padding:32px;border-radius:16px">
+      ${inner}
+    </div>`;
+}
+
+/// Al staff (admins + correos configurados): llegó una solicitud de
+/// anuncio ya pagada. `branchLabel` = la sede comprada (o "todas").
+export async function sendAdOrderStaffNotice(opts: {
+  to: string;
+  businessName: string;
+  placementLabel: string;
+  branchLabel?: string;
+  weeks: number;
+  amount: number;
+  reviewUrl: string;
+}): Promise<boolean> {
+  const html = mailShell(`
+    <h2 style="margin:0 0 8px">Nueva solicitud de anuncio</h2>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      <strong style="color:#e8eaf0">${opts.businessName}</strong> pagó
+      <strong style="color:#e8eaf0">$${opts.amount.toLocaleString('es-MX')} MXN</strong>
+      por ${opts.placementLabel} durante ${opts.weeks} semana(s)${opts.branchLabel ? ` — sede: <strong style="color:#e8eaf0">${opts.branchLabel}</strong>` : ''}.
+      Revisa el creativo y apruébalo o recházalo — el rechazo reembolsa
+      automáticamente.
+    </p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="${opts.reviewUrl}" style="display:inline-block;background:#c8f04a;color:#0d0f14;font-weight:800;font-size:13px;text-decoration:none;padding:12px 20px;border-radius:10px">Revisar solicitud</a>
+    </div>`);
+  return sendMail({
+    to: opts.to,
+    subject: `Nueva solicitud de anuncio — ${opts.businessName}`,
+    html,
+  });
+}
+
+/// Al anunciante: pago recibido, anuncio en revisión.
+export async function sendAdOrderPaidEmail(opts: {
+  to: string;
+  businessName: string;
+  brandName: string;
+  amount: number;
+  weeks: number;
+}): Promise<boolean> {
+  const html = mailShell(`
+    <h2 style="margin:0 0 8px">¡Recibimos tu anuncio, ${opts.businessName}!</h2>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      Tu pago de <strong style="color:#e8eaf0">$${opts.amount.toLocaleString('es-MX')} MXN</strong>
+      quedó registrado. El equipo de ${opts.brandName} revisará tu anuncio
+      antes de publicarlo — te avisamos por correo cuando quede en vivo.
+    </p>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      Si el anuncio no fuera aprobado, tu pago se reembolsa
+      automáticamente a la misma tarjeta.
+    </p>
+    <p style="color:#5a6070;font-size:11px;line-height:1.5">
+      Vigencia contratada: ${opts.weeks} semana(s) desde la aprobación.
+    </p>`);
+  return sendMail({
+    to: opts.to,
+    subject: `Tu anuncio está en revisión — ${opts.brandName}`,
+    html,
+  });
+}
+
+/// Al anunciante: anuncio aprobado y en vivo hasta `endsAt`.
+export async function sendAdOrderApprovedEmail(opts: {
+  to: string;
+  businessName: string;
+  brandName: string;
+  endsAt: number;
+}): Promise<boolean> {
+  const endLabel = new Date(opts.endsAt).toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Mexico_City',
+  });
+  const html = mailShell(`
+    <h2 style="margin:0 0 8px">Tu anuncio está en vivo</h2>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      El equipo de ${opts.brandName} aprobó el anuncio de
+      <strong style="color:#e8eaf0">${opts.businessName}</strong> — ya lo
+      ven los socios en la app. Estará publicado hasta el
+      <strong style="color:#e8eaf0">${endLabel}</strong>.
+    </p>`);
+  return sendMail({
+    to: opts.to,
+    subject: `Tu anuncio está en vivo — ${opts.brandName}`,
+    html,
+  });
+}
+
+/// Al anunciante: rechazado, reembolso automático en camino.
+export async function sendAdOrderRejectedEmail(opts: {
+  to: string;
+  businessName: string;
+  brandName: string;
+  amount: number;
+  reason: string;
+}): Promise<boolean> {
+  const html = mailShell(`
+    <h2 style="margin:0 0 8px">Sobre tu anuncio</h2>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      El equipo de ${opts.brandName} no pudo aprobar el anuncio de
+      <strong style="color:#e8eaf0">${opts.businessName}</strong>.
+      ${opts.reason ? `Motivo: ${opts.reason}.` : ''}
+    </p>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      Tu pago de <strong style="color:#e8eaf0">$${opts.amount.toLocaleString('es-MX')} MXN</strong>
+      se reembolsó automáticamente — Stripe lo refleja en tu estado de
+      cuenta en 5-10 días hábiles. Si ajustas tu creativo puedes volver a
+      publicarlo cuando quieras.
+    </p>`);
+  return sendMail({
+    to: opts.to,
+    subject: `Reembolso de tu anuncio — ${opts.brandName}`,
+    html,
+  });
+}
+
 export function generateClaimPin(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -36,8 +185,7 @@ export async function sendClaimPinEmail(opts: {
   const iosUrl = process.env.APP_IOS_URL || 'https://apps.apple.com';
   const androidUrl =
     process.env.APP_ANDROID_URL || 'https://play.google.com/store';
-  const from =
-    process.env.MAIL_FROM || process.env.SMTP_USER || 'no-reply@gym.local';
+  const from = getFrom();
   const firstName = opts.name.split(' ')[0] ?? opts.name;
 
   const html = `

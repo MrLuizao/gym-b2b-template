@@ -1,7 +1,10 @@
 import { Timestamp } from 'firebase-admin/firestore';
 
 import type { SponsorAd } from '#shared/types';
+import { PLACEMENT_RANK } from '#shared/types';
 
+
+import { writeAdAudit } from '../../../utils/audit';
 import { db, toSponsorAd } from '../../../utils/db';
 import { requireAdmin, requireStaff } from '../../../utils/staff-auth';
 
@@ -11,11 +14,24 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   const id = getRouterParam(event, 'id') ?? '';
 
   const ref = db().collection('sponsorAds').doc(id);
-  if (!(await ref.get()).exists) {
+  const snap = await ref.get();
+  if (!snap.exists) {
     throw createError({ statusCode: 404, statusMessage: 'Anuncio no encontrado' });
   }
+  const before = snap.data() ?? {};
+  /// Anuncio comprado por self-serve — su espacio/visibilidad es lo que
+  /// el anunciante PAGÓ; degradarlo requiere razón + evidencia en auditLogs.
+  const orderId = (before.order_id as string | null) ?? null;
+  const beforePlacement: SponsorAd['placement'] =
+    before.placement === 'list' || before.placement === 'both'
+      ? before.placement
+      : 'carousel';
 
   const body = await readBody<Record<string, unknown>>(event) ?? {};
+  const overrideReason =
+    typeof body.overrideReason === 'string'
+      ? body.overrideReason.trim().slice(0, 300)
+      : '';
   const update: Record<string, unknown> = {};
 
   if (body.status === 'ACTIVE' || body.status === 'PAUSED') update.status = body.status;
@@ -27,7 +43,7 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   if (typeof body.imageUrl === 'string') update.image_url = body.imageUrl.trim();
   if (typeof body.ctaLabel === 'string') update.cta_label = body.ctaLabel.trim().slice(0, 24) || 'Ver más';
   if (body.branchId !== undefined) update.branch_id = body.branchId || null;
-  if (body.placement === 'carousel' || body.placement === 'list') update.placement = body.placement;
+  if (body.placement === 'carousel' || body.placement === 'list' || body.placement === 'both') update.placement = body.placement;
   if (typeof body.endsAt === 'number' && body.endsAt > 0) update.ends_at = Timestamp.fromMillis(body.endsAt);
   if (typeof body.description === 'string') update.description = body.description.trim().slice(0, 500);
   if (typeof body.address === 'string') update.address = body.address.trim().slice(0, 160);
@@ -50,6 +66,63 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
       : [];
   }
 
+  const audits: Parameters<typeof writeAdAudit>[0][] = [];
+  if (orderId) {
+    const afterPlacement = update.placement as
+      | SponsorAd['placement']
+      | undefined;
+    if (afterPlacement && afterPlacement !== beforePlacement) {
+      const down =
+        PLACEMENT_RANK[afterPlacement] < PLACEMENT_RANK[beforePlacement];
+      if (down && !overrideReason) {
+        throw createError({
+          statusCode: 400,
+          statusMessage:
+            'Este anuncio fue comprado — bajar de espacio requiere una razón (queda en el log)',
+        });
+      }
+      audits.push({
+        adId: id,
+        orderId,
+        advertiser: String(before.advertiser ?? ''),
+        action: down ? 'PLACEMENT_DOWNGRADE' : 'PLACEMENT_UPGRADE',
+        staff,
+        reason: overrideReason,
+        changes: {
+          placement: { before: beforePlacement, after: afterPlacement },
+        },
+      });
+    }
+    if (update.status === 'PAUSED' && before.status === 'ACTIVE') {
+      if (!overrideReason) {
+        throw createError({
+          statusCode: 400,
+          statusMessage:
+            'Este anuncio fue comprado — pausarlo requiere una razón (queda en el log)',
+        });
+      }
+      audits.push({
+        adId: id,
+        orderId,
+        advertiser: String(before.advertiser ?? ''),
+        action: 'PAUSE',
+        staff,
+        reason: overrideReason,
+        changes: { status: { before: 'ACTIVE', after: 'PAUSED' } },
+      });
+    }
+    /// Un PENDING se activa solo por el flujo de aprobación (define
+    /// ends_at + marca la orden) — no por edición manual de status.
+    if (update.status === 'ACTIVE' && before.status === 'PENDING') {
+      throw createError({
+        statusCode: 400,
+        statusMessage:
+          'Los anuncios comprados se activan aprobando su orden en /publicidad',
+      });
+    }
+  }
+
   if (Object.keys(update).length > 0) await ref.update(update);
+  for (const audit of audits) await writeAdAudit(audit);
   return toSponsorAd(await ref.get());
 });

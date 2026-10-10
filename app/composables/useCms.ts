@@ -1,4 +1,4 @@
-import type { CmsResponse, Coupon, PromoBanner, PushLog, SponsorAd } from '#shared/types';
+import type { AdOrder, AdSelfServeConfig, CmsResponse, Coupon, PromoBanner, PushLog, SponsorAd } from '#shared/types';
 
 export interface PromoDraft {
   title: string;
@@ -54,6 +54,9 @@ export function useCms() {
   const coupons = ref<Coupon[]>([]);
   const pushes = ref<PushLog[]>([]);
   const ads = ref<SponsorAd[]>([]);
+  /// Solicitudes self-serve (/adOrders) + precios de venta directa.
+  const orders = ref<AdOrder[]>([]);
+  const adsConfig = ref<AdSelfServeConfig | null>(null);
   const pending = ref(true);
 
   async function load(): Promise<void> {
@@ -149,17 +152,21 @@ export function useCms() {
   async function updateAdStatus(
     ad: SponsorAd,
     status: SponsorAd['status'],
+    overrideReason?: string,
   ): Promise<void> {
     const updated = await $api<SponsorAd>(`/api/cms/ads/${ad.id}`, {
       method: 'PUT',
-      body: { status },
+      body: { status, overrideReason },
     });
     Object.assign(ad, updated);
   }
 
   async function updateAd(
     ad: SponsorAd,
-    draft: Partial<AdDraft> & { status?: SponsorAd['status'] },
+    draft: Partial<AdDraft> & {
+      status?: SponsorAd['status'];
+      overrideReason?: string;
+    },
   ): Promise<void> {
     const updated = await $api<SponsorAd>(`/api/cms/ads/${ad.id}`, {
       method: 'PUT',
@@ -168,9 +175,52 @@ export function useCms() {
     Object.assign(ad, updated);
   }
 
-  async function deleteAd(ad: SponsorAd): Promise<void> {
-    await $api(`/api/cms/ads/${ad.id}`, { method: 'DELETE' });
+  async function deleteAd(ad: SponsorAd, reason?: string): Promise<void> {
+    await $api(`/api/cms/ads/${ad.id}`, {
+      method: 'DELETE',
+      body: reason ? { reason } : undefined,
+    });
     ads.value = ads.value.filter((item) => item.id !== ad.id);
+  }
+
+  /// Órdenes self-serve — el negocio pagó y espera aprobación.
+  async function loadOrders(): Promise<void> {
+    orders.value = await $api<AdOrder[]>('/api/ads/orders');
+  }
+
+  /// Aprobar = el anuncio pasa a ACTIVE y la vigencia arranca hoy.
+  async function approveOrder(order: AdOrder): Promise<void> {
+    const updated = await $api<AdOrder>(
+      `/api/ads/orders/${order.id}/approve`,
+      { method: 'POST' },
+    );
+    Object.assign(order, updated);
+    if (order.sponsorAdId) {
+      const ad = ads.value.find((a) => a.id === order.sponsorAdId);
+      if (ad) ad.status = 'ACTIVE';
+    }
+  }
+
+  /// Rechazar = reembolso Stripe automático + se borra el anuncio.
+  async function rejectOrder(order: AdOrder, reason: string): Promise<void> {
+    const updated = await $api<AdOrder>(
+      `/api/ads/orders/${order.id}/reject`,
+      { method: 'POST', body: { reason } },
+    );
+    Object.assign(order, updated);
+    ads.value = ads.value.filter((a) => a.id !== order.sponsorAdId);
+  }
+
+  /// Precios de venta directa — /config/ads (solo admin).
+  async function loadAdsConfig(): Promise<void> {
+    adsConfig.value = await $api<AdSelfServeConfig>('/api/ads/self-serve');
+  }
+
+  async function saveAdsConfig(draft: AdSelfServeConfig): Promise<void> {
+    adsConfig.value = await $api<AdSelfServeConfig>('/api/ads/self-serve', {
+      method: 'PUT',
+      body: draft,
+    });
   }
 
   return {
@@ -178,6 +228,8 @@ export function useCms() {
     coupons,
     pushes,
     ads,
+    orders,
+    adsConfig,
     pending,
     load,
     createPromo,
@@ -192,5 +244,10 @@ export function useCms() {
     updateAd,
     updateAdStatus,
     deleteAd,
+    loadOrders,
+    approveOrder,
+    rejectOrder,
+    loadAdsConfig,
+    saveAdsConfig,
   };
 }

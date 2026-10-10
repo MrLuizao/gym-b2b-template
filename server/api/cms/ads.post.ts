@@ -64,7 +64,10 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
     image_url: String(body!.imageUrl),
     cta_label: String(body!.ctaLabel ?? 'Ver más').slice(0, 24),
     branch_id: body!.branchId || null,
-    placement: body!.placement === 'list' ? 'list' : 'carousel',
+    placement:
+      body!.placement === 'list' || body!.placement === 'both'
+        ? body!.placement
+        : 'carousel',
     status: body!.status === 'PAUSED' ? 'PAUSED' : 'ACTIVE',
     ends_at: Timestamp.fromMillis(Number(body!.endsAt)),
     impressions: 0,

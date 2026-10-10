@@ -303,11 +303,15 @@ export interface SponsorAd {
   imageUrl: string;
   ctaLabel: string;
   branchId: string | null;
-  /// Espacio vendido: 'carousel' = carrusel del Home (premium),
-  /// 'list' = directorio de Aliados. Los ads viejos sin el campo
-  /// se tratan como 'carousel' (comportamiento previo).
-  placement: 'carousel' | 'list';
-  status: 'ACTIVE' | 'PAUSED';
+  /// Espacio vendido: 'carousel' = carrusel del Home + Promociones
+  /// (premium), 'list' = solo directorio de Aliados, 'both' = ambas
+  /// superficies (combo con precio propio). Los ads viejos sin el
+  /// campo se tratan como 'carousel' (comportamiento previo).
+  placement: 'carousel' | 'list' | 'both';
+  /// PENDING = comprado por self-serve, esperando aprobación del gym —
+  /// la app solo muestra ACTIVE, así que nunca se cuela a producción.
+  status: 'PENDING' | 'ACTIVE' | 'PAUSED';
+  /// 0 = sin vigencia (anuncio PENDING — arranca al aprobarse).
   endsAt: number;
   impressions: number;
   taps: number;
@@ -319,6 +323,117 @@ export interface SponsorAd {
   phone: string;
   socials: SponsorAdSocials;
   photos: string[];
+  /// Orden self-serve que originó el anuncio — null = creado por staff.
+  orderId: string | null;
+}
+
+/// Superficies que compra cada placement — usado para detectar
+/// "downgrade" en anuncios ligados a una orden pagada: bajar de rank
+/// (p.ej. both → list) requiere razón obligatoria + registro en
+/// /auditLogs. Subir de rank es un upgrade gratis del gym.
+export const PLACEMENT_RANK: Record<SponsorAd['placement'], number> = {
+  list: 1,
+  carousel: 2,
+  both: 3,
+};
+
+/// /auditLogs/{id} — evidencia de cambios excepcionales sobre anuncios
+/// comprados por self-serve (downgrade de espacio, pausa, borrado).
+/// Escritura solo server; lectura solo admin.
+export interface AdAuditEntry {
+  id: string;
+  entity: 'sponsorAd';
+  entityId: string;
+  orderId: string | null;
+  advertiser: string;
+  action: 'PLACEMENT_DOWNGRADE' | 'PLACEMENT_UPGRADE' | 'PAUSE' | 'DELETE';
+  actorUid: string;
+  actorEmail: string;
+  reason: string;
+  changes: Record<string, { before: unknown; after: unknown }>;
+  /// Snapshot del anuncio (sin imágenes) — solo en DELETE.
+  snapshot: Record<string, unknown> | null;
+  createdAt: number;
+}
+
+/// Precio semanal por espacio publicitario — lo configura el admin en
+/// /publicidad (doc /config/ads). `pricePerWeek` en pesos MXN y es la
+/// tarifa por sede: elegir "todas las sedes" multiplica por N sedes.
+export interface AdSlotConfig {
+  enabled: boolean;
+  pricePerWeek: number;
+}
+
+export interface AdSelfServeConfig {
+  enabled: boolean;
+  slots: {
+    carousel: AdSlotConfig;
+    list: AdSlotConfig;
+    /// 'both' = el anuncio sale en el carrusel del Home/Promociones Y
+    /// en el directorio de Aliados — el gym define el precio del combo
+    /// (suele ser menor que la suma de ambos, como gancho de venta).
+    both: AdSlotConfig;
+  };
+  /// Destinatarios del aviso "llegó una solicitud pagada" (además de
+  /// los admins de staff, que siempre se notifican por su correo de
+  /// login). `global` = siempre; `byBranch` = solo si la orden compró
+  /// esa sede — compra de "todas las sedes" → avisa a TODOS los
+  /// correos configurados.
+  notify: {
+    global: string[];
+    byBranch: Record<string, string>;
+  };
+}
+
+/// /adOrders/{orderId} — compra self-serve de un negocio externo (sin
+/// login): el anunciante sube su creativo, paga por Stripe Checkout y la
+/// orden queda PENDING_APPROVAL hasta que el admin aprueba (anuncio va
+/// live) o rechaza (reembolso automático).
+export interface AdOrder {
+  id: string;
+  businessName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  /// Creativo — se copia tal cual al sponsorAd al confirmarse el pago.
+  title: string;
+  subtitle: string;
+  badge: string;
+  brandColor: number | null;
+  imageUrl: string;
+  ctaLabel: string;
+  description: string;
+  address: string;
+  socials: SponsorAdSocials;
+  photos: string[];
+  branchId: string | null;
+  placement: SponsorAd['placement'];
+  weeks: number;
+  amount: number;
+  currency: string;
+  status:
+    | 'AWAITING_PAYMENT'
+    | 'PENDING_APPROVAL'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'EXPIRED';
+  stripeSessionId: string | null;
+  stripePaymentIntentId: string | null;
+  sponsorAdId: string | null;
+  rejectionReason: string | null;
+  createdAt: number;
+  paidAt: number | null;
+  reviewedAt: number | null;
+  reviewedBy: string | null;
+}
+
+/// Respuesta pública de /api/ads/self-serve — lo mínimo para pintar el
+/// formulario de compra (nombre de marca, sedes y precios).
+export interface AdSelfServeInfo {
+  enabled: boolean;
+  brandName: string;
+  branches: { id: string; name: string }[];
+  slots: AdSelfServeConfig['slots'];
 }
 
 /// Tab de la app al tocar el push — 'auto' usa el mapping por kind

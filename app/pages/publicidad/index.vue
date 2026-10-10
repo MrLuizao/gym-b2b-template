@@ -1,22 +1,50 @@
 <script setup lang="ts">
 import {
+  Check,
+  Copy,
+  Hourglass,
   Layers,
   PauseCircle,
   PlayCircle,
   Plus,
+  Settings2,
   TimerOff,
+  Undo2,
 } from '@lucide/vue';
 
-import type { Branch, SponsorAd } from '#shared/types';
+import type { AdOrder, AdSelfServeConfig, Branch, SponsorAd } from '#shared/types';
 
-const { ads, pending, load } = useCms();
+const {
+  ads,
+  orders,
+  adsConfig,
+  pending,
+  load,
+  loadOrders,
+  loadAdsConfig,
+  approveOrder,
+  rejectOrder,
+  saveAdsConfig,
+} = useCms();
 const { session } = useAuth();
 /// El inventario publicitario es comercial/global — solo el admin lo edita.
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 
+/// Revisión de órdenes pagadas: el admin aprueba cualquiera; el gerente
+/// solo las de SU sede — las de "todas las sedes" (branchId null) son
+/// admin-only (el server valida igual con requireBranchScope).
+function canReviewOrder(order: AdOrder): boolean {
+  if (isAdmin.value) return true;
+  return (
+    session.value?.role === 'MANAGER' &&
+    order.branchId !== null &&
+    order.branchId === session.value?.branchId
+  );
+}
+
 const branches = ref<Branch[]>([]);
 
-type AdFilter = 'todas' | 'ACTIVE' | 'PAUSED' | 'expiring';
+type AdFilter = 'todas' | 'PENDING' | 'ACTIVE' | 'PAUSED' | 'expiring';
 const adFilter = ref<AdFilter>('todas');
 
 const WEEK_MS = 7 * 86_400_000;
@@ -35,7 +63,16 @@ const activeAds = computed(() =>
   ads.value.filter((a) => a.status === 'ACTIVE' && !isExpired(a)),
 );
 const pausedAds = computed(() => ads.value.filter((a) => a.status === 'PAUSED'));
-const expiringAds = computed(() => ads.value.filter(isExpiring));
+/// Comprados por self-serve, esperando revisión del admin.
+const pendingAds = computed(() =>
+  ads.value.filter((a) => a.status === 'PENDING'),
+);
+const expiringAds = computed(() =>
+  ads.value.filter((a) => a.status !== 'PENDING' && isExpiring(a)),
+);
+const pendingOrders = computed(() =>
+  orders.value.filter((o) => o.status === 'PENDING_APPROVAL'),
+);
 const totalImpressions = computed(() =>
   ads.value.reduce((sum, a) => sum + a.impressions, 0),
 );
@@ -50,6 +87,8 @@ const globalCtr = computed(() =>
 
 const filteredAds = computed(() => {
   switch (adFilter.value) {
+    case 'PENDING':
+      return pendingAds.value;
     case 'ACTIVE':
       return activeAds.value;
     case 'PAUSED':
@@ -82,8 +121,127 @@ function formatDay(ts: number): string {
   });
 }
 
+// ── Venta directa (self-serve) ──
+
+const configDraft = ref<AdSelfServeConfig | null>(null);
+const configOpen = ref(false);
+const savingConfig = ref(false);
+const linkCopied = ref(false);
+const orderError = ref<string | null>(null);
+const processingOrder = ref<string | null>(null);
+const rejectTarget = ref<AdOrder | null>(null);
+const rejectReason = ref('');
+const rejecting = ref(false);
+
+const selfServeUrl = computed(() =>
+  import.meta.client ? `${window.location.origin}/anuncia` : '/anuncia',
+);
+
+function openConfig(): void {
+  const c = adsConfig.value;
+  configDraft.value = c
+    ? JSON.parse(JSON.stringify(c))
+    : {
+        enabled: false,
+        slots: {
+          carousel: { enabled: true, pricePerWeek: 500 },
+          list: { enabled: true, pricePerWeek: 250 },
+          both: { enabled: true, pricePerWeek: 650 },
+        },
+      };
+  /// Docs viejos de /config/ads no tienen el bloque notify.
+  configDraft.value!.notify ??= { global: [], byBranch: {} };
+  configOpen.value = true;
+}
+
+/// Correos globales como texto — el modelo guarda un arreglo.
+const globalNotifyText = computed({
+  get: () => configDraft.value?.notify.global.join(', ') ?? '',
+  set: (v: string) => {
+    if (configDraft.value) {
+      configDraft.value.notify.global = v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  },
+});
+
+async function saveConfig(): Promise<void> {
+  if (!configDraft.value || savingConfig.value) return;
+  savingConfig.value = true;
+  try {
+    await saveAdsConfig(configDraft.value);
+    configOpen.value = false;
+  } finally {
+    savingConfig.value = false;
+  }
+}
+
+async function copyLink(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(selfServeUrl.value);
+    linkCopied.value = true;
+    setTimeout(() => {
+      linkCopied.value = false;
+    }, 2000);
+  } catch {
+    /// Portapapeles bloqueado — el texto queda a la vista para copiar.
+  }
+}
+
+async function approve(order: AdOrder): Promise<void> {
+  if (processingOrder.value) return;
+  processingOrder.value = order.id;
+  orderError.value = null;
+  try {
+    await approveOrder(order);
+  } catch (cause) {
+    orderError.value =
+      cause instanceof Error ? cause.message : 'No se pudo aprobar';
+  } finally {
+    processingOrder.value = null;
+  }
+}
+
+function askReject(order: AdOrder): void {
+  rejectTarget.value = order;
+  rejectReason.value = '';
+  orderError.value = null;
+}
+
+async function confirmReject(): Promise<void> {
+  if (!rejectTarget.value || rejecting.value) return;
+  rejecting.value = true;
+  try {
+    await rejectOrder(rejectTarget.value, rejectReason.value);
+    rejectTarget.value = null;
+  } catch (cause) {
+    orderError.value =
+      cause instanceof Error ? cause.message : 'No se pudo reembolsar';
+    rejectTarget.value = null;
+  } finally {
+    rejecting.value = false;
+  }
+}
+
+function formatMoney(amount: number): string {
+  return `$${amount.toLocaleString('es-MX')} MXN`;
+}
+
+function placementName(p: AdOrder['placement']): string {
+  if (p === 'both') return 'Home + Aliados';
+  return p === 'carousel' ? 'Carrusel del Home' : 'Directorio de Aliados';
+}
+
+const slotMeta: Record<SponsorAd['placement'], { label: string; hint: string }> = {
+  carousel: { label: 'Carrusel del Home', hint: 'Banner premium del Home' },
+  list: { label: 'Directorio de Aliados', hint: 'Listado en Aliados' },
+  both: { label: 'Home + Aliados', hint: 'Combo — sale en ambas superficies' },
+};
+
 onMounted(async () => {
-  await load();
+  await Promise.all([load(), loadOrders(), loadAdsConfig()]);
   try {
     branches.value = await $api<Branch[]>('/api/branches');
   } catch {
@@ -94,7 +252,32 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
-    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <button
+        v-if="pendingOrders.length"
+        class="cursor-pointer rounded-2xl border p-4 text-left transition"
+        :class="
+          adFilter === 'PENDING'
+            ? 'border-amber-400 bg-amber-400/10'
+            : 'border-amber-400/50 bg-amber-400/5 hover:border-amber-400'
+        "
+        @click="toggleFilter('PENDING')"
+      >
+        <div class="flex items-center gap-2">
+          <Hourglass class="h-4 w-4 text-amber-400" />
+          <p
+            class="text-[10px] font-bold uppercase tracking-widest text-amber-400"
+          >
+            Por aprobar
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-amber-400">
+          {{ pendingOrders.length }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          ya pagaron — esperan tu revisión
+        </p>
+      </button>
       <button
         class="cursor-pointer rounded-2xl border p-4 text-left transition"
         :class="
@@ -194,6 +377,88 @@ onMounted(async () => {
       </button>
     </div>
 
+    <!-- Solicitudes self-serve pagadas — el gym solo aprueba o reembolsa -->
+    <section
+      v-if="pendingOrders.length"
+      class="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5"
+    >
+      <div class="flex items-center justify-between">
+        <h2
+          class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-amber-400"
+        >
+          <Hourglass class="h-4 w-4" />
+          Solicitudes de anuncios pagados
+        </h2>
+        <p class="text-[10px] font-semibold text-text-dim">
+          Aprueba para publicar · Rechaza para reembolsar automáticamente
+        </p>
+      </div>
+      <p
+        v-if="orderError"
+        class="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-medium text-red-400"
+      >
+        {{ orderError }}
+      </p>
+      <div class="mt-4 space-y-3">
+        <div
+          v-for="order in pendingOrders"
+          :key="order.id"
+          class="flex flex-col gap-3 rounded-xl border border-stroke bg-surface p-4 sm:flex-row sm:items-center"
+        >
+          <img
+            :src="order.imageUrl"
+            :alt="order.title"
+            class="h-12 w-20 shrink-0 rounded-lg border border-stroke object-cover"
+          />
+          <div class="min-w-0 flex-1">
+            <button
+              v-if="order.sponsorAdId"
+              type="button"
+              class="cursor-pointer truncate text-sm font-black text-text-primary transition hover:text-accent hover:underline"
+              @click="navigateTo(`/publicidad/${order.sponsorAdId}`)"
+            >
+              {{ order.businessName }}
+            </button>
+            <p v-else class="truncate text-sm font-black text-text-primary">
+              {{ order.businessName }}
+            </p>
+            <p class="truncate text-[11px] text-text-dim">
+              {{ order.title }} — {{ order.contactName }} · {{ order.email }}
+            </p>
+            <p class="mt-1 text-[10px] font-bold text-text-muted">
+              {{ placementName(order.placement) }} ·
+              {{ order.weeks }} semana{{ order.weeks > 1 ? 's' : '' }} ·
+              {{ order.branchId ? branchName(order.branchId) : 'Todas las sedes' }}
+              ·
+              <span class="text-emerald-400">
+                pagó {{ formatMoney(order.amount) }}
+              </span>
+            </p>
+          </div>
+          <div v-if="canReviewOrder(order)" class="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              class="flex cursor-pointer items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-4 py-1.5 text-[11px] font-black text-emerald-400 transition hover:bg-emerald-400/20 disabled:opacity-50"
+              :disabled="processingOrder === order.id"
+              @click="approve(order)"
+            >
+              <Check class="h-3.5 w-3.5" />
+              {{ processingOrder === order.id ? 'Publicando…' : 'Aprobar' }}
+            </button>
+            <button
+              type="button"
+              class="flex cursor-pointer items-center gap-1.5 rounded-full border border-red-400/40 bg-red-400/10 px-4 py-1.5 text-[11px] font-black text-red-400 transition hover:bg-red-400/20 disabled:opacity-50"
+              :disabled="!!processingOrder"
+              @click="askReject(order)"
+            >
+              <Undo2 class="h-3.5 w-3.5" />
+              Rechazar
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section>
       <div class="mb-3 flex items-center justify-between">
         <div>
@@ -206,14 +471,34 @@ onMounted(async () => {
             Espacios vendibles — Carrusel del Home o directorio de Aliados
           </p>
         </div>
-        <button
-          v-if="isAdmin"
-          class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
-          @click="navigateTo('/publicidad/nuevo')"
-        >
-          <Plus class="h-3.5 w-3.5" />
-          Nuevo anuncio
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            v-if="isAdmin"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-4 py-1.5 text-[11px] font-black text-text-muted transition hover:border-accent/50 hover:text-text-primary"
+            @click="openConfig"
+          >
+            <Settings2 class="h-3.5 w-3.5" />
+            Venta directa
+            <span
+              class="rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase"
+              :class="
+                adsConfig?.enabled
+                  ? 'bg-emerald-400/15 text-emerald-400'
+                  : 'bg-base text-text-dim'
+              "
+            >
+              {{ adsConfig?.enabled ? 'ON' : 'OFF' }}
+            </span>
+          </button>
+          <button
+            v-if="isAdmin"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
+            @click="navigateTo('/publicidad/nuevo')"
+          >
+            <Plus class="h-3.5 w-3.5" />
+            Nuevo anuncio
+          </button>
+        </div>
       </div>
       <div class="overflow-hidden rounded-2xl border border-stroke bg-surface">
         <table class="w-full text-left">
@@ -270,12 +555,18 @@ onMounted(async () => {
                 <span
                   class="rounded-full border px-2.5 py-0.5 text-[10px] font-black"
                   :class="
-                    ad.placement === 'carousel'
+                    ad.placement !== 'list'
                       ? 'border-accent/40 bg-accent/10 text-accent'
                       : 'border-stroke bg-base text-text-muted'
                   "
                 >
-                  {{ ad.placement === 'carousel' ? 'CARRUSEL' : 'DIRECTORIO' }}
+                  {{
+                    ad.placement === 'carousel'
+                      ? 'CARRUSEL'
+                      : ad.placement === 'both'
+                        ? 'AMBOS'
+                        : 'DIRECTORIO'
+                  }}
                 </span>
               </td>
               <td class="px-5 py-3 text-[11px] text-text-muted">
@@ -283,27 +574,37 @@ onMounted(async () => {
               </td>
               <td
                 class="px-5 py-3 font-mono text-[10px]"
-                :class="isExpired(ad) ? 'font-bold text-red-400' : 'text-text-dim'"
+                :class="
+                  ad.status === 'PENDING'
+                    ? 'text-amber-400'
+                    : isExpired(ad)
+                      ? 'font-bold text-red-400'
+                      : 'text-text-dim'
+                "
               >
-                {{ formatDay(ad.endsAt) }}
+                {{ ad.status === 'PENDING' ? 'al aprobar' : formatDay(ad.endsAt) }}
               </td>
               <td class="px-5 py-3">
                 <span
                   class="rounded-full border px-2.5 py-0.5 text-[10px] font-black"
                   :class="
-                    isExpired(ad)
-                      ? 'border-red-400/40 bg-red-400/10 text-red-400'
-                      : ad.status === 'ACTIVE'
-                        ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
-                        : 'border-stroke bg-base text-text-dim'
+                    ad.status === 'PENDING'
+                      ? 'border-amber-400/40 bg-amber-400/10 text-amber-400'
+                      : isExpired(ad)
+                        ? 'border-red-400/40 bg-red-400/10 text-red-400'
+                        : ad.status === 'ACTIVE'
+                          ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
+                          : 'border-stroke bg-base text-text-dim'
                   "
                 >
                   {{
-                    isExpired(ad)
-                      ? 'VENCIDO'
-                      : ad.status === 'ACTIVE'
-                        ? 'ACTIVO'
-                        : 'PAUSADO'
+                    ad.status === 'PENDING'
+                      ? 'EN REVISIÓN'
+                      : isExpired(ad)
+                        ? 'VENCIDO'
+                        : ad.status === 'ACTIVE'
+                          ? 'ACTIVO'
+                          : 'PAUSADO'
                   }}
                 </span>
               </td>
@@ -335,5 +636,173 @@ onMounted(async () => {
         </p>
       </div>
     </section>
+
+    <!-- Config de venta directa — precios por espacio y liga pública -->
+    <UModal
+      v-model:open="configOpen"
+      title="Venta directa de publicidad"
+      :description="'Cualquier negocio puede comprar su anuncio en ' + selfServeUrl + ' — sube su creativo, paga y tú solo apruebas.'"
+    >
+      <template #body>
+        <div v-if="configDraft" class="space-y-4">
+          <div
+            class="flex items-center justify-between rounded-xl border border-stroke bg-base px-4 py-3"
+          >
+            <div>
+              <p class="text-xs font-black text-text-primary">
+                Venta directa activa
+              </p>
+              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                Apágala si no quieres recibir solicitudes nuevas
+              </p>
+            </div>
+            <button
+              type="button"
+              class="relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition"
+              :class="
+                configDraft.enabled
+                  ? 'bg-accent'
+                  : 'border border-stroke bg-base'
+              "
+              @click="configDraft.enabled = !configDraft.enabled"
+            >
+              <span
+                class="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+                :class="
+                  configDraft.enabled ? 'left-[22px] bg-base' : 'left-0.5 bg-white'
+                "
+              />
+            </button>
+          </div>
+          <div
+            v-for="slot in (['carousel', 'list', 'both'] as const)"
+            :key="slot"
+            class="flex items-center justify-between gap-3 rounded-xl border border-stroke bg-base px-4 py-3"
+          >
+            <div class="min-w-0">
+              <p class="text-xs font-black text-text-primary">
+                {{ slotMeta[slot].label }}
+              </p>
+              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                {{ slotMeta[slot].hint }}
+              </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <input
+                v-model.number="configDraft.slots[slot].pricePerWeek"
+                type="number"
+                min="0"
+                step="50"
+                class="w-24 rounded-lg border border-stroke bg-surface px-2 py-1.5 text-right text-xs font-bold text-text-primary outline-none focus:border-accent"
+              />
+              <span class="text-[10px] font-bold text-text-dim">
+                MXN/semana/sede
+              </span>
+            </div>
+          </div>
+          <div
+            class="space-y-3 rounded-xl border border-stroke bg-base px-4 py-3"
+          >
+            <div>
+              <p class="text-xs font-black text-text-primary">
+                Avisos por correo
+              </p>
+              <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+                Además del admin, ¿quién recibe el aviso de cada solicitud
+                pagada? Si compran una sede avisa solo a su correo; si
+                compran todas, avisa a todos.
+              </p>
+            </div>
+            <input
+              v-model="globalNotifyText"
+              type="text"
+              placeholder="Correos globales, separados por coma"
+              class="w-full rounded-lg border border-stroke bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary outline-none placeholder:text-text-dim/60 focus:border-accent"
+            />
+            <div
+              v-for="b in branches"
+              :key="b.id"
+              class="flex items-center gap-2"
+            >
+              <span
+                class="w-24 shrink-0 truncate text-[10px] font-black text-text-muted"
+                :title="b.name"
+              >
+                {{ b.name }}
+              </span>
+              <input
+                v-model="configDraft.notify.byBranch[b.id]"
+                type="email"
+                placeholder="correo de la sede"
+                class="min-w-0 flex-1 rounded-lg border border-stroke bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary outline-none placeholder:text-text-dim/60 focus:border-accent"
+              />
+            </div>
+          </div>
+          <div
+            class="flex items-center justify-between gap-3 rounded-xl border border-stroke bg-base px-4 py-3"
+          >
+            <p class="min-w-0 truncate font-mono text-[11px] text-text-muted">
+              {{ selfServeUrl }}
+            </p>
+            <button
+              type="button"
+              class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-stroke px-3 py-1.5 text-[10px] font-black text-text-muted transition hover:border-accent/50 hover:text-text-primary"
+              @click="copyLink"
+            >
+              <Copy class="h-3 w-3" />
+              {{ linkCopied ? 'Copiado' : 'Copiar' }}
+            </button>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="configOpen = false"
+          />
+          <UButton
+            label="Guardar"
+            :loading="savingConfig"
+            @click="saveConfig"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <!-- Rechazo de orden — con reembolso automático -->
+    <UModal
+      :open="!!rejectTarget"
+      title="Rechazar y reembolsar"
+      :description="`Se reembolsará ${rejectTarget ? formatMoney(rejectTarget.amount) : ''} a ${rejectTarget?.businessName ?? ''} y el anuncio no se publicará.`"
+      @update:open="rejectTarget = null"
+    >
+      <template #body>
+        <textarea
+          v-model="rejectReason"
+          rows="2"
+          placeholder="Motivo del rechazo (opcional — se envía al anunciante por correo)"
+          class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+        />
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="rejectTarget = null"
+          />
+          <UButton
+            label="Rechazar y reembolsar"
+            color="error"
+            :loading="rejecting"
+            @click="confirmReject"
+          />
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
