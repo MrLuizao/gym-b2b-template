@@ -315,6 +315,13 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 | CMS (`/cms`) | sin acceso | ver (detalle solo lectura) | editar + crear + enviar + eliminar |
 | Reportes (`/reportes`) | sin acceso | todos los tipos, siempre filtrado a su sede | todos, cualquier sede |
 
+La matriz se enforcea **server-side**, no solo en la UI: `RECEPTIONIST`
+recibe 403 en cualquier mutación de trainers (`trainers.post`,
+`trainers/{id}/update|duty`), `classes/{id}.put`, en las lecturas de
+publicidad/CMS (`ads/orders.get`, `ads/config.get`, `ads/{id}/stats.get`,
+`cms/**`) y solo cobra a socios de su sede (`payments.post` valida
+`requireBranchScope` contra `member.branch_id`).
+
 ### Reglas de negocio clave
 
 - **Entidad compartida** (clase o coach asignado a varias sedes): el gerente solo
@@ -378,9 +385,9 @@ su propia sede (`session.branchId`), el admin cualquier sede.
 - **Stripe keys**: el flujo está programado de punta a punta; falta
   poblar `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (.env B2B) y
   `stripePublishableKey` (app_config.dart) con llaves reales.
-- **Cron `close-day` en Vercel**: configurado en `vercel.json` pero no corre
-  sin deploy a producción + env `CRON_SECRET`. Hoy el cierre es manual
-  (botón header) o vía cron-job.org. `auto-checkout` sí corre en
+- **Cron `close-day` en Vercel**: `server/api/cron/close-day.ts` acepta
+  GET (Vercel Cron, 23:55 CDMX en `vercel.json`) y POST (manual con
+  Bearer). Requiere `CRON_SECRET` en Vercel. `auto-checkout` corre en
   cron-job.org cada 15 min.
 - **`bookings` archivadas**: el close-day mueve las de `class_date <
   hoy` a `/bookings_archive` (lectura solo staff — índice

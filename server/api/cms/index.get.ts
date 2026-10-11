@@ -4,7 +4,11 @@ import { db, toCoupon, toPromo, toPushLog, toSponsorAd } from '../../utils/db';
 import { requireStaff } from '../../utils/staff-auth';
 
 export default defineEventHandler(async (event): Promise<CmsResponse> => {
-  await requireStaff(event);
+  const staff = await requireStaff(event);
+  /// La sección CMS no aplica a recepción (matriz de roles).
+  if (staff.role === 'RECEPTIONIST') {
+    throw createError({ statusCode: 403, statusMessage: 'Sin acceso' });
+  }
   const [promotionsSnap, pushesSnap, adsSnap] = await Promise.all([
     db().collection('promotions').orderBy('created_at', 'desc').get(),
     db().collection('pushLogs').orderBy('created_at', 'desc').get(),

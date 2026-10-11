@@ -20,6 +20,12 @@ export default defineEventHandler(async (event): Promise<Trainer> => {
   const data = snap.data() ?? {};
   const currentBranchIds = (data.branch_ids as string[]) ?? [];
 
+  /// Recepcionista solo VE — la edición (incluso MANAGER_KEYS) es
+  /// gerente de la sede o admin.
+  if (staff.role === 'RECEPTIONIST') {
+    throw createError({ statusCode: 403, statusMessage: 'Solo lectura' });
+  }
+
   const body = await readBody<
     Partial<Trainer> & {
       addBranchId?: string;

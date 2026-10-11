@@ -8,6 +8,10 @@ const VALID_SHIFTS = ['MAÑANA', 'TARDE', 'NOCHE'] as const;
 
 export default defineEventHandler(async (event): Promise<Trainer> => {
   const staff = await requireStaff(event);
+  /// Recepcionista solo VE coaches — crear es gerente (su sede) o admin.
+  if (staff.role === 'RECEPTIONIST') {
+    throw createError({ statusCode: 403, statusMessage: 'Solo lectura' });
+  }
   const body = await readBody<{
     firstName?: string;
     middleName?: string;

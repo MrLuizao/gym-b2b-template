@@ -13,6 +13,10 @@ export default defineEventHandler(async (event): Promise<Trainer> => {
     throw createError({ statusCode: 404, statusMessage: 'Entrenador no encontrado' });
   }
 
+  /// Recepcionista solo VE — gestionar el turno es gerente o admin.
+  if (staff.role === 'RECEPTIONIST') {
+    throw createError({ statusCode: 403, statusMessage: 'Solo lectura' });
+  }
   /// Gerente: solo coaches asignados a su sede.
   if (staff.role !== 'ADMIN') {
     const branchIds = (snap.data()?.branch_ids as string[]) ?? [];

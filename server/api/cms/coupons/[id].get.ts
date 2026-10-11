@@ -4,7 +4,10 @@ import { db, toCoupon } from '../../../utils/db';
 import { requireStaff } from '../../../utils/staff-auth';
 
 export default defineEventHandler(async (event): Promise<Coupon> => {
-  await requireStaff(event);
+  const staff = await requireStaff(event);
+  if (staff.role === 'RECEPTIONIST') {
+    throw createError({ statusCode: 403, statusMessage: 'Sin acceso' });
+  }
   const snap = await db()
     .collection('promotions')
     .doc(getRouterParam(event, 'id') ?? '')

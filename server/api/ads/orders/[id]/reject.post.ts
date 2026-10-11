@@ -11,14 +11,11 @@ import { useStripe } from '../../../../utils/stripe';
 /// sponsorAds PENDING y la orden queda REJECTED. Si el reembolso falla
 /// no se toca nada (el admin reintenta) — el dinero nunca queda
 /// cobrado sin anuncio publicado.
-/// Permisos: igual que approve — gerente solo órdenes de su sede.
+/// Permisos: igual que approve — admin-only (órdenes siempre globales).
 export default defineEventHandler(async (event): Promise<AdOrder> => {
   const staff = await requireStaff(event);
-  if (staff.role !== 'ADMIN' && staff.role !== 'MANAGER') {
-    throw createError({
-      statusCode: 403,
-      message: 'Solo admin o gerente de la sede',
-    });
+  if (staff.role !== 'ADMIN') {
+    throw createError({ statusCode: 403, message: 'Solo el admin' });
   }
 
   const body = await readBody<{ reason?: string }>(event);

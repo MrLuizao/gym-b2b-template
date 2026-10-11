@@ -15,6 +15,12 @@ export default defineEventHandler(async (event): Promise<ClassSchedule> => {
   const data = snap.data() ?? {};
   const branchIds = (data.branch_ids as string[]) ?? [];
 
+  /// Recepcionista solo VE clases — editar (incluso el branchTime
+  /// local) es gerente de la sede o admin.
+  if (staff.role === 'RECEPTIONIST') {
+    throw createError({ statusCode: 403, statusMessage: 'Solo lectura' });
+  }
+
   const body = await readBody<
     Partial<ClassSchedule> & {
       branchTime?: { branchId?: string } & Partial<ClassBranchTime>;

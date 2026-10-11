@@ -16,15 +16,13 @@ import { requireBranchScope, requireStaff } from '../../../../utils/staff-auth';
 /// /api/cron/push-dispatch. El push sale DESPUÉS del filtro humano,
 /// nunca al pagar. Fallo de correo o FCM no tumba la aprobación
 /// (queda push_error + push_log_ids para reintentar desde el CMS).
-/// Permisos: admin — las órdenes siempre son globales (branch_id null)
-/// así que requireBranchScope solo deja pasar al admin.
+/// Permisos: admin — las órdenes siempre son globales (branch_id null);
+/// el requireBranchScope queda como segunda capa por si alguna orden
+/// legacy trae sede.
 export default defineEventHandler(async (event): Promise<AdOrder> => {
   const staff = await requireStaff(event);
-  if (staff.role !== 'ADMIN' && staff.role !== 'MANAGER') {
-    throw createError({
-      statusCode: 403,
-      message: 'Solo admin o gerente de la sede',
-    });
+  if (staff.role !== 'ADMIN') {
+    throw createError({ statusCode: 403, message: 'Solo el admin' });
   }
 
   const orderRef = db()

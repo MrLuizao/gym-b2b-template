@@ -3,11 +3,16 @@ import type { AdOrder } from '#shared/types';
 import { db, toAdOrder } from '../../utils/db';
 import { requireStaff } from '../../utils/staff-auth';
 
-/// Órdenes de publicidad self-serve — staff las lista en /publicidad
-/// (el gerente ve todas; aprueba/rechaza solo las de su sede — las de
-/// "todas las sedes" son admin-only, ver orders/[id]/approve|reject).
+/// Órdenes de publicidad self-serve — las lista admin/gerente en
+/// /publicidad. Contienen datos de contacto del anunciante — el
+/// recepcionista no tiene acceso a la sección ni al endpoint.
+/// (Todas las órdenes son globales: aprobar/rechazar es admin-only,
+/// ver orders/[id]/approve|reject).
 export default defineEventHandler(async (event): Promise<AdOrder[]> => {
-  await requireStaff(event);
+  const staff = await requireStaff(event);
+  if (staff.role === 'RECEPTIONIST') {
+    throw createError({ statusCode: 403, statusMessage: 'Sin acceso' });
+  }
   const snap = await db()
     .collection('adOrders')
     .orderBy('created_at', 'desc')

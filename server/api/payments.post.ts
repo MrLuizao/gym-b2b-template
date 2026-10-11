@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type { PaymentRecord } from '#shared/types';
 
 import { db, toPayment } from '../utils/db';
-import { requireStaff } from '../utils/staff-auth';
+import { requireBranchScope, requireStaff } from '../utils/staff-auth';
 
 const ALLOWED_METHODS = new Set(['cash', 'transfer', 'terminal', 'card']);
 
@@ -35,7 +35,9 @@ export default defineEventHandler(async (event): Promise<PaymentRecord> => {
   }
   const plan = planSnap.data() ?? {};
 
-  /// El cobro se toma en la sede del staff (admin usa la del socio).
+  /// El cobro se toma en la sede del staff (admin usa la del socio) —
+  /// gerente/recepcionista solo cobran a socios de su propia sede.
+  requireBranchScope(staff, member.branch_id as string);
   const branchId = staff.branchId ?? (member.branch_id as string) ?? '';
 
   const method = ALLOWED_METHODS.has(body?.method ?? '')
