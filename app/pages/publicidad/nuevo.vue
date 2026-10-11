@@ -615,7 +615,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <AdPreview :preview="preview">
+      <AdPreview :preview="preview" :show-badges="false">
         <p
           v-if="formError"
           class="mt-3 text-[11px] font-bold text-red-400"

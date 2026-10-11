@@ -60,11 +60,19 @@ interface Props {
   /// Muestra la sección "Así se ve el push" — solo en /anuncia (ahí el
   /// push es producto vendible; en páginas de staff no aplica).
   showPush?: boolean;
+  /// Layout en fila (mocks lado a lado con wrap) — lo usa /publicidad/[id]
+  /// que ya es una sola columna; sin él las secciones se apilan.
+  row?: boolean;
+  /// Badges "Incluido" junto a cada título — copy de venta para /anuncia;
+  /// en páginas de staff se ocultan.
+  showBadges?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   brandName: 'RIR-HUB',
   showPush: false,
+  row: false,
+  showBadges: true,
 });
 
 const onAlly = computed(() => readableOn(props.preview.brandColor));
@@ -128,13 +136,20 @@ const weekDays = computed(() => {
   <section
     class="flex flex-1 flex-col rounded-2xl border border-stroke bg-surface p-5"
   >
-    <template v-if="showPush">
+    <div
+      :class="
+        row ? 'flex flex-wrap items-start justify-between gap-x-10 gap-y-8' : ''
+      "
+    >
+    <div v-if="showPush" :class="row ? 'w-[290px]' : ''">
       <h2
         class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+        :class="row ? 'min-h-10' : ''"
       >
         <span class="h-4 w-1 rounded-full bg-accent" />
         Así se ve el push
         <span
+          v-if="showBadges"
           class="ml-auto rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-accent"
         >
           Incluido
@@ -214,17 +229,22 @@ const weekDays = computed(() => {
           </div>
         </div>
       </div>
-    </template>
+    </div>
 
     <div
-      :class="showPush ? 'mt-6 border-t border-stroke pt-5' : ''"
+      :class="[
+        row ? 'w-[290px]' : '',
+        showPush && !row ? 'mt-6 border-t border-stroke pt-5' : '',
+      ]"
     >
       <h3
         class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+        :class="row ? 'min-h-10' : ''"
       >
         <span class="h-4 w-1 rounded-full bg-accent" />
         Así se ve en el Home
         <span
+          v-if="showBadges"
           class="ml-auto rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest"
           :class="
             inHome
@@ -235,10 +255,9 @@ const weekDays = computed(() => {
           {{ inHome ? 'Incluido' : 'No incluido' }}
         </span>
       </h3>
-    </div>
 
     <div
-      class="mt-4 flex flex-1 items-center justify-center"
+      class="mt-4 flex items-center justify-center"
       :class="{ 'opacity-40': !inHome }"
     >
       <div
@@ -467,14 +486,17 @@ const weekDays = computed(() => {
         </div>
       </div>
     </div>
+    </div>
 
-    <div class="mt-6 border-t border-stroke pt-5">
+    <div :class="row ? 'w-[290px]' : 'mt-6 border-t border-stroke pt-5'">
       <h3
         class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+        :class="row ? 'min-h-10' : ''"
       >
         <span class="h-4 w-1 rounded-full bg-accent" />
         Así se ve en Aliados
         <span
+          v-if="showBadges"
           class="ml-auto rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest"
           :class="
             inAllies
@@ -485,13 +507,18 @@ const weekDays = computed(() => {
           {{ inAllies ? 'Incluido' : 'No incluido' }}
         </span>
       </h3>
-    </div>
     <div class="mt-3 flex justify-center" :class="{ 'opacity-40': !inAllies }">
       <div
-        class="w-full max-w-[280px] rounded-t-[2.4rem] border-4 border-b-0 border-stroke bg-black p-1.5 pb-0 shadow-2xl"
+        class="w-full max-w-[260px] border-4 border-stroke bg-black p-1.5 shadow-2xl"
+        :class="
+          showBadges
+            ? 'rounded-t-[2.4rem] border-b-0 pb-0'
+            : 'rounded-[2.4rem]'
+        "
       >
         <div
-          class="relative h-[268px] overflow-hidden rounded-t-[1.9rem] bg-base"
+          class="relative flex flex-col overflow-hidden bg-base"
+          :class="showBadges ? 'h-[268px] rounded-t-[1.9rem]' : 'h-[480px] rounded-[1.9rem]'"
         >
           <div
             class="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black"
@@ -507,7 +534,7 @@ const weekDays = computed(() => {
             </span>
           </div>
 
-          <div class="px-4 pt-4">
+          <div class="min-h-0 flex-1 overflow-hidden px-4 pt-4">
             <p class="text-[15px] font-black tracking-tight text-text-primary">
               Aliados
             </p>
@@ -560,7 +587,7 @@ const weekDays = computed(() => {
             <!-- El resto del listado — difuminado y recortado -->
             <div class="mt-2 space-y-2 opacity-50 blur-[0.6px]">
               <div
-                v-for="i in 2"
+                v-for="i in showBadges ? 2 : 5"
                 :key="i"
                 class="flex items-center gap-3 rounded-2xl border border-stroke bg-surface p-2.5"
               >
@@ -574,34 +601,41 @@ const weekDays = computed(() => {
               </div>
             </div>
           </div>
+
+          <div
+            v-if="!showBadges"
+            class="mx-auto mb-2 mt-auto h-1 w-24 shrink-0 rounded-full bg-text-dim/60"
+          />
         </div>
       </div>
     </div>
+    </div>
 
-    <div class="mt-6 border-t border-stroke pt-5">
+    <div :class="row ? 'w-[290px]' : 'mt-6 border-t border-stroke pt-5'">
       <h3
         class="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-text-primary"
+        :class="row ? 'min-h-10' : ''"
       >
         <span class="h-4 w-1 rounded-full bg-accent" />
         Tu ficha de aliado
         <span
+          v-if="showBadges"
           class="ml-auto rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-accent"
         >
           Siempre incluida
         </span>
       </h3>
-      <p class="mt-1 text-[11px] font-semibold text-text-dim">
+      <p v-if="!row" class="mt-1 text-[11px] font-semibold text-text-dim">
         Al tocar tu anuncio, el socio abre esta pantalla con toda tu
         información.
       </p>
-    </div>
 
-    <div class="mt-4 flex flex-1 items-center justify-center">
+    <div class="mt-4 flex items-center justify-center">
       <div
         class="w-full max-w-[260px] rounded-[2.4rem] border-4 border-stroke bg-black p-1.5 shadow-2xl"
       >
         <div
-          class="relative flex h-[460px] flex-col overflow-hidden rounded-[1.9rem] bg-base"
+          class="relative flex h-[480px] flex-col overflow-hidden rounded-[1.9rem] bg-base"
         >
           <div
             class="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black"
@@ -778,6 +812,8 @@ const weekDays = computed(() => {
           <div class="mx-auto mb-2 h-1 w-24 shrink-0 rounded-full bg-text-dim/60" />
         </div>
       </div>
+    </div>
+    </div>
     </div>
 
     <slot />

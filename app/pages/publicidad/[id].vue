@@ -264,11 +264,13 @@ const rejectModalOpen = ref(false);
 const rejectReason = ref('');
 /// Reenvío manual del correo de cierre de campaña.
 const resendingReport = ref(false);
+const resendModalOpen = ref(false);
 
 async function resendReport(): Promise<void> {
   const o = linkedOrder.value;
   if (!o || resendingReport.value) return;
   resendingReport.value = true;
+  resendModalOpen.value = false;
   actionError.value = null;
   try {
     await resendOrderReport(o);
@@ -663,7 +665,7 @@ async function removeAd(): Promise<void> {
       {{ actionError }}
     </p>
 
-    <div class="grid gap-6 lg:grid-cols-[3fr_2fr]">
+    <div class="flex flex-col gap-6">
       <div class="space-y-6">
 
     <!-- Orden self-serve — el negocio ya pagó, espera tu aprobación -->
@@ -806,7 +808,7 @@ async function removeAd(): Promise<void> {
         type="button"
         class="shrink-0 cursor-pointer rounded-full border border-stroke px-3.5 py-1.5 text-[10px] font-black text-text-muted transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
         :disabled="resendingReport"
-        @click="resendReport()"
+        @click="actionError = null; resendModalOpen = true"
       >
         {{ resendingReport ? 'Enviando…' : 'Reenviar' }}
       </button>
@@ -1282,8 +1284,7 @@ async function removeAd(): Promise<void> {
     </section>
       </div>
 
-      <div class="flex flex-col space-y-4">
-        <AdPreview :preview="preview">
+      <AdPreview :preview="preview" row :show-badges="false">
           <template v-if="editing">
             <p
               v-if="formError"
@@ -1307,8 +1308,7 @@ async function removeAd(): Promise<void> {
               Cancelar
             </button>
           </template>
-        </AdPreview>
-      </div>
+      </AdPreview>
     </div>
 
     <UModal
@@ -1428,6 +1428,37 @@ async function removeAd(): Promise<void> {
               color="primary"
               :loading="approving"
               @click="confirmReject"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="resendModalOpen"
+      title="Reenviar reporte de campaña"
+      :description="`Se enviará de nuevo el correo con las métricas de la campaña a ${linkedOrder?.email ?? 'el anunciante'}.`"
+    >
+      <template #footer>
+        <div class="flex w-full flex-col gap-2">
+          <p
+            v-if="actionError"
+            class="text-[11px] font-bold text-red-400"
+          >
+            {{ actionError }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton
+              label="Cancelar"
+              color="neutral"
+              variant="outline"
+              @click="resendModalOpen = false"
+            />
+            <UButton
+              label="Reenviar correo"
+              color="primary"
+              :loading="resendingReport"
+              @click="resendReport"
             />
           </div>
         </div>
