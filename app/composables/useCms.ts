@@ -211,6 +211,13 @@ export function useCms() {
     ads.value = ads.value.filter((a) => a.id !== order.sponsorAdId);
   }
 
+  /// Reenvío manual del correo de cierre de campaña al anunciante —
+  /// actualiza reportSentAt en la orden local si sale bien.
+  async function resendOrderReport(order: AdOrder): Promise<void> {
+    await $api(`/api/ads/orders/${order.id}/report`, { method: 'POST' });
+    order.reportSentAt = Date.now();
+  }
+
   /// Precios de venta directa — /config/ads (staff). El GET público
   /// /api/ads/self-serve NO incluye notify — este endpoint staff sí,
   /// de lo contrario guardar pisaría los correos con vacío.
@@ -249,6 +256,7 @@ export function useCms() {
     loadOrders,
     approveOrder,
     rejectOrder,
+    resendOrderReport,
     loadAdsConfig,
     saveAdsConfig,
   };

@@ -18,8 +18,6 @@ interface PendingToggle {
   title: string;
   description: string;
   confirmLabel: string;
-  /// Apagar → botón rojo; activar → accent.
-  danger: boolean;
   /// Solo el toggle maestro muestra el aviso de correos faltantes.
   warnMissingNotify?: boolean;
   apply: () => void;
@@ -60,7 +58,6 @@ function askToggle(): void {
       ? 'La página pública empezará a aceptar compras de anuncios — cada pago crea una solicitud que tú solo apruebas.'
       : 'Se dejarán de recibir solicitudes nuevas — los anuncios ya vendidos siguen su vigencia normal.',
     confirmLabel: on ? 'Activar' : 'Apagar',
-    danger: !on,
     warnMissingNotify: on,
     apply: () => {
       configDraft.value!.enabled = on;
@@ -78,7 +75,6 @@ function askSlotToggle(slot: SponsorAd['placement']): void {
       ? 'El espacio vuelve a ser comprable en la página pública.'
       : 'Ya no se podrá comprar en /anuncia — los anuncios activos siguen su vigencia normal.',
     confirmLabel: on ? 'Activar' : 'Apagar',
-    danger: !on,
     apply: () => {
       s.enabled = on;
     },
@@ -95,7 +91,6 @@ function askPushToggle(): void {
       ? 'El paquete de pushes extra se ofrece como add-on en /anuncia.'
       : 'Dejará de ofrecerse en /anuncia — los paquetes ya vendidos se siguen entregando.',
     confirmLabel: on ? 'Activar' : 'Apagar',
-    danger: !on,
     apply: () => {
       p.enabled = on;
     },
@@ -543,7 +538,7 @@ onMounted(async () => {
           />
           <UButton
             :label="toggleConfirm?.confirmLabel ?? 'Confirmar'"
-            :color="toggleConfirm?.danger ? 'error' : 'primary'"
+            color="primary"
             class="flex-1 justify-center"
             @click="applyToggle"
           />

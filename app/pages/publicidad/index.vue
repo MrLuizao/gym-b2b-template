@@ -571,7 +571,7 @@ onMounted(async () => {
           />
           <UButton
             label="Rechazar y reembolsar"
-            color="error"
+            color="primary"
             :loading="rejecting"
             @click="confirmReject"
           />

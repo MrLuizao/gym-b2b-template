@@ -257,6 +257,13 @@ Sin vínculo no ve datos del gym.
 - `checkout.session.expired` marca la orden EXPIRED. Requiere suscribir
   los eventos `checkout.session.*` en el webhook de Stripe (ver
   .env.example).
+- **Fin de campaña**: el cron diario `GET /api/cron/ads-report`
+  (`vercel.json` 16:30 UTC ≈ 10:30 CDMX, `CRON_SECRET` o admin) barre
+  los `sponsorAds` ACTIVE con `ends_at` vencida → los marca `EXPIRED` y
+  envía al anunciante el **reporte de campaña** (impresiones/taps/CTR de
+  `adStats` + pushes SENT + CTA "Renovar" a `/anuncia`). Sella
+  `adOrders.report_sent_at`; reenvío manual `POST /api/ads/orders/{id}/report`
+  (admin — el detalle del anuncio muestra el estado + botón).
 
 ### Seguridad anti-abuso
 

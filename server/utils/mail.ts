@@ -170,6 +170,68 @@ export async function sendAdOrderRejectedEmail(opts: {
   });
 }
 
+/// Al anunciante: cierre de campaña — métricas de su pauta (impresiones,
+/// toques, CTR, pushes) + CTA de renovación. Lo dispara el cron
+/// ads-report cuando el anuncio vence.
+export async function sendAdReportEmail(opts: {
+  to: string;
+  businessName: string;
+  brandName: string;
+  placementLabel: string;
+  weeks: number;
+  amount: number;
+  endsAt: number;
+  impressions: number;
+  taps: number;
+  pushesSent: number;
+  renewUrl: string;
+}): Promise<boolean> {
+  const endLabel = new Date(opts.endsAt).toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Mexico_City',
+  });
+  const ctr =
+    opts.impressions > 0
+      ? `${((opts.taps / opts.impressions) * 100).toFixed(1)}%`
+      : '0%';
+  const cell = (label: string, value: string) => `
+    <td style="padding:10px 14px;background:#161a24;border-radius:10px;text-align:center">
+      <div style="font-size:18px;font-weight:800;color:#e8eaf0">${value}</div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5a6070;margin-top:2px">${label}</div>
+    </td>`;
+  const html = mailShell(`
+    <h2 style="margin:0 0 8px">Así le fue a tu campaña</h2>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      La pauta de <strong style="color:#e8eaf0">${opts.businessName}</strong>
+      en ${opts.brandName} terminó el
+      <strong style="color:#e8eaf0">${endLabel}</strong>
+      (${opts.placementLabel} · ${opts.weeks} semana(s) ·
+      $${opts.amount.toLocaleString('es-MX')} MXN).
+    </p>
+    <table style="width:100%;border-spacing:6px;margin:16px 0">
+      <tr>
+        ${cell('Impresiones', opts.impressions.toLocaleString('es-MX'))}
+        ${cell('Toques', opts.taps.toLocaleString('es-MX'))}
+        ${cell('CTR', ctr)}
+      </tr>
+      ${opts.pushesSent > 0 ? `<tr>${cell('Notificaciones enviadas', String(opts.pushesSent))}<td></td><td></td></tr>` : ''}
+    </table>
+    <p style="color:#9aa0ae;font-size:14px;line-height:1.5">
+      ¿Quieres seguir viéndote en la app? Renueva tu espacio en un minuto
+      — el creativo nuevo entra a revisión igual que este.
+    </p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="${opts.renewUrl}" style="display:inline-block;background:#f4e701;color:#0d0f14;font-weight:800;font-size:13px;text-decoration:none;padding:12px 20px;border-radius:10px">Renovar campaña</a>
+    </div>`);
+  return sendMail({
+    to: opts.to,
+    subject: `Reporte de tu campaña — ${opts.brandName}`,
+    html,
+  });
+}
+
 export function generateClaimPin(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }

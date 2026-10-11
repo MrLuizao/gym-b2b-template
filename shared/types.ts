@@ -456,6 +456,10 @@ export interface AdOrder {
   paidAt: number | null;
   reviewedAt: number | null;
   reviewedBy: string | null;
+  /// Correo de cierre de campaña (impresiones/taps/CTR + pushes) enviado
+  /// al anunciante cuando el anuncio vence — lo marca el cron
+  /// ads-report; null = aún no se envía o la campaña sigue vigente.
+  reportSentAt: number | null;
 }
 
 /// Respuesta pública de /api/ads/self-serve — lo mínimo para pintar el

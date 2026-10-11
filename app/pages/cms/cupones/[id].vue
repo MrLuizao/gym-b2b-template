@@ -452,7 +452,7 @@ onMounted(async () => {
           />
           <UButton
             label="Eliminar"
-            color="error"
+            color="primary"
             :loading="deleting"
             @click="remove"
           />

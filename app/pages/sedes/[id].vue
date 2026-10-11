@@ -1192,7 +1192,7 @@ async function unassignTrainer(): Promise<void> {
           <UButton
             v-if="canManageBranch"
             label="Quitar de la sede"
-            color="error"
+            color="primary"
             variant="soft"
             icon="i-lucide-x"
             @click="askRemoveSelectedTrainer"
@@ -1216,7 +1216,7 @@ async function unassignTrainer(): Promise<void> {
           />
           <UButton
             label="Quitar de la sede"
-            color="error"
+            color="primary"
             :loading="removing"
             @click="unassignTrainer"
           />
@@ -1362,7 +1362,7 @@ async function unassignTrainer(): Promise<void> {
           />
           <UButton
             label="Quitar de la sede"
-            color="error"
+            color="primary"
             :loading="removingClass"
             @click="removeClass"
           />
@@ -1393,7 +1393,7 @@ async function unassignTrainer(): Promise<void> {
           />
           <UButton
             label="Eliminar sede"
-            color="error"
+            color="primary"
             :disabled="deleteBlocked"
             :loading="deleting"
             @click="deleteBranch"

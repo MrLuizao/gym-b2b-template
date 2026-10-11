@@ -6,6 +6,7 @@ import {
   CircleCheck,
   Eye,
   Hourglass,
+  MailCheck,
   MousePointerClick,
   Pause,
   Pencil,
@@ -29,6 +30,7 @@ const {
   loadOrders,
   approveOrder,
   rejectOrder,
+  resendOrderReport,
 } = useCms();
 const { session } = useAuth();
 /// El contenido publicitario es global — solo el admin lo modifica.
@@ -260,6 +262,23 @@ onMounted(async () => {
 const approving = ref(false);
 const rejectModalOpen = ref(false);
 const rejectReason = ref('');
+/// Reenvío manual del correo de cierre de campaña.
+const resendingReport = ref(false);
+
+async function resendReport(): Promise<void> {
+  const o = linkedOrder.value;
+  if (!o || resendingReport.value) return;
+  resendingReport.value = true;
+  actionError.value = null;
+  try {
+    await resendOrderReport(o);
+  } catch (cause) {
+    actionError.value =
+      cause instanceof Error ? cause.message : 'No se pudo reenviar';
+  } finally {
+    resendingReport.value = false;
+  }
+}
 
 function orderAmount(): string {
   return `$${(linkedOrder.value?.amount ?? 0).toLocaleString('es-MX')} MXN`;
@@ -758,6 +777,40 @@ async function removeAd(): Promise<void> {
         </p>
       </div>
     </div>
+
+    <!-- Reporte de cierre de campaña al anunciante — el cron lo manda
+         solo al vencer; el admin puede reenviarlo -->
+    <section
+      v-if="isPaidAd && linkedOrder && isAdmin"
+      class="flex items-center justify-between gap-4 rounded-2xl border border-stroke bg-surface p-4"
+    >
+      <div class="flex items-center gap-3">
+        <MailCheck class="h-4 w-4 shrink-0 text-text-dim" />
+        <div>
+          <p class="text-xs font-black text-text-primary">
+            Reporte de campaña
+          </p>
+          <p class="mt-0.5 text-[10px] font-semibold text-text-dim">
+            {{
+              linkedOrder.reportSentAt
+                ? `Enviado a ${linkedOrder.email} el ${formatDay(linkedOrder.reportSentAt)}`
+                : isExpired
+                  ? 'Pendiente — el cron lo envía hoy'
+                  : 'Se envía solo al anunciante cuando venza la pauta'
+            }}
+          </p>
+        </div>
+      </div>
+      <button
+        v-if="isExpired || linkedOrder.reportSentAt"
+        type="button"
+        class="shrink-0 cursor-pointer rounded-full border border-stroke px-3.5 py-1.5 text-[10px] font-black text-text-muted transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
+        :disabled="resendingReport"
+        @click="resendReport()"
+      >
+        {{ resendingReport ? 'Enviando…' : 'Reenviar' }}
+      </button>
+    </section>
 
     <!-- Rendimiento diario — eventos únicos por socio/día -->
     <section
@@ -1372,7 +1425,7 @@ async function removeAd(): Promise<void> {
             />
             <UButton
               label="Rechazar y reembolsar"
-              color="error"
+              color="primary"
               :loading="approving"
               @click="confirmReject"
             />
@@ -1421,7 +1474,7 @@ async function removeAd(): Promise<void> {
             />
             <UButton
               label="Eliminar anuncio"
-              color="error"
+              color="primary"
               :loading="deleting"
               @click="removeAd"
             />

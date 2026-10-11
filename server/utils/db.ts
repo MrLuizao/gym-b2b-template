@@ -302,6 +302,7 @@ export function toAdOrder(s: DocumentSnapshot): AdOrder {
     paidAt: toMs(d.paid_at),
     reviewedAt: toMs(d.reviewed_at),
     reviewedBy: d.reviewed_by ?? null,
+    reportSentAt: toMs(d.report_sent_at),
   };
 }
 

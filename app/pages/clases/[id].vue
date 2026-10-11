@@ -683,7 +683,7 @@ async function deleteClass(): Promise<void> {
           />
           <UButton
             label="Eliminar clase"
-            color="error"
+            color="primary"
             :loading="deleting"
             @click="deleteClass"
           />

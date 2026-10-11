@@ -503,7 +503,7 @@ async function deletePlan(): Promise<void> {
           />
           <UButton
             label="Eliminar plan"
-            color="error"
+            color="primary"
             :disabled="(detail?.stats.members ?? 0) > 0"
             :loading="deleting"
             @click="deletePlan"

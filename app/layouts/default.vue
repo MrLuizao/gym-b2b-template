@@ -27,6 +27,16 @@ const { session, logout } = useAuth();
 const { unreadCount, lastAlert, start, dismissAlert } = useSupportUnread();
 
 const logoutConfirmOpen = ref(false);
+/// Wipe de salida — espejo del login: el panel oscuro entra desde la
+/// derecha, cubre la app y debajo se navega a /login.
+const signingOut = ref(false);
+
+async function confirmLogout(): Promise<void> {
+  logoutConfirmOpen.value = false;
+  signingOut.value = true;
+  await new Promise((r) => setTimeout(r, 700));
+  await logout();
+}
 
 /// Cierre de sede desde el header — final del día: archiva los check-ins
 /// abiertos de la sede a dailyStats y resetea su aforo a 0. Cualquier
@@ -356,8 +366,8 @@ onMounted(() => {
           <UButton
             label="Cerrar sesión"
             icon="i-lucide-log-out"
-            color="error"
-            @click="logout()"
+            color="primary"
+            @click="confirmLogout()"
           />
         </div>
       </template>
@@ -409,7 +419,7 @@ onMounted(() => {
           <UButton
             label="Cerrar sede"
             icon="i-lucide-door-closed"
-            color="error"
+            color="primary"
             :loading="closingDay"
             :disabled="!closeBranchId"
             @click="confirmCloseDay"
@@ -462,5 +472,16 @@ onMounted(() => {
         </button>
       </NuxtLink>
     </Transition>
+
+    <!-- Wipe de cierre de sesión — espejo del login: entra desde la
+         derecha y cubre la app mientras se navega a /login -->
+    <div
+      class="pointer-events-none fixed inset-0 z-[60] translate-x-full bg-base transition-transform duration-700 ease-[cubic-bezier(0.7,0,0.25,1)]"
+      :class="signingOut && 'translate-x-0'"
+    >
+      <div
+        class="absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_100%,rgba(244,231,1,0.16),transparent_60%)]"
+      />
+    </div>
   </div>
 </template>

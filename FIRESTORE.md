@@ -531,6 +531,7 @@ el admin aprueba (`ends_at = hoy + weeks`, anuncio ACTIVE) o rechaza
 | `sponsor_ad_id` | string \| null | → `sponsorAds/{id}` tras el pago |
 | `rejection_reason` | string \| null | Opcional — va en el correo al anunciante |
 | `paid_at` / `reviewed_at` / `reviewed_by` | timestamp / string | |
+| `report_sent_at` | timestamp \| null | Correo de cierre de campaña enviado al anunciante — lo marca el cron `ads-report` (diario): barre `sponsorAds` ACTIVE con `ends_at` vencida → los pasa a `EXPIRED` y envía el reporte (impresiones/taps/CTR de `adStats` + pushes SENT de `push_log_ids` + CTA de renovación a `/anuncia`). Reenvío manual: `POST /api/ads/orders/{id}/report` (admin). |
 
 ### `/auditLogs/{id}` — evidencia de cambios excepcionales en ads comprados
 

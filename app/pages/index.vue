@@ -100,8 +100,23 @@ const kpis = computed(() => {
 <template>
   <div class="space-y-6">
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <template v-if="pending && branches.length === 0">
+        <div
+          v-for="i in 4"
+          :key="i"
+          class="animate-pulse rounded-2xl border border-stroke bg-surface p-5"
+        >
+          <div class="flex items-start justify-between">
+            <div class="h-3 w-20 rounded bg-white/5" />
+            <div class="h-8 w-8 rounded-xl bg-white/5" />
+          </div>
+          <div class="mt-4 h-8 w-16 rounded bg-white/5" />
+          <div class="mt-3 h-6 w-full rounded bg-white/5" />
+        </div>
+      </template>
       <StatCard
         v-for="kpi in kpis"
+        v-else
         :key="kpi.label"
         :label="kpi.label"
         :value="kpi.value"
