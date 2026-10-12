@@ -160,6 +160,13 @@ Sin vínculo no ve datos del gym.
   (acumulado histórico — `points` solo es saldo) y al premiar manda
   push FCM a `member_{userId}` con `data.type='loyalty'` (la app abre
   Recompensas al tocarla).
+- **Racha extendida**: si el socio cumple la meta semanas consecutivas,
+  gana puntos extra (`STREAK_BONUSES` en `loyalty.ts`): 2 semanas +25,
+  4 semanas +50, 8 semanas +100, 12 semanas +150. Se trackea con
+  `goal_streak` y `goal_streak_week` en el doc del usuario.
+- **Historial de puntos**: cada movimiento (+meta, +racha, -canje) se
+  registra en `users/{id}/pointsHistory` vía `recordPointsHistory` —
+  transparencia para el socio. `GET /api/rewards/history` lo expone.
 - `users.weekly_goal` (default 4) lo edita el socio desde la app —
   whitelisted en rules. `points` y `goal_awarded_*` solo functions.
 - `GET /api/rewards/stats` — KPIs vía agregaciones: `points_earned`
@@ -167,8 +174,14 @@ Sin vínculo no ve datos del gym.
   (scope por sede para no-admin). La página los muestra junto al
   desglose de canjes por sede.
 - `POST /api/rewards/redeem` `{rewardId}` (socio): transacción —
-  valida `rewards.active` + saldo → descuenta `points` y crea
-  `users/{id}/redemptions` (`code` `RWR-XXXXXX`, `active`, expira 30d).
+  valida `rewards.active` + saldo + **stock** → descuenta `points`,
+  incrementa `redeemed_count` y crea `users/{id}/redemptions`
+  (`code` `RWR-XXXXXX`, `active`, expira 30d). Envía push de
+  confirmación al socio con el código.
+- **Stock limitado**: `rewards.stock` (null = ilimitado) y
+  `redeemed_count` — el canje falla si `redeemed_count >= stock`.
+- **Recordatorio de expiración**: cron `redemption-reminder` (diario,
+  09:00 CDMX) envía push a socios con códigos que expiran en 3 días.
 - Panel B2B `/recompensas`: catálogo CRUD (solo admin;
   `GET/POST /api/rewards` + `PUT /api/rewards/:id`), KPIs de canje,
   listado de canjes (`GET /api/rewards/redemptions`, scope por sede vía

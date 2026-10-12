@@ -17,6 +17,8 @@ export default defineEventHandler(async (event): Promise<Reward[]> => {
         pointsCost: Number(d.points_cost ?? 0),
         icon: String(d.icon ?? 'gift'),
         active: d.active === true,
+        stock: d.stock ?? null,
+        redeemedCount: Number(d.redeemed_count ?? 0),
         createdAt: toMs(d.created_at) ?? 0,
       } satisfies Reward;
     })

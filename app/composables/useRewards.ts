@@ -5,6 +5,7 @@ export interface RewardDraft {
   description: string;
   pointsCost: number;
   icon: string;
+  stock?: number | null;
 }
 
 export interface LoyaltyStats {

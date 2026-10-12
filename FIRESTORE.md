@@ -160,6 +160,8 @@ que llegó por correo).
 | `points_earned` | int | functions | Acumulado histórico de puntos emitidos (KPI `/api/rewards/stats`) |
 | `goal_awarded_week` | string | functions | Lunes `yyyy-mm-dd` de la semana ya premiada — evita doble premio |
 | `goal_awarded_at` | timestamp | functions | Cuándo se otorgó el último premio |
+| `goal_streak` | int | functions | Semanas consecutivas cumpliendo la meta — se resetea si falla una semana |
+| `goal_streak_week` | string | functions | Lunes de la última semana de racha — para detectar si continúa |
 | `created_at` | timestamp | functions | |
 
 Lectura: el socio (su doc), staff según sede. Escritura de perfil: el socio
@@ -189,6 +191,21 @@ concedido. La app lo lee para la racha semanal y objetivos.
 | `branch_id` | string | Sede de la visita |
 | `checkin_id` | string \| null | → `checkins/{id}` (null en seed) |
 | `at` | timestamp | Hora de la visita |
+
+#### `/users/{userId}/pointsHistory/{docId}` — lealtad
+
+Historial de movimientos de puntos — cada ganancia o gasto queda
+registrado para transparencia. Lo escribe `recordPointsHistory` en
+transacción junto con el cambio de `points`.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `type` | string | `weekly_goal` / `streak_bonus` / `redeem` / `manual_adjustment` / `referral` |
+| `delta` | int | Cambio (+/-) en puntos |
+| `balance` | int | Saldo resultante después del movimiento |
+| `description` | string | Texto legible del movimiento |
+| `ref_id` | string \| null | Referencia opcional (redemptionId, etc.) |
+| `created_at` | timestamp | |
 
 #### `/users/{userId}/redemptions/{redemptionId}` — lealtad
 
@@ -603,6 +620,8 @@ Recompensas canjeables con puntos. Catálogo fijo sembrado por seed
 | `icon` | string | Id de icono — la app lo mapea a Material |
 | `image_url` | string | Vacío por ahora |
 | `active` | bool | La app solo lee `active == true` |
+| `stock` | int \| null | Stock limitado — null = ilimitado |
+| `redeemed_count` | int | Canjes realizados — se incrementa en cada redeem |
 | `created_at` | timestamp | |
 
 Escritura: ADMIN (o Admin SDK). Lectura: cualquier usuario firmado.

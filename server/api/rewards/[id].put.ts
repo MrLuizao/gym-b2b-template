@@ -23,6 +23,7 @@ export default defineEventHandler(async (event): Promise<Reward> => {
     pointsCost?: number;
     icon?: string;
     active?: boolean;
+    stock?: number | null;
   }>(event);
 
   const patch: Record<string, unknown> = {};
@@ -48,6 +49,12 @@ export default defineEventHandler(async (event): Promise<Reward> => {
   if (body?.active !== undefined) {
     patch.active = body.active === true;
   }
+  if (body?.stock !== undefined) {
+    patch.stock =
+      body.stock != null && Number.isFinite(body.stock) && body.stock > 0
+        ? Math.round(body.stock)
+        : null;
+  }
   if (Object.keys(patch).length) await ref.update(patch);
 
   const d = (await ref.get()).data() ?? {};
@@ -58,6 +65,8 @@ export default defineEventHandler(async (event): Promise<Reward> => {
     pointsCost: Number(d.points_cost ?? 0),
     icon: String(d.icon ?? 'gift'),
     active: d.active === true,
+    stock: d.stock ?? null,
+    redeemedCount: Number(d.redeemed_count ?? 0),
     createdAt: toMs(d.created_at) ?? 0,
   };
 });

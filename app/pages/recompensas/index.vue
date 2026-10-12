@@ -63,13 +63,13 @@ const spentPoints = computed(() =>
 /// ── Crear / editar recompensa ──
 const editing = ref<Reward | null>(null);
 const showForm = ref(false);
-const form = ref({ name: '', description: '', pointsCost: 50, icon: 'gift' });
+const form = ref({ name: '', description: '', pointsCost: 50, icon: 'gift', stock: null as number | null });
 const saving = ref(false);
 const formError = ref('');
 
 function openCreate() {
   editing.value = null;
-  form.value = { name: '', description: '', pointsCost: 50, icon: 'gift' };
+  form.value = { name: '', description: '', pointsCost: 50, icon: 'gift', stock: null };
   formError.value = '';
   showForm.value = true;
 }
@@ -80,6 +80,7 @@ function openEdit(reward: Reward) {
     description: reward.description,
     pointsCost: reward.pointsCost,
     icon: reward.icon,
+    stock: reward.stock ?? null,
   };
   formError.value = '';
   showForm.value = true;
@@ -355,6 +356,7 @@ onMounted(load);
             >
               <th class="px-5 py-3 font-bold">Recompensa</th>
               <th class="px-5 py-3 font-bold">Costo</th>
+              <th class="px-5 py-3 font-bold">Stock</th>
               <th class="px-5 py-3 font-bold">Estado</th>
               <th v-if="isAdmin" class="px-5 py-3 text-right font-bold">
                 Acciones
@@ -363,12 +365,12 @@ onMounted(load);
           </thead>
           <tbody>
             <tr v-if="pending">
-              <td colspan="4" class="px-5 py-8 text-center text-sm text-text-dim">
+              <td colspan="5" class="px-5 py-8 text-center text-sm text-text-dim">
                 Cargando…
               </td>
             </tr>
             <tr v-else-if="!rewards.length">
-              <td colspan="4" class="px-5 py-8 text-center text-sm text-text-dim">
+              <td colspan="5" class="px-5 py-8 text-center text-sm text-text-dim">
                 Sin recompensas en el catálogo
               </td>
             </tr>
@@ -400,6 +402,16 @@ onMounted(load);
                 >
                   {{ reward.pointsCost }} PTS
                 </span>
+              </td>
+              <td class="px-5 py-3">
+                <span
+                  v-if="reward.stock != null"
+                  class="text-[11px] font-bold"
+                  :class="(reward.redeemedCount ?? 0) >= reward.stock ? 'text-rose-400' : 'text-text-muted'"
+                >
+                  {{ reward.redeemedCount ?? 0 }}/{{ reward.stock }}
+                </span>
+                <span v-else class="text-[11px] text-text-dim">∞</span>
               </td>
               <td class="px-5 py-3">
                 <span
@@ -551,6 +563,20 @@ onMounted(load);
                   min="1"
                   class="mt-1 w-full rounded-xl border border-stroke bg-base px-4 py-2 text-sm text-text-primary outline-none focus:border-accent"
                 />
+              </label>
+              <label class="block flex-1">
+                <span
+                  class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
+                  >Stock</span
+                >
+                <input
+                  v-model.number="form.stock"
+                  type="number"
+                  min="0"
+                  placeholder="∞"
+                  class="mt-1 w-full rounded-xl border border-stroke bg-base px-4 py-2 text-sm text-text-primary outline-none placeholder:text-text-dim focus:border-accent"
+                />
+                <p class="mt-0.5 text-[9px] text-text-dim">Vacío = ilimitado</p>
               </label>
               <label class="block flex-1">
                 <span

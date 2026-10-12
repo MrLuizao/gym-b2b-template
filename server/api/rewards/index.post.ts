@@ -17,6 +17,7 @@ export default defineEventHandler(async (event): Promise<Reward> => {
     description?: string;
     pointsCost?: number;
     icon?: string;
+    stock?: number | null;
   }>(event);
 
   const name = body?.name?.trim() ?? '';
@@ -35,6 +36,11 @@ export default defineEventHandler(async (event): Promise<Reward> => {
   }
 
   const icon = VALID_ICONS.includes(body?.icon ?? '') ? body!.icon! : 'gift';
+  const stock =
+    body?.stock != null && Number.isFinite(body.stock) && body.stock > 0
+      ? Math.round(body.stock)
+      : null;
+
   const ref = db().collection('rewards').doc();
   await ref.set({
     name,
@@ -43,6 +49,8 @@ export default defineEventHandler(async (event): Promise<Reward> => {
     icon,
     image_url: '',
     active: true,
+    stock,
+    redeemed_count: 0,
     created_at: FieldValue.serverTimestamp(),
   });
   return {
@@ -52,6 +60,8 @@ export default defineEventHandler(async (event): Promise<Reward> => {
     pointsCost: cost,
     icon,
     active: true,
+    stock,
+    redeemedCount: 0,
     createdAt: Date.now(),
   };
 });

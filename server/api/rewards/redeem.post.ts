@@ -1,7 +1,9 @@
 import { FieldValue } from 'firebase-admin/firestore';
 
 import { db } from '../../utils/db';
+import { useAdmin } from '../../utils/firebase-admin';
 import { requireMember } from '../../utils/member-auth';
+import { recordPointsHistory } from '../../utils/points-history';
 import { rateLimit } from '../../utils/rate-limit';
 
 /// Validez del código de canje una vez emitido.
@@ -35,17 +37,30 @@ export default defineEventHandler(async (event) => {
     if (!rewardDoc.exists || rewardDoc.get('active') !== true) {
       throw createError({ statusCode: 404, message: 'Recompensa no disponible' });
     }
-    const cost = Number(rewardDoc.get('points_cost') ?? 0);
+
+    const rewardData = rewardDoc.data()!;
+    const cost = Number(rewardData.points_cost ?? 0);
     const balance = Number(userDoc.get('points') ?? 0);
+    const rewardName = String(rewardData.name ?? '');
+
     if (balance < cost) {
       throw createError({ statusCode: 409, message: 'Puntos insuficientes' });
     }
 
+    /// Validar stock si está configurado.
+    const stock = rewardData.stock as number | null | undefined;
+    const redeemedCount = Number(rewardData.redeemed_count ?? 0);
+    if (stock != null && redeemedCount >= stock) {
+      throw createError({ statusCode: 409, message: 'Recompensa agotada' });
+    }
+
     const expiresAt = new Date(Date.now() + REDEMPTION_TTL_DAYS * 86_400_000);
     const code = redemptionCode();
+    const newBalance = balance - cost;
+
     tx.set(redemptionRef, {
       reward_id: rewardId,
-      reward_name: String(rewardDoc.get('name') ?? ''),
+      reward_name: rewardName,
       points_spent: cost,
       member_id: member.id,
       member_name: member.name,
@@ -57,8 +72,35 @@ export default defineEventHandler(async (event) => {
       used_at: null,
     });
     tx.update(userRef, { points: FieldValue.increment(-cost) });
-    return { code, points: balance - cost };
+
+    /// Incrementar contador de canjes en la recompensa.
+    tx.update(rewardRef, { redeemed_count: FieldValue.increment(1) });
+
+    /// Registrar en historial de puntos.
+    recordPointsHistory(tx, member.id, {
+      type: 'redeem',
+      delta: -cost,
+      balance: newBalance,
+      description: `Canje: ${rewardName}`,
+      refId: redemptionRef.id,
+    });
+
+    return { code, points: newBalance, rewardName };
   });
+
+  /// Push de confirmación al socio — best-effort.
+  try {
+    await useAdmin().messaging.send({
+      topic: `member_${member.id}`,
+      notification: {
+        title: '¡Recompensa canjeada!',
+        body: `Tu código ${result.code} es válido por ${REDEMPTION_TTL_DAYS} días — muéstralo en recepción`,
+      },
+      data: { type: 'loyalty', code: result.code },
+    });
+  } catch {
+    // Push best-effort — el canje ya quedó en Firestore.
+  }
 
   return {
     id: redemptionRef.id,

@@ -574,6 +574,30 @@ export interface Reward {
   icon: string;
   active: boolean;
   createdAt: number;
+  /// Stock limitado — null/undefined = ilimitado.
+  stock?: number | null;
+  /// Canjes realizados — se incrementa en cada redeem.
+  redeemedCount?: number;
+}
+
+/// Movimiento de puntos — `users/{id}/pointsHistory/{docId}`.
+export type PointsHistoryType =
+  | 'weekly_goal'
+  | 'streak_bonus'
+  | 'redeem'
+  | 'manual_adjustment'
+  | 'referral';
+
+export interface PointsHistoryEntry {
+  id: string;
+  type: PointsHistoryType;
+  delta: number;
+  balance: number;
+  /// Descripción legible del movimiento.
+  description: string;
+  /// Referencia opcional (rewardId, redemptionId, etc.).
+  refId?: string | null;
+  createdAt: number;
 }
 
 export interface RewardRedemption {
