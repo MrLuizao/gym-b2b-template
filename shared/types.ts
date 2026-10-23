@@ -614,3 +614,74 @@ export interface RewardRedemption {
   expiresAt: number;
   usedAt: number | null;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Retención & Churn Prediction (ML / Vertex AI)
+// ─────────────────────────────────────────────────────────────────────
+
+export type ChurnRiskLevel = 'low' | 'medium' | 'high';
+export type ChurnPredictionProvider = 'sklearn_local' | 'vertex_ai';
+
+export interface ChurnFeatures {
+  avg_visits_per_week_last_4: number;
+  visits_variance: number;
+  days_since_last_visit: number;
+  class_cancellation_rate: number;
+  unique_branches_visited: number;
+  active_class_types_count: number;
+  has_payment_late_30d: boolean;
+  support_tickets_last_30d: number;
+  goal_streak_current: number;
+  weekly_goal: number;
+  points_balance: number;
+  membership_months_active: number;
+  is_churned?: boolean;
+  scored_at?: string;
+}
+
+export interface ChurnMember {
+  id: string;
+  name: string;
+  email: string;
+  branch_id: string;
+  membership_status: string;
+  churn_risk_ml: number;
+  churn_risk_level: ChurnRiskLevel;
+  churn_scored_at?: string;
+  churn_provider?: ChurnPredictionProvider;
+  churn_top_factors?: string[];
+  days_since_last_visit: number;
+  avg_visits_per_week_last_4: number;
+  points: number;
+}
+
+export interface ChurnMembersResponse {
+  members: ChurnMember[];
+  total: number;
+  kpis: {
+    highRisk: number;
+    mediumRisk: number;
+    lowRisk: number;
+    totalActive: number;
+  };
+  filters: {
+    risk_level: string;
+    branch_id?: string;
+  };
+}
+
+export interface BusinessFeatures {
+  ai_churn_prediction: {
+    enabled: boolean;
+    provider: ChurnPredictionProvider;
+    plan: 'basic' | 'premium' | 'enterprise';
+    settings: {
+      daily_batch: boolean;
+      alert_threshold: number; // 0-100
+      auto_push_enabled: boolean;
+      vertex_project_id?: string;
+      vertex_location?: string;
+      vertex_endpoint_id?: string;
+    };
+  };
+}

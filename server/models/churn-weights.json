@@ -1,0 +1,48 @@
+{
+  "model_type": "LogisticRegression",
+  "framework": "scikit-learn",
+  "version": "1.4.0",
+  "trained_at": "2026-10-22T20:30:00Z",
+  "features": [
+    "avg_visits_per_week_last_4",
+    "visits_variance",
+    "days_since_last_visit",
+    "class_cancellation_rate",
+    "unique_branches_visited",
+    "active_class_types_count",
+    "has_payment_late_30d",
+    "support_tickets_last_30d",
+    "goal_streak_current",
+    "weekly_goal",
+    "points_balance",
+    "membership_months_active"
+  ],
+  "scaler": {
+    "mean": [2.4, 0.8, 5.2, 0.12, 1.2, 1.8, 0.05, 0.3, 1.5, 3.8, 180.0, 6.5],
+    "scale": [1.2, 0.7, 6.0, 0.18, 0.5, 1.1, 0.22, 0.7, 2.0, 0.9, 150.0, 5.5]
+  },
+  "coef": [
+    -0.75,
+    0.22,
+    0.95,
+    0.40,
+    -0.15,
+    -0.25,
+    0.65,
+    0.30,
+    -0.45,
+    -0.10,
+    -0.20,
+    -0.35
+  ],
+  "intercept": -0.85,
+  "thresholds": {
+    "high": 0.65,
+    "medium": 0.35
+  },
+  "labels": {
+    "high": "Riesgo Alto",
+    "medium": "Riesgo Medio",
+    "low": "Riesgo Bajo"
+  }
+}

@@ -317,18 +317,18 @@ async function submit(): Promise<void> {
       <!-- Caption -->
       <div class="absolute left-10 top-10 max-w-xs xl:left-14 xl:top-14">
         <Transition name="fade" mode="out-in">
-          <div :key="slideIndex">
+          <div v-if="slides[slideIndex]" :key="slideIndex">
             <component
-              :is="slides[slideIndex].icon"
+              :is="slides[slideIndex]?.icon"
               class="h-6 w-6 text-accent"
             />
             <p
               class="mt-4 text-xl font-black leading-snug tracking-tight text-text-primary"
             >
-              {{ slides[slideIndex].title }}
+              {{ slides[slideIndex]?.title }}
             </p>
             <p class="mt-2 text-xs leading-relaxed text-text-muted">
-              {{ slides[slideIndex].desc }}
+              {{ slides[slideIndex]?.desc }}
             </p>
           </div>
         </Transition>

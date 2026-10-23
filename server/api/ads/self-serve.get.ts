@@ -53,7 +53,7 @@ export default defineEventHandler(async (event): Promise<AdSelfServeInfo> => {
   /// comprometidos — el (occupied - slots + 1)° vencimiento más próximo.
   const nextFreeAt =
     occupied >= CAROUSEL_SLOTS && ends.length > occupied - CAROUSEL_SLOTS
-      ? ends[occupied - CAROUSEL_SLOTS]
+      ? (ends[occupied - CAROUSEL_SLOTS] ?? null)
       : null;
 
   return {

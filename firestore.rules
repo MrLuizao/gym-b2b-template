@@ -212,6 +212,12 @@ service cloud.firestore {
         allow read: if isSelfDoc(uid) || isStaff();
         allow create, update, delete: if false;
       }
+
+      // Features de ML para predicción de churn (solo staff)
+      match /churn_features/{dateId} {
+        allow read: if isStaff();
+        allow write: if false;
+      }
     }
 
     // ═══════════════ ENTRENADORES ═══════════════

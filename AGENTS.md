@@ -189,6 +189,44 @@ Sin vínculo no ve datos del gym.
   del código en recepción (`POST /api/rewards/redemptions {code}` →
   marca `used`, verifica vigencia + sede).
 
+### Retención y Churn Prediction con IA (Scikit-Learn + Vertex AI)
+
+- **Arquitectura Bi-Nivel**:
+  1. **Tier Estándar / MVP Viable (`sklearn_local`)**: Modelo de Regresión
+     Logística entrenado con scikit-learn con pesos y StandardScaler exportados
+     a `server/models/churn-weights.json`. La inferencia corre en TypeScript
+     puro en Vercel Serverless (`server/utils/churn-model.ts`) en <0.1ms sin
+     dependencias pesadas ni cold-start.
+  2. **Tier Premium / Enterprise (`vertex_ai`)**: Integración con Google Cloud
+     Vertex AI AutoML Tabular (`server/utils/vertex-ai.ts`). Inferencia contra
+     endpoint dedicado vía OAuth2 (GoogleAuth). Incluye fallback automático a
+     `sklearn_local` si la nube es inalcanzable.
+- **Aprovisionamiento bajo demanda (Control del Desarrollador)**:
+  El cliente final (gimnasio) **no configura la IA**; tú como programador la
+  activas o desactivas por despliegue mediante variables de entorno (Vercel / `.env`):
+  `AI_CHURN_ENABLED=1` la activa; si está en `0` o ausente, el módulo permanece
+  oculto en el menú y los crons se saltan inmediatamente.
+  Variables de control: `AI_CHURN_ENABLED`, `AI_CHURN_PROVIDER` (`sklearn_local` o
+  `vertex_ai`), `AI_CHURN_PLAN`, `AI_CHURN_ALERT_THRESHOLD` y credenciales de Vertex AI.
+- **Features de socio** (`server/api/cron/churn-features.post.ts`, 03:00 CDMX):
+  Calcula visitas de los últimos 30 días (`users/{id}/visits`), varianza semanal,
+  días sin asistencia, cancelaciones de clases, tickets de soporte y rachas.
+  Guarda en `users/{id}/churn_features/{fecha}` y denormaliza en
+  `users/{id}.latest_churn_features` para evitar consultas $N+1$.
+- **Inferencia en lote** (`server/api/cron/churn-predict.post.ts`, 03:30 CDMX):
+  Evalúa a los socios activos, actualiza `churn_risk_ml`, `churn_risk_level` y
+  extrae las causas principales en `churn_top_factors` ("Ausente hace 18 días", etc.).
+  Registra telemetría de uso en `usage_analytics` para facturación mensual.
+- **Consola B2B `/retencion`**: Dashboard para Admin y Gerente (filtrado a su sede).
+  Muestra KPIs de riesgo (Alto, Medio, Bajo), causas explicativas por socio,
+  recalculación individual (`POST /api/analytics/churn-score`) y acciones
+  inmediatas: Push FCM de reactivación y apertura de ticket proactivo de soporte
+  (`POST /api/analytics/reengage-member`).
+- **Scripts de entrenamiento y exportación**:
+  - `scripts/train-churn-model.py`: Genera dataset sintético calibrado o lee Firestore,
+    entrena LogisticRegression balanceada y exporta a `churn-weights.json`.
+  - `scripts/export-vertex-dataset.py`: Exporta CSV para entrenar AutoML Tabular en GCP.
+
 ### Push / CMS
 
 - `pushLogs`: `status` draft/sent/failed + `target` (`auto|home|explore|

@@ -36,6 +36,10 @@ export default defineNuxtConfig({
       /// App Check web (reCAPTCHA Enterprise) — site key de Firebase
       /// Console → App Check → registrar app web. Vacío = no se activa.
       recaptchaSiteKey: '',
+      /// Features bajo demanda provisionadas por el desarrollador para este despliegue
+      features: {
+        churnRetention: process.env.AI_CHURN_ENABLED === '1' || process.env.AI_CHURN_ENABLED === 'true',
+      },
     },
   },
 

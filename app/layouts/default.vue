@@ -2,6 +2,7 @@
 import {
   BarChart3,
   Bell,
+  Brain,
   CalendarDays,
   CreditCard,
   DoorClosed,
@@ -165,6 +166,12 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
         icon: MessageCircle,
         roles: ['ADMIN', 'MANAGER', 'RECEPTIONIST'],
       },
+      {
+        to: '/retencion',
+        label: 'Retención IA',
+        icon: Brain,
+        roles: ['ADMIN', 'MANAGER'],
+      },
     ],
   },
   {
@@ -192,13 +199,19 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
   },
 ];
 
+const runtimeConfig = useRuntimeConfig();
+
 const visibleGroups = computed(() =>
   navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) =>
-        item.roles.includes(session.value?.role ?? 'RECEPTIONIST'),
-      ),
+      items: group.items.filter((item) => {
+        // Módulo de Retención: solo visible si el programador lo activó para este cliente
+        if (item.to === '/retencion' && !runtimeConfig.public.features?.churnRetention) {
+          return false;
+        }
+        return item.roles.includes(session.value?.role ?? 'RECEPTIONIST');
+      }),
     }))
     .filter((group) => group.items.length > 0),
 );

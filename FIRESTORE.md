@@ -29,6 +29,7 @@ otro proyecto Firebase, no otro tenant.
 ```
 /config/brand                    configuración white-label (1 doc)
 /config/ads                      precios de venta directa de publicidad (1 doc)
+/config/features                 módulos y features IA del negocio (1 doc)
 
 /branches/{branchId}             sedes
 /plans/{planId}                  planes de membresía (catálogo + Stripe)
@@ -37,6 +38,7 @@ otro proyecto Firebase, no otro tenant.
 
 /users/{userId}                  socios
 /users/{userId}/coupons/{id}     cupones generados del socio (rules: solo lectura)
+/users/{userId}/churn_features/{d} histórico diario de features de ML
 /staff/{uid}                     personal (rol + sede)
 
 /checkins/{checkinId}            entradas del día (TTL — se borran solas)
@@ -46,6 +48,7 @@ otro proyecto Firebase, no otro tenant.
 /forecasts/{branchId}            aforo típico por hora/día de semana (app)
 /payments/{paymentId}            pagos (solo functions escribe)
 /webhookEvents/{eventId}         idempotencia de webhooks Stripe
+/usage_analytics/{month_feature} registro de consumo de IA y features para facturación
 
 /promotions/{promotionId}        banners + cupones CMS
 /sponsorAds/{adId}               anuncios de aliados + métricas
