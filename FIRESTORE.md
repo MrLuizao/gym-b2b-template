@@ -564,10 +564,11 @@ aquí. Escritura solo server (`server/utils/audit.ts`); lectura solo admin.
 | `entity` / `entity_id` | string | `sponsorAd` + id del anuncio |
 | `order_id` | string \| null | → `adOrders/{id}` |
 | `advertiser` | string | Snapshot para display |
-| `action` | string | `PLACEMENT_DOWNGRADE` \| `PLACEMENT_UPGRADE` \| `PAUSE` \| `DELETE` |
-| `actor_uid` / `actor_email` | string | Staff que forzó el cambio |
-| `reason` | string | Obligatoria en downgrade/pausa/delete |
+| `action` | string | `PLACEMENT_DOWNGRADE` \| `PLACEMENT_UPGRADE` \| `PAUSE` \| `DELETE` \| `REACTIVATE_EXPIRED` |
+| `actor_uid` / `actor_email` | string | Staff que forzó o autorizó el cambio |
+| `reason` | string | Obligatoria en downgrade/pausa/delete/reactivación cortesía |
 | `changes` | map | `{campo: {before, after}}` |
+| `payment` | map \| null | Datos del cobro en mostrador si fue reactivación pagada (`amount`, `method`, `folio`) |
 | `snapshot` | map \| null | Estado del anuncio (sin imágenes) — solo DELETE |
 | `created_at` | timestamp | |
 | `created_at` | timestamp | |

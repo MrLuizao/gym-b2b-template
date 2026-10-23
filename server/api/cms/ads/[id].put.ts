@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase-admin/firestore';
 
-import type { SponsorAd } from '#shared/types';
+import type { AdPaymentDraft, SponsorAd } from '#shared/types';
 import { PLACEMENT_RANK } from '#shared/types';
 
 
@@ -67,6 +67,159 @@ export default defineEventHandler(async (event): Promise<SponsorAd> => {
   }
 
   const audits: Parameters<typeof writeAdAudit>[0][] = [];
+
+  /// Control estricto de anuncios vencidos o extensiones de vigencia:
+  /// Reactivar un vencido o extender la fecha manualmente NO puede ser
+  /// silencioso. Requiere registrar cobro en recepción/admin o justificación
+  /// obligatoria para auditoría.
+  const beforeEndsAtMs = before.ends_at?.toMillis?.() ?? 0;
+  const wasExpired =
+    before.status === 'EXPIRED' ||
+    (beforeEndsAtMs > 0 && beforeEndsAtMs <= Date.now());
+
+  const targetEndsAtMs =
+    typeof body.endsAt === 'number' && body.endsAt > 0
+      ? body.endsAt
+      : beforeEndsAtMs;
+
+  const isReactivating =
+    wasExpired &&
+    (update.status === 'ACTIVE' ||
+      (typeof body.endsAt === 'number' && body.endsAt > beforeEndsAtMs));
+
+  const isExtending =
+    !wasExpired &&
+    typeof body.endsAt === 'number' &&
+    body.endsAt > beforeEndsAtMs;
+
+  if (isReactivating || isExtending) {
+    if (isReactivating && targetEndsAtMs <= Date.now()) {
+      throw createError({
+        statusCode: 400,
+        statusMessage:
+          'No puedes reactivar un anuncio vencido sin definir una nueva fecha de vigencia futura.',
+      });
+    }
+
+    const rawPayment = body.payment as Record<string, unknown> | undefined;
+    const payment: AdPaymentDraft | null =
+      rawPayment && typeof rawPayment.amount === 'number' && rawPayment.amount > 0
+        ? {
+            amount: Math.round(rawPayment.amount),
+            method: (['cash', 'terminal', 'transfer', 'card'].includes(String(rawPayment.method))
+              ? String(rawPayment.method)
+              : 'cash') as AdPaymentDraft['method'],
+            folio: typeof rawPayment.folio === 'string' ? rawPayment.folio.trim().slice(0, 80) : '',
+            notes: typeof rawPayment.notes === 'string' ? rawPayment.notes.trim().slice(0, 200) : '',
+          }
+        : null;
+
+    if (!payment && overrideReason.length < 5) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: isReactivating
+          ? 'Reactivar un anuncio vencido requiere registrar el cobro (en recepción o admin) o una justificación obligatoria de cortesía/extensión (mínimo 5 caracteres).'
+          : 'Extender la vigencia de un anuncio requiere registrar el cobro o una justificación obligatoria de cortesía/extensión (mínimo 5 caracteres).',
+      });
+    }
+
+    update.ends_at = Timestamp.fromMillis(targetEndsAtMs);
+    if (isReactivating) {
+      update.status = 'ACTIVE';
+    }
+    update.last_renewed_at = Timestamp.now();
+    update.last_renewed_by = staff.email;
+
+    if (payment) {
+      update.last_renewed_amount = payment.amount;
+      update.last_renewed_method = payment.method;
+      update.last_courtesy_reason = null;
+
+      const orderRef = db().collection('adOrders').doc();
+      const diffMs = isReactivating
+        ? targetEndsAtMs - Date.now()
+        : targetEndsAtMs - beforeEndsAtMs;
+      const weeks = Math.max(1, Math.round(diffMs / (7 * 86_400_000)));
+
+      await orderRef.set({
+        business_name: String(before.advertiser ?? ''),
+        contact_name: String(before.advertiser ?? ''),
+        email: '',
+        phone: String(before.phone ?? ''),
+        title: String(before.title ?? ''),
+        subtitle: String(before.subtitle ?? ''),
+        badge: String(before.badge ?? 'ALIADO'),
+        brand_color: before.brand_color ?? null,
+        image_url: String(before.image_url ?? ''),
+        cta_label: String(before.cta_label ?? 'Ver oferta'),
+        description: String(before.description ?? ''),
+        address: String(before.address ?? ''),
+        lat: before.lat ?? null,
+        lng: before.lng ?? null,
+        socials: before.socials ?? {},
+        photos: before.photos ?? [],
+        branch_id: before.branch_id ?? null,
+        placement: update.placement ?? before.placement ?? 'carousel',
+        weeks,
+        amount: payment.amount,
+        currency: 'mxn',
+        status: 'APPROVED',
+        payment_method: payment.method,
+        payment_folio: payment.folio || null,
+        sponsor_ad_id: id,
+        created_at: Timestamp.now(),
+        approved_at: Timestamp.now(),
+        approved_by: staff.email,
+        notes:
+          payment.notes ||
+          (isReactivating
+            ? 'Reactivación de anuncio vencido en recepción / admin'
+            : 'Extensión manual de vigencia en recepción / admin'),
+      });
+      update.order_id = orderRef.id;
+
+      audits.push({
+        adId: id,
+        orderId: orderRef.id,
+        advertiser: String(before.advertiser ?? ''),
+        action: isReactivating ? 'REACTIVATE_EXPIRED' : 'PLACEMENT_UPGRADE',
+        staff,
+        reason: payment.folio
+          ? `Cobro registrado: $${payment.amount} MXN (${payment.method}) · Ref: ${payment.folio}`
+          : `Cobro registrado: $${payment.amount} MXN (${payment.method})`,
+        changes: {
+          status: {
+            before: before.status ?? (wasExpired ? 'EXPIRED' : 'ACTIVE'),
+            after: update.status ?? before.status,
+          },
+          ends_at: { before: beforeEndsAtMs, after: targetEndsAtMs },
+        },
+        payment,
+      });
+    } else {
+      update.last_courtesy_reason = overrideReason;
+      update.last_renewed_amount = 0;
+
+      audits.push({
+        adId: id,
+        orderId,
+        advertiser: String(before.advertiser ?? ''),
+        action: isReactivating ? 'REACTIVATE_EXPIRED' : 'PLACEMENT_UPGRADE',
+        staff,
+        reason: isReactivating
+          ? `Cortesía autorizada: ${overrideReason}`
+          : `Extensión de cortesía: ${overrideReason}`,
+        changes: {
+          status: {
+            before: before.status ?? (wasExpired ? 'EXPIRED' : 'ACTIVE'),
+            after: update.status ?? before.status,
+          },
+          ends_at: { before: beforeEndsAtMs, after: targetEndsAtMs },
+        },
+        payment: null,
+      });
+    }
+  }
   if (orderId) {
     const afterPlacement = update.placement as
       | SponsorAd['placement']

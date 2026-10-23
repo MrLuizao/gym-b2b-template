@@ -1,4 +1,4 @@
-import type { AdOrder, AdSelfServeConfig, CmsResponse, Coupon, PromoBanner, PushLog, SponsorAd } from '#shared/types';
+import type { AdOrder, AdPaymentDraft, AdSelfServeConfig, CmsResponse, Coupon, PromoBanner, PushLog, SponsorAd } from '#shared/types';
 
 export interface PromoDraft {
   title: string;
@@ -166,6 +166,7 @@ export function useCms() {
     draft: Partial<AdDraft> & {
       status?: SponsorAd['status'];
       overrideReason?: string;
+      payment?: AdPaymentDraft;
     },
   ): Promise<void> {
     const updated = await $api<SponsorAd>(`/api/cms/ads/${ad.id}`, {

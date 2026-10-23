@@ -242,6 +242,10 @@ export function toSponsorAd(s: DocumentSnapshot): SponsorAd {
     },
     photos: d.photos ?? [],
     orderId: d.order_id ?? null,
+    lastRenewedAt: toMs(d.last_renewed_at) ?? null,
+    lastRenewedBy: d.last_renewed_by ?? null,
+    lastRenewedAmount: typeof d.last_renewed_amount === 'number' ? d.last_renewed_amount : null,
+    lastCourtesyReason: d.last_courtesy_reason ?? null,
   };
 }
 

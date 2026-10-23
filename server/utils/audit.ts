@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase-admin/firestore';
 
+import type { AdPaymentDraft } from '#shared/types';
 import { db } from './db';
 import type { StaffContext } from './staff-auth';
 
@@ -17,11 +18,13 @@ export async function writeAdAudit(opts: {
     | 'PLACEMENT_DOWNGRADE'
     | 'PLACEMENT_UPGRADE'
     | 'PAUSE'
-    | 'DELETE';
+    | 'DELETE'
+    | 'REACTIVATE_EXPIRED';
   staff: StaffContext;
   reason: string;
   changes?: Record<string, { before: unknown; after: unknown }>;
   snapshot?: Record<string, unknown>;
+  payment?: AdPaymentDraft | null;
 }): Promise<void> {
   await db().collection('auditLogs').add({
     entity: 'sponsorAd',
@@ -34,6 +37,7 @@ export async function writeAdAudit(opts: {
     reason: opts.reason,
     changes: opts.changes ?? {},
     snapshot: opts.snapshot ?? null,
+    payment: opts.payment ?? null,
     created_at: Timestamp.now(),
   });
 }

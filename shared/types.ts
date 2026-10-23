@@ -315,7 +315,7 @@ export interface SponsorAd {
   placement: 'carousel' | 'list';
   /// PENDING = comprado por self-serve, esperando aprobación del gym —
   /// la app solo muestra ACTIVE, así que nunca se cuela a producción.
-  status: 'PENDING' | 'ACTIVE' | 'PAUSED';
+  status: 'PENDING' | 'ACTIVE' | 'PAUSED' | 'EXPIRED';
   /// 0 = sin vigencia (anuncio PENDING — arranca al aprobarse).
   endsAt: number;
   impressions: number;
@@ -330,6 +330,17 @@ export interface SponsorAd {
   photos: string[];
   /// Orden self-serve que originó el anuncio — null = creado por staff.
   orderId: string | null;
+  lastRenewedAt?: number | null;
+  lastRenewedBy?: string | null;
+  lastRenewedAmount?: number | null;
+  lastCourtesyReason?: string | null;
+}
+
+export interface AdPaymentDraft {
+  amount: number;
+  method: 'cash' | 'terminal' | 'transfer' | 'card';
+  folio?: string;
+  notes?: string;
 }
 
 /// Espacios simultáneos del carrusel — el producto premium. Cuando se
@@ -356,11 +367,17 @@ export interface AdAuditEntry {
   entityId: string;
   orderId: string | null;
   advertiser: string;
-  action: 'PLACEMENT_DOWNGRADE' | 'PLACEMENT_UPGRADE' | 'PAUSE' | 'DELETE';
+  action:
+    | 'PLACEMENT_DOWNGRADE'
+    | 'PLACEMENT_UPGRADE'
+    | 'PAUSE'
+    | 'DELETE'
+    | 'REACTIVATE_EXPIRED';
   actorUid: string;
   actorEmail: string;
   reason: string;
   changes: Record<string, { before: unknown; after: unknown }>;
+  payment?: AdPaymentDraft | null;
   /// Snapshot del anuncio (sin imágenes) — solo en DELETE.
   snapshot: Record<string, unknown> | null;
   createdAt: number;

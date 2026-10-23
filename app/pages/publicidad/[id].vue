@@ -11,6 +11,7 @@ import {
   Pause,
   Pencil,
   Play,
+  RotateCw,
   Trash2,
   TriangleAlert,
   Undo2,
@@ -28,6 +29,8 @@ const {
   deleteAd,
   orders,
   loadOrders,
+  adsConfig,
+  loadAdsConfig,
   approveOrder,
   rejectOrder,
   resendOrderReport,
@@ -97,6 +100,16 @@ const saveChanges = ref<string[]>([]);
 const actionError = ref<string | null>(null);
 /// Errores del formulario de edición (pickers, validaciones pre-modal).
 const formError = ref<string | null>(null);
+
+/// Variables para cuando se modifica la fecha manualmente en el formulario de edición
+const editDateExtending = ref(false);
+const editDateReactivating = ref(false);
+const editExtensionWeeks = ref(1);
+const editPaymentMode = ref<'paid' | 'courtesy'>('paid');
+const editPaymentAmount = ref(0);
+const editPaymentMethod = ref<'cash' | 'terminal' | 'transfer' | 'card'>('cash');
+const editPaymentFolio = ref('');
+const editCourtesyReason = ref('');
 
 function branchName(_id: string | null): string {
   /// Los anuncios ya no se segmentan por sede — siempre global.
@@ -250,6 +263,7 @@ onMounted(async () => {
     dailyStats.value = stats.days;
     /// Órdenes self-serve — para ligar PENDING ↔ pago del anunciante.
     loadOrders().catch(() => {});
+    loadAdsConfig().catch(() => {});
   } catch {
     ad.value = null;
   } finally {
@@ -397,8 +411,31 @@ function confirmSave(): void {
       'Este anuncio fue comprado — bajar de espacio requiere una razón (queda en el log)';
     return;
   }
-  if (endsAt !== a.endsAt)
+  const wasExpired = isExpired.value || a.status === 'EXPIRED';
+  const isExtending = endsAt > a.endsAt;
+  const isReactivatingViaEdit = wasExpired && endsAt > Date.now();
+
+  editDateReactivating.value = isReactivatingViaEdit;
+  editDateExtending.value = !isReactivatingViaEdit && isExtending;
+
+  if (isReactivatingViaEdit || editDateExtending.value) {
+    const diffMs = isReactivatingViaEdit
+      ? endsAt - Date.now()
+      : endsAt - a.endsAt;
+    editExtensionWeeks.value = Math.max(1, Math.round(diffMs / (7 * 86_400_000)));
+    editPaymentAmount.value = pricePerWeek.value * editExtensionWeeks.value;
+    editPaymentMode.value = 'paid';
+    editPaymentMethod.value = 'cash';
+    editPaymentFolio.value = '';
+    editCourtesyReason.value = '';
+    changes.push(
+      isReactivatingViaEdit
+        ? `Reactivación: vencido → activo hasta el ${formatDay(endsAt)} (+${editExtensionWeeks.value} sem)`
+        : `Extensión de vigencia: ${formatDay(a.endsAt)} → ${formatDay(endsAt)} (+${editExtensionWeeks.value} sem)`,
+    );
+  } else if (endsAt !== a.endsAt) {
     changes.push(`Vigencia: ${formatDay(a.endsAt)} → ${formatDay(endsAt)}`);
+  }
   if (editForm.value.description !== a.description)
     changes.push('Se actualizará la descripción del aliado');
   if (editForm.value.address !== a.address)
@@ -428,11 +465,29 @@ function confirmSave(): void {
 
 async function saveAd(): Promise<void> {
   if (!ad.value || saving.value) return;
+  actionError.value = null;
+
+  const endsAt = editForm.value.endsAt
+    ? new Date(`${editForm.value.endsAt}T23:59:59`).getTime()
+    : ad.value.endsAt;
+
+  if (editDateReactivating.value || editDateExtending.value) {
+    if (editPaymentMode.value === 'paid') {
+      if (!editPaymentAmount.value || editPaymentAmount.value <= 0) {
+        actionError.value = 'Ingresa un monto de cobro válido mayor a $0.';
+        return;
+      }
+    } else {
+      if (!editCourtesyReason.value.trim() || editCourtesyReason.value.trim().length < 5) {
+        actionError.value =
+          'La justificación de cortesía/extensión es obligatoria (mínimo 5 caracteres para auditoría).';
+        return;
+      }
+    }
+  }
+
   saving.value = true;
   try {
-    const endsAt = editForm.value.endsAt
-      ? new Date(`${editForm.value.endsAt}T23:59:59`).getTime()
-      : ad.value.endsAt;
     await updateAd(ad.value, {
       advertiser: editForm.value.advertiser.trim(),
       title: editForm.value.title.trim(),
@@ -445,6 +500,16 @@ async function saveAd(): Promise<void> {
       branchId: null,
       placement: editForm.value.placement,
       endsAt,
+      status: editDateReactivating.value ? 'ACTIVE' : undefined,
+      payment:
+        (editDateReactivating.value || editDateExtending.value) &&
+        editPaymentMode.value === 'paid'
+          ? {
+              amount: Number(editPaymentAmount.value),
+              method: editPaymentMethod.value,
+              folio: editPaymentFolio.value.trim() || undefined,
+            }
+          : undefined,
       description: editForm.value.description.trim(),
       address: editForm.value.address.trim(),
       lat: parseCoord(editForm.value.lat),
@@ -460,7 +525,11 @@ async function saveAd(): Promise<void> {
         other_url: editForm.value.otherUrl.trim(),
       },
       photos: editForm.value.photos,
-      overrideReason: overrideReason.value.trim() || undefined,
+      overrideReason:
+        (editDateReactivating.value || editDateExtending.value) &&
+        editPaymentMode.value === 'courtesy'
+          ? editCourtesyReason.value.trim()
+          : (overrideReason.value.trim() || undefined),
     });
     await reload();
     saveModalOpen.value = false;
@@ -486,6 +555,13 @@ const statusDescription = computed(() => {
 
 async function toggleStatus(): Promise<void> {
   if (!ad.value || saving.value) return;
+  /// Si el anuncio está vencido, no se puede simplemente "activar" con fecha vieja:
+  /// debe abrir el flujo de reactivación/renovación con nueva vigencia y costo/justificación.
+  if (isExpired.value) {
+    statusModalOpen.value = false;
+    openReactivateModal();
+    return;
+  }
   /// Pausar un anuncio comprado quita la superficie que el anunciante
   /// pagó — el server exige razón y la registra en /auditLogs.
   const pausing = ad.value.status === 'ACTIVE';
@@ -509,6 +585,104 @@ async function toggleStatus(): Promise<void> {
       cause instanceof Error ? cause.message : 'No se pudo actualizar';
   } finally {
     saving.value = false;
+  }
+}
+
+// ── Modal de Reactivación / Renovación de Anuncio Vencido ──
+const reactivateModalOpen = ref(false);
+const reactivating = ref(false);
+const reactivateWeeks = ref(2);
+const reactivateCustomDate = ref('');
+const reactivationMode = ref<'paid' | 'courtesy'>('paid');
+const paymentAmount = ref(0);
+const paymentMethod = ref<'cash' | 'terminal' | 'transfer' | 'card'>('cash');
+const paymentFolio = ref('');
+const paymentNotes = ref('');
+const courtesyReason = ref('');
+const reactivateError = ref<string | null>(null);
+
+const pricePerWeek = computed(() => {
+  if (!ad.value) return 1500;
+  const placement = ad.value.placement === 'list' ? 'list' : 'carousel';
+  return adsConfig.value?.slots?.[placement]?.pricePerWeek || 1500;
+});
+
+const calculatedSuggestedAmount = computed(() => {
+  return pricePerWeek.value * reactivateWeeks.value;
+});
+
+const calculatedEndsAtMs = computed(() => {
+  if (reactivateCustomDate.value) {
+    const d = new Date(`${reactivateCustomDate.value}T23:59:59`);
+    return d.getTime();
+  }
+  return Date.now() + reactivateWeeks.value * 7 * 86_400_000;
+});
+
+function openReactivateModal(): void {
+  actionError.value = null;
+  reactivateWeeks.value = 2;
+  reactivateCustomDate.value = '';
+  reactivationMode.value = 'paid';
+  paymentAmount.value = pricePerWeek.value * 2;
+  paymentMethod.value = 'cash';
+  paymentFolio.value = '';
+  paymentNotes.value = '';
+  courtesyReason.value = '';
+  reactivateError.value = null;
+  reactivateModalOpen.value = true;
+}
+
+function selectReactivatePreset(weeks: number): void {
+  reactivateWeeks.value = weeks;
+  reactivateCustomDate.value = '';
+  paymentAmount.value = pricePerWeek.value * weeks;
+}
+
+async function confirmReactivate(): Promise<void> {
+  if (!ad.value || reactivating.value) return;
+  reactivateError.value = null;
+
+  const targetEndsAt = calculatedEndsAtMs.value;
+  if (targetEndsAt <= Date.now()) {
+    reactivateError.value = 'La nueva fecha de vigencia debe ser posterior al día de hoy.';
+    return;
+  }
+
+  if (reactivationMode.value === 'paid') {
+    if (!paymentAmount.value || paymentAmount.value <= 0) {
+      reactivateError.value = 'Ingresa un monto de cobro válido mayor a $0.';
+      return;
+    }
+  } else {
+    if (!courtesyReason.value.trim() || courtesyReason.value.trim().length < 5) {
+      reactivateError.value = 'La justificación de cortesía es obligatoria (mínimo 5 caracteres para auditoría).';
+      return;
+    }
+  }
+
+  reactivating.value = true;
+  try {
+    const updated = await $api<SponsorAd>(`/api/cms/ads/${ad.value.id}`, {
+      method: 'PUT',
+      body: {
+        status: 'ACTIVE',
+        endsAt: targetEndsAt,
+        payment: reactivationMode.value === 'paid' ? {
+          amount: Number(paymentAmount.value),
+          method: paymentMethod.value,
+          folio: paymentFolio.value.trim() || undefined,
+          notes: paymentNotes.value.trim() || undefined,
+        } : undefined,
+        overrideReason: reactivationMode.value === 'courtesy' ? courtesyReason.value.trim() : undefined,
+      },
+    });
+    Object.assign(ad.value, updated);
+    reactivateModalOpen.value = false;
+  } catch (cause) {
+    reactivateError.value = cause instanceof Error ? cause.message : 'No se pudo reactivar el anuncio';
+  } finally {
+    reactivating.value = false;
   }
 }
 
@@ -605,6 +779,11 @@ async function removeAd(): Promise<void> {
                     : 'Pausado'
             }}
           </span>
+          <span v-if="ad.lastRenewedAt" class="text-[10px] text-text-dim">
+            · Renovado: {{ formatDay(ad.lastRenewedAt) }}
+            <template v-if="ad.lastRenewedAmount">(${{ ad.lastRenewedAmount.toLocaleString('es-MX') }})</template>
+            <template v-else-if="ad.lastCourtesyReason">(Cortesía)</template>
+          </span>
         </p>
       </div>
       <div
@@ -633,6 +812,16 @@ async function removeAd(): Promise<void> {
         </template>
         <template v-else-if="isAdmin">
           <button
+            v-if="isExpired"
+            type="button"
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-4 text-[11px] font-black text-emerald-400 transition hover:bg-emerald-400/20"
+            @click="openReactivateModal"
+          >
+            <RotateCw class="h-3.5 w-3.5" />
+            Reactivar / Renovar
+          </button>
+          <button
+            v-else
             type="button"
             class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-4 text-[11px] font-black transition"
             :class="
@@ -1144,6 +1333,20 @@ async function removeAd(): Promise<void> {
               <TriangleAlert class="h-3 w-3 shrink-0" />
               Esta fecha ya venció — el anuncio no se mostrará en la app
             </p>
+            <p
+              v-else-if="isExpired && editForm.endsAt"
+              class="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-emerald-400"
+            >
+              <CircleCheck class="h-3 w-3 shrink-0" />
+              Fecha futura seleccionada — al guardar se solicitará registrar el cobro o justificación para reactivarlo
+            </p>
+            <p
+              v-else-if="editForm.endsAt && new Date(`${editForm.endsAt}T23:59:59`).getTime() > ad.endsAt"
+              class="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-accent"
+            >
+              <CircleCheck class="h-3 w-3 shrink-0" />
+              Extensión de vigencia — al guardar se solicitará registrar el cobro o justificación de cortesía
+            </p>
           </label>
           <label class="col-span-2 block">
             <span
@@ -1320,6 +1523,128 @@ async function removeAd(): Promise<void> {
           : `${saveChanges.join('. ')}.`
       "
     >
+      <template v-if="editDateReactivating || editDateExtending" #body>
+        <div class="space-y-4">
+          <div
+            class="rounded-xl border px-3.5 py-2.5"
+            :class="
+              editDateReactivating
+                ? 'border-emerald-500/30 bg-emerald-500/10'
+                : 'border-accent/30 bg-accent/10'
+            "
+          >
+            <p
+              class="text-xs font-bold"
+              :class="editDateReactivating ? 'text-emerald-400' : 'text-accent'"
+            >
+              {{
+                editDateReactivating
+                  ? 'Estás reactivando este anuncio vencido con una fecha futura.'
+                  : 'Estás extendiendo la vigencia de este anuncio.'
+              }}
+            </p>
+            <p class="text-[11px] text-text-dim mt-0.5">
+              Nueva vigencia: <strong class="text-white">{{ formatFullDay(new Date(`${editForm.endsAt}T23:59:59`).getTime()) }}</strong> (+{{ editExtensionWeeks }} semana{{ editExtensionWeeks > 1 ? 's' : '' }}).
+              Para mantener la integridad contable, registra el cobro en recepción o la justificación obligatoria.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1.5">
+              Modalidad de la Vigencia Adicional
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                class="cursor-pointer rounded-xl border p-2.5 text-left text-xs font-bold transition flex items-center gap-2"
+                :class="
+                  editPaymentMode === 'paid'
+                    ? 'border-emerald-400 bg-emerald-400/10 text-emerald-400'
+                    : 'border-stroke bg-base text-text-muted hover:border-stroke hover:text-text-primary'
+                "
+                @click="editPaymentMode = 'paid'"
+              >
+                <div class="w-3 h-3 rounded-full border flex items-center justify-center" :class="editPaymentMode === 'paid' ? 'border-emerald-400 bg-emerald-400' : 'border-text-dim'">
+                  <div v-if="editPaymentMode === 'paid'" class="w-1.5 h-1.5 rounded-full bg-black" />
+                </div>
+                <span>Cobro en recepción / caja</span>
+              </button>
+
+              <button
+                type="button"
+                class="cursor-pointer rounded-xl border p-2.5 text-left text-xs font-bold transition flex items-center gap-2"
+                :class="
+                  editPaymentMode === 'courtesy'
+                    ? 'border-amber-400 bg-amber-400/10 text-amber-400'
+                    : 'border-stroke bg-base text-text-muted hover:border-stroke hover:text-text-primary'
+                "
+                @click="editPaymentMode = 'courtesy'"
+              >
+                <div class="w-3 h-3 rounded-full border flex items-center justify-center" :class="editPaymentMode === 'courtesy' ? 'border-amber-400 bg-amber-400' : 'border-text-dim'">
+                  <div v-if="editPaymentMode === 'courtesy'" class="w-1.5 h-1.5 rounded-full bg-black" />
+                </div>
+                <span>Cortesía / Sin costo ($0)</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="editPaymentMode === 'paid'" class="space-y-3 p-3.5 rounded-xl border border-emerald-400/30 bg-emerald-400/5">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1">
+                  Monto a cobrar ($ MXN)
+                </label>
+                <input
+                  v-model.number="editPaymentAmount"
+                  type="number"
+                  min="1"
+                  step="50"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm font-black text-white outline-none transition focus:border-emerald-400"
+                />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1">
+                  Método de pago
+                </label>
+                <select
+                  v-model="editPaymentMethod"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition focus:border-emerald-400 cursor-pointer"
+                >
+                  <option value="cash">Efectivo en caja</option>
+                  <option value="terminal">Terminal / Tarjeta</option>
+                  <option value="transfer">Transferencia bancaria</option>
+                  <option value="card">Tarjeta manual</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1">
+                Folio / Referencia de cobro (opcional)
+              </label>
+              <input
+                v-model="editPaymentFolio"
+                type="text"
+                placeholder="ej. Recibo R-1049, Voucher T-9812, etc."
+                class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-xs text-text-primary outline-none transition placeholder:text-text-dim focus:border-emerald-400"
+              />
+            </div>
+          </div>
+
+          <div v-else class="space-y-2 p-3.5 rounded-xl border border-amber-400/30 bg-amber-400/5">
+            <label class="block text-[10px] font-bold uppercase tracking-widest text-amber-400">
+              Justificación de la cortesía / extensión (Obligatoria para auditoría)
+            </label>
+            <textarea
+              v-model="editCourtesyReason"
+              rows="2"
+              placeholder="ej. Compensación por remodelación / Extensión acordada por dirección"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-xs text-text-primary outline-none transition placeholder:text-text-dim focus:border-amber-400"
+            />
+          </div>
+        </div>
+      </template>
       <template #footer>
         <div class="flex w-full flex-col gap-2">
           <p
@@ -1389,6 +1714,184 @@ async function removeAd(): Promise<void> {
               label="Confirmar"
               :loading="saving"
               @click="toggleStatus"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="reactivateModalOpen"
+      title="Reactivar y renovar anuncio vencido"
+      description="Define la nueva vigencia del anuncio y registra el cobro en recepción o la justificación de cortesía."
+    >
+      <template #body>
+        <div class="space-y-4">
+          <div class="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5">
+            <p class="text-xs font-bold text-red-400">
+              '{{ ad.advertiser }}' venció el {{ formatFullDay(ad.endsAt) }}.
+            </p>
+            <p class="text-[11px] text-text-dim mt-0.5">
+              Al reactivarlo, volverá a mostrarse en la app móvil ({{ placementLabel(ad.placement) }}) a partir de hoy.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1.5">
+              Nueva Vigencia
+            </label>
+            <div class="grid grid-cols-4 gap-2">
+              <button
+                v-for="w in [1, 2, 3, 4]"
+                :key="w"
+                type="button"
+                class="cursor-pointer rounded-xl border py-2 text-center text-xs font-black transition"
+                :class="
+                  !reactivateCustomDate && reactivateWeeks === w
+                    ? 'border-accent bg-accent/15 text-accent'
+                    : 'border-stroke bg-base text-text-muted hover:border-stroke hover:text-text-primary'
+                "
+                @click="selectReactivatePreset(w)"
+              >
+                +{{ w }} sem
+              </button>
+            </div>
+
+            <div class="mt-2.5 flex items-center gap-2">
+              <span class="text-[10px] font-bold text-text-dim uppercase">O fecha exacta:</span>
+              <input
+                v-model="reactivateCustomDate"
+                type="date"
+                class="flex-1 rounded-xl border border-stroke bg-base px-3 py-1.5 text-xs text-text-primary outline-none transition focus:border-accent"
+              />
+            </div>
+
+            <div class="mt-2 flex items-center justify-between text-[11px] font-semibold text-text-muted bg-surface/50 p-2.5 rounded-lg border border-stroke">
+              <span>Nueva fecha de término: <strong class="text-white">{{ formatFullDay(calculatedEndsAtMs) }}</strong></span>
+              <span class="text-accent font-black">Tarifa base: ${{ calculatedSuggestedAmount.toLocaleString('es-MX') }} MXN</span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1.5">
+              Modalidad de Renovación
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                class="cursor-pointer rounded-xl border p-2.5 text-left text-xs font-bold transition flex items-center gap-2"
+                :class="
+                  reactivationMode === 'paid'
+                    ? 'border-emerald-400 bg-emerald-400/10 text-emerald-400'
+                    : 'border-stroke bg-base text-text-muted hover:border-stroke hover:text-text-primary'
+                "
+                @click="reactivationMode = 'paid'"
+              >
+                <div class="w-3 h-3 rounded-full border flex items-center justify-center" :class="reactivationMode === 'paid' ? 'border-emerald-400 bg-emerald-400' : 'border-text-dim'">
+                  <div v-if="reactivationMode === 'paid'" class="w-1.5 h-1.5 rounded-full bg-black" />
+                </div>
+                <span>Cobro en recepción / caja</span>
+              </button>
+
+              <button
+                type="button"
+                class="cursor-pointer rounded-xl border p-2.5 text-left text-xs font-bold transition flex items-center gap-2"
+                :class="
+                  reactivationMode === 'courtesy'
+                    ? 'border-amber-400 bg-amber-400/10 text-amber-400'
+                    : 'border-stroke bg-base text-text-muted hover:border-stroke hover:text-text-primary'
+                "
+                @click="reactivationMode = 'courtesy'"
+              >
+                <div class="w-3 h-3 rounded-full border flex items-center justify-center" :class="reactivationMode === 'courtesy' ? 'border-amber-400 bg-amber-400' : 'border-text-dim'">
+                  <div v-if="reactivationMode === 'courtesy'" class="w-1.5 h-1.5 rounded-full bg-black" />
+                </div>
+                <span>Cortesía / Sin costo ($0)</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="reactivationMode === 'paid'" class="space-y-3 p-3.5 rounded-xl border border-emerald-400/30 bg-emerald-400/5">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1">
+                  Monto a cobrar ($ MXN)
+                </label>
+                <input
+                  v-model.number="paymentAmount"
+                  type="number"
+                  min="1"
+                  step="50"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm font-black text-white outline-none transition focus:border-emerald-400"
+                />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1">
+                  Método de pago
+                </label>
+                <select
+                  v-model="paymentMethod"
+                  class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none transition focus:border-emerald-400 cursor-pointer"
+                >
+                  <option value="cash">Efectivo en caja</option>
+                  <option value="terminal">Terminal / Tarjeta</option>
+                  <option value="transfer">Transferencia bancaria</option>
+                  <option value="card">Tarjeta manual</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-widest text-text-dim mb-1">
+                Folio / Referencia de cobro (opcional)
+              </label>
+              <input
+                v-model="paymentFolio"
+                type="text"
+                placeholder="ej. Recibo R-1049, Voucher T-9812, etc."
+                class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-xs text-text-primary outline-none transition placeholder:text-text-dim focus:border-emerald-400"
+              />
+            </div>
+
+            <p class="text-[10px] text-text-dim">
+              Se generará una orden aprobada por este monto para registro contable en la plataforma.
+            </p>
+          </div>
+
+          <div v-else class="space-y-2 p-3.5 rounded-xl border border-amber-400/30 bg-amber-400/5">
+            <label class="block text-[10px] font-bold uppercase tracking-widest text-amber-400">
+              Justificación de la cortesía (Obligatoria para auditoría)
+            </label>
+            <textarea
+              v-model="courtesyReason"
+              rows="2"
+              placeholder="ej. Compensación por remodelación de sede / Acuerdo de patrocinio anual"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-xs text-text-primary outline-none transition placeholder:text-text-dim focus:border-amber-400"
+            />
+            <p class="text-[10px] text-text-dim">
+              Esta justificación quedará sellada permanentemente en /auditLogs con tu usuario de staff.
+            </p>
+          </div>
+        </div>
+      </template>
+
+      <template #footer>
+        <div class="flex w-full flex-col gap-2">
+          <p v-if="reactivateError" class="text-[11px] font-bold text-red-400">
+            {{ reactivateError }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton
+              label="Cancelar"
+              color="neutral"
+              variant="outline"
+              @click="reactivateModalOpen = false"
+            />
+            <UButton
+              label="Confirmar y reactivar anuncio"
+              :loading="reactivating"
+              @click="confirmReactivate"
             />
           </div>
         </div>

@@ -286,6 +286,15 @@ Sin vínculo no ve datos del gym.
   orden (reembolso). Activar un PENDING por edición manual también
   está bloqueado — solo vía approve (define `ends_at` y cierra el
   ciclo de pago).
+- **Reactivación / Renovación de anuncios vencidos**: Reactivar un anuncio
+  vencido (`ends_at <= now` o status `EXPIRED`) no puede hacerse con solo
+  cambiar el status a ACTIVE con fecha vieja: requiere **definir obligatoriamente
+  una nueva fecha de vigencia futura** Y registrar un **cobro en mostrador / recepción**
+  (monto + método + folio, creando una orden aprobada en `/adOrders` para
+  trazabilidad contable) O bien una **justificación obligatoria de cortesía /
+  extensión** que queda grabada en `/auditLogs` con el sello del usuario de
+  staff autorizador. El backend (`server/api/cms/ads/[id].put.ts`) rechaza con 400
+  cualquier intento de activación sin vigencia futura o sin cobro/justificación.
 - El webhook (`checkout.session.completed`, respaldo en
   `payment_intent.succeeded` por `ad_order_id` en metadata) crea el
   `sponsorAds` con **status PENDING** — la app solo consulta ACTIVE, no
