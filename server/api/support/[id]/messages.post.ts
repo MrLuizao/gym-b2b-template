@@ -2,6 +2,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 import type { SupportMessage } from '#shared/types';
 
+import { getBusinessFeatures } from '../../../utils/config';
+import { recordComplaintFromMessage } from '../../../utils/complaint-risk';
 import { db } from '../../../utils/db';
 import { useAdmin } from '../../../utils/firebase-admin';
 import { requireMember } from '../../../utils/member-auth';
@@ -78,6 +80,17 @@ export default defineEventHandler(async (event): Promise<SupportMessage> => {
       expires_at: expiresAt,
     });
   });
+
+  /// Socio → detección de quejas para Retención IA (solo con el módulo
+  /// activo). Corre en segundo plano (`waitUntil`) para no retrasar la
+  /// respuesta del chat; Gemini/keywords y la escritura son best-effort.
+  if (sender === 'member') {
+    const memberId = conv.member_id as string;
+    const task = getBusinessFeatures()
+      .then((f) => (f.ai_churn_prediction?.enabled ? recordComplaintFromMessage(memberId, text) : undefined))
+      .catch(() => undefined);
+    event.waitUntil(task);
+  }
 
   /// Respuesta de staff → push al socio por topic `member_{id}` (la app
   /// se suscribe en syncTopics). Best-effort: el mensaje ya quedó

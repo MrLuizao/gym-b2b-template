@@ -2,6 +2,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { defineEventHandler, readBody } from 'h3';
 import type { ChurnFeatures, ChurnPredictionProvider } from '#shared/types';
 import { predictChurnScikitLearn } from '../../utils/churn-model';
+import { churnFieldsWithComplaints } from '../../utils/complaint-risk';
 import { getBusinessFeatures } from '../../utils/config';
 import { requireStaff } from '../../utils/staff-auth';
 import { predictChurnVertexAI, type VertexConfig } from '../../utils/vertex-ai';
@@ -84,11 +85,10 @@ export default defineEventHandler(async (event) => {
     result = predictChurnScikitLearn(features);
   }
 
-  // Guardar resultado
+  // Guardar resultado — mismo criterio que el cron (ML + quejas decaídas)
+  const fields = churnFieldsWithComplaints(result, memberData);
   await memberRef.update({
-    churn_risk_ml: result.probability,
-    churn_risk_level: result.riskLevel,
-    churn_top_factors: result.topFactors,
+    ...fields,
     churn_suggested_playbook: result.suggestedPlaybook,
     churn_provider: result.provider,
     churn_scored_at: result.scoredAt,
@@ -98,8 +98,9 @@ export default defineEventHandler(async (event) => {
     success: true,
     member_id: memberId,
     churn_probability: result.probability,
-    risk_level: result.riskLevel,
-    top_factors: result.topFactors,
+    combined_risk: fields.combined_risk,
+    risk_level: fields.churn_risk_level,
+    top_factors: fields.churn_top_factors,
     suggested_playbook: result.suggestedPlaybook,
     provider: result.provider,
     features,

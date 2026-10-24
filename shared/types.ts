@@ -689,7 +689,33 @@ export interface ChurnMember {
   points: number;
   goal_streak?: number;
   weekly_goal?: number;
+  /// Riesgo final para nivel/orden: 0.7·ML + 0.3·queja decaída (= ML si no hay score).
+  combined_risk: number;
+  /// Riesgo de queja vivo (vida media 14d) detectado en el chat de soporte.
+  complaint_risk: number;
+  last_complaint_type: ComplaintType | null;
+  last_complaint_at: string | null;
 }
+
+/// Categoría de queja detectada en mensajes de soporte (`sentiment-analysis.ts`).
+export type ComplaintType =
+  | 'precio'
+  | 'aforo'
+  | 'staff'
+  | 'instalaciones'
+  | 'horarios'
+  | 'general'
+  | 'ninguna';
+
+export const COMPLAINT_LABELS: Record<ComplaintType, string> = {
+  precio: 'Precio',
+  aforo: 'Aforo',
+  staff: 'Staff',
+  instalaciones: 'Instalaciones',
+  horarios: 'Horarios',
+  general: 'General',
+  ninguna: 'Ninguna',
+};
 
 export interface ChurnMembersResponse {
   members: ChurnMember[];

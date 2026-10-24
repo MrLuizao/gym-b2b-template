@@ -2,6 +2,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { defineEventHandler, getHeader, getQuery, readBody } from 'h3';
 import type { ChurnFeatures, ChurnPredictionProvider } from '#shared/types';
 import { predictChurnScikitLearn } from '../../utils/churn-model';
+import { churnFieldsWithComplaints } from '../../utils/complaint-risk';
 import { getBusinessFeatures } from '../../utils/config';
 import { recordFeatureUsage } from '../../utils/telemetry';
 import { predictChurnVertexAI, type VertexConfig } from '../../utils/vertex-ai';
@@ -101,15 +102,17 @@ export default defineEventHandler(async (event) => {
       result = predictChurnScikitLearn(features);
     }
 
-    if (result.riskLevel === 'high') highRiskCount++;
-    else if (result.riskLevel === 'medium') mediumRiskCount++;
+    // Riesgo combinado: ML puro en churn_risk_ml + quejas (decaídas) en
+    // combined_risk; el nivel sale del combinado.
+    const fields = churnFieldsWithComplaints(result, data);
+
+    if (fields.churn_risk_level === 'high') highRiskCount++;
+    else if (fields.churn_risk_level === 'medium') mediumRiskCount++;
     else lowRiskCount++;
 
     const memberRef = db.collection('users').doc(memberId);
     batch.update(memberRef, {
-      churn_risk_ml: result.probability,
-      churn_risk_level: result.riskLevel,
-      churn_top_factors: result.topFactors,
+      ...fields,
       churn_suggested_playbook: result.suggestedPlaybook,
       churn_provider: result.provider,
       churn_scored_at: result.scoredAt,

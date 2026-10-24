@@ -223,6 +223,17 @@ Sin vínculo no ve datos del gym.
   Evalúa a los socios activos, actualiza `churn_risk_ml`, `churn_risk_level` y
   extrae las causas principales en `churn_top_factors` ("Ausente hace 18 días", etc.).
   Registra telemetría de uso en `usage_analytics` para facturación mensual.
+- **Quejas del chat → riesgo combinado** (`server/utils/complaint-risk.ts` +
+  `sentiment-analysis.ts`): cada mensaje del socio en `messages.post` se
+  clasifica en segundo plano (`event.waitUntil`, solo si el módulo está
+  activo) con Gemini JSON mode → respaldo por frases clave. Si es queja
+  acumula `users.complaint_risk` (+severidad·0.5, tope 1, **vida media 14d**
+  calculada al leer desde `last_complaint_at`) y sella
+  `last_complaint_type/at/severity`; mensajes sin queja no tocan nada.
+  `churn_risk_ml` = probabilidad pura del modelo; `combined_risk` =
+  0.7·ML + 0.3·queja decaída, y de ahí sale `churn_risk_level` (umbrales
+  del modelo). `/retencion` recalcula el combinado al vuelo, ordena por él,
+  filtra "Solo con quejas" (≥0.3) y muestra ambos porcentajes.
 - **Consola B2B `/retencion`**: Dashboard para Admin y Gerente (filtrado a su sede).
   Muestra KPIs de riesgo (Alto, Medio, Bajo), causas explicativas por socio,
   recalculación individual (`POST /api/analytics/churn-score`) y acciones

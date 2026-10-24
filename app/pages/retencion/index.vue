@@ -13,11 +13,12 @@ import {
   User,
   Users,
 } from '@lucide/vue';
-import type {
-  Branch,
-  ChurnMember,
-  ChurnMembersResponse,
-  RetentionPlaybookId,
+import {
+  type Branch,
+  type ChurnMember,
+  type ChurnMembersResponse,
+  COMPLAINT_LABELS,
+  type RetentionPlaybookId,
 } from '#shared/types';
 
 const { session } = useAuth();
@@ -31,6 +32,7 @@ const isManager = computed(() => session.value?.role === 'MANAGER');
 const riskFilter = ref<'high' | 'medium' | 'low' | 'all'>('high');
 const branchFilter = ref<string>(session.value?.branchId || '');
 const searchQuery = ref('');
+const complaintFilter = ref<boolean>(false); // Filtrar solo con quejas pendientes
 
 /// Datos
 const members = ref<ChurnMember[]>([]);
@@ -125,6 +127,7 @@ async function loadData() {
       query: {
         risk_level: riskFilter.value,
         branch_id: branchFilter.value || undefined,
+        has_complaint: complaintFilter.value || undefined,
         limit: 100,
       },
     });
@@ -286,6 +289,7 @@ async function rescore(member: ChurnMember) {
     const res = await $api<{
       success: boolean;
       churn_probability: number;
+      combined_risk: number;
       risk_level: 'low' | 'medium' | 'high';
       top_factors: string[];
       suggested_playbook: RetentionPlaybookId;
@@ -296,6 +300,7 @@ async function rescore(member: ChurnMember) {
     });
 
     member.churn_risk_ml = res.churn_probability;
+    member.combined_risk = res.combined_risk;
     member.churn_risk_level = res.risk_level;
     member.churn_top_factors = res.top_factors;
     member.suggested_playbook = res.suggested_playbook;
@@ -303,7 +308,7 @@ async function rescore(member: ChurnMember) {
 
     toast.add({
       title: 'Score actualizado',
-      description: `Riesgo: ${(res.churn_probability * 100).toFixed(0)}% · Jugada: ${playbookInfo(res.suggested_playbook).label}`,
+      description: `Riesgo: ${(res.combined_risk * 100).toFixed(0)}% · Jugada: ${playbookInfo(res.suggested_playbook).label}`,
       color: 'success',
     });
   } catch (err: any) {
@@ -436,7 +441,7 @@ onMounted(async () => {
 
     <!-- Filtros de Búsqueda -->
     <UCard>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
           <label class="text-xs font-medium mb-1 block text-muted-foreground">Nivel de Riesgo</label>
           <USelect
@@ -459,6 +464,14 @@ onMounted(async () => {
             :disabled="isManager && !!session?.branchId"
             @change="loadData"
           />
+        </div>
+
+        <div>
+          <label class="text-xs font-medium mb-1 block text-muted-foreground">Quejas pendientes</label>
+          <div class="flex items-center gap-2 pt-2">
+            <USwitch v-model="complaintFilter" @update:model-value="loadData" />
+            <span class="text-xs text-muted-foreground">Solo con quejas</span>
+          </div>
         </div>
 
         <div>
@@ -521,8 +534,15 @@ onMounted(async () => {
                 variant="subtle"
                 size="xs"
               >
-                {{ (member.churn_risk_ml * 100).toFixed(0) }}% Riesgo
+                {{ (member.combined_risk * 100).toFixed(0) }}% Riesgo
               </UBadge>
+              <span
+                v-if="Math.abs(member.combined_risk - member.churn_risk_ml) >= 0.01"
+                class="text-[11px] text-muted-foreground"
+                title="Probabilidad del modelo sin considerar quejas del chat"
+              >
+                (ML {{ (member.churn_risk_ml * 100).toFixed(0) }}%)
+              </span>
 
               <!-- Jugada Recomendada -->
               <span
@@ -583,11 +603,23 @@ onMounted(async () => {
             <div v-if="member.churn_top_factors?.length" class="flex flex-wrap items-center gap-1.5 pt-1">
               <span class="text-[11px] text-muted-foreground">Factores principales:</span>
               <span
-                v-for="factor in member.churn_top_factors"
+                v-for="factor in (member.churn_top_factors ?? []).filter((f) => !f.startsWith('Queja reciente'))"
                 :key="factor"
                 class="text-[11px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 font-medium"
               >
                 {{ factor }}
+              </span>
+            </div>
+
+            <!-- Queja pendiente (valor vivo con decaimiento; el factor
+                 guardado por el cron puede estar desfasado, se oculta) -->
+            <div
+              v-if="member.complaint_risk >= 0.3 && member.last_complaint_type && member.last_complaint_type !== 'ninguna'"
+              class="flex items-center gap-1.5 pt-1"
+            >
+              <span class="text-[11px] text-muted-foreground">Queja reciente:</span>
+              <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">
+                {{ COMPLAINT_LABELS[member.last_complaint_type] }} · {{ (member.complaint_risk * 100).toFixed(0) }}%
               </span>
             </div>
           </div>

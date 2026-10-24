@@ -31,6 +31,10 @@ interface ModelWeights {
 
 const model = weightsData as ModelWeights;
 
+/// Umbrales del modelo — los reusa `complaint-risk.ts` para nivelar el
+/// riesgo combinado (ML + quejas) con la misma escala.
+export const CHURN_THRESHOLDS = model.thresholds;
+
 function formatFactorLabel(
   feature: keyof ChurnFeatures,
   features: ChurnFeatures,

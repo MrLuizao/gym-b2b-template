@@ -4,10 +4,16 @@ import type {
   ChurnFeatures,
   ChurnMembersResponse,
   ChurnRiskLevel,
+  ComplaintType,
   RetentionInterventionInfo,
   RetentionPlaybookId,
 } from '#shared/types';
 import { selectRetentionPlaybook } from '../../utils/churn-model';
+import {
+  COMPLAINT_ACTIVE_THRESHOLD,
+  combineChurnRisk,
+  decayedComplaintRisk,
+} from '../../utils/complaint-risk';
 import { getBusinessFeatures } from '../../utils/config';
 import { requireStaff } from '../../utils/staff-auth';
 
@@ -36,6 +42,7 @@ export default defineEventHandler(async (event): Promise<ChurnMembersResponse> =
   }
 
   const limit = Math.min(Math.max(parseInt((query.limit as string) || '50', 10), 1), 200);
+  const hasComplaint = query.has_complaint === 'true';
 
   // Obtener todos los socios activos de la sede o global
   let baseQuery: FirebaseFirestore.Query = db
@@ -64,12 +71,19 @@ export default defineEventHandler(async (event): Promise<ChurnMembersResponse> =
     const data = doc.data();
     const feat = (data.latest_churn_features || {}) as Partial<ChurnFeatures>;
 
-    const riskLevel: ChurnRiskLevel =
+    const storedLevel: ChurnRiskLevel =
       data.churn_risk_level === 'high' ||
       data.churn_risk_level === 'medium' ||
       data.churn_risk_level === 'low'
         ? data.churn_risk_level
         : 'low';
+
+    // Riesgo combinado al vuelo: ML guardado + queja con decaimiento a hoy.
+    const mlRisk = typeof data.churn_risk_ml === 'number' ? data.churn_risk_ml : 0;
+    const complaintRisk = decayedComplaintRisk(data.complaint_risk, data.last_complaint_at);
+    const scored = typeof data.churn_risk_ml === 'number';
+    const { combined: combinedRisk, level: combinedLevel } = combineChurnRisk(mlRisk, complaintRisk);
+    const riskLevel: ChurnRiskLevel = scored ? combinedLevel : storedLevel;
 
     if (riskLevel === 'high') highRisk++;
     else if (riskLevel === 'medium') mediumRisk++;
@@ -130,7 +144,8 @@ export default defineEventHandler(async (event): Promise<ChurnMembersResponse> =
       email: (data.contact_email as string) || (data.email as string) || '',
       branch_id: (data.branch_id as string) || '',
       membership_status: (data.membership_status as string) || 'ACTIVE',
-      churn_risk_ml: typeof data.churn_risk_ml === 'number' ? data.churn_risk_ml : 0,
+      churn_risk_ml: mlRisk,
+      combined_risk: scored ? combinedRisk : mlRisk,
       churn_risk_level: riskLevel,
       churn_scored_at: data.churn_scored_at as string | undefined,
       churn_provider: data.churn_provider,
@@ -144,6 +159,9 @@ export default defineEventHandler(async (event): Promise<ChurnMembersResponse> =
       points: typeof data.points === 'number' ? data.points : 0,
       goal_streak: Number(data.goal_streak ?? 0),
       weekly_goal: Number(data.weekly_goal ?? 4),
+      last_complaint_type: (data.last_complaint_type as ComplaintType | undefined) ?? null,
+      last_complaint_at: (data.last_complaint_at as string | undefined) ?? null,
+      complaint_risk: complaintRisk,
     };
   });
 
@@ -169,8 +187,18 @@ export default defineEventHandler(async (event): Promise<ChurnMembersResponse> =
     filtered = allMembers.filter((m) => m.churn_risk_level === riskLevelParam);
   }
 
-  // Ordenar de mayor a menor riesgo
-  filtered.sort((a, b) => b.churn_risk_ml - a.churn_risk_ml);
+  // Filtrar solo con quejas pendientes (riesgo de queja vivo tras decaimiento)
+  if (hasComplaint) {
+    filtered = filtered.filter(
+      (m) =>
+        m.complaint_risk >= COMPLAINT_ACTIVE_THRESHOLD &&
+        !!m.last_complaint_type &&
+        m.last_complaint_type !== 'ninguna',
+    );
+  }
+
+  // Ordenar de mayor a menor riesgo combinado
+  filtered.sort((a, b) => b.combined_risk - a.combined_risk);
 
   return {
     members: filtered.slice(0, limit),
