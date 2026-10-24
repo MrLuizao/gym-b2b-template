@@ -302,12 +302,18 @@ export async function generateMemberCoachTip(input: {
   const firstName = input.memberName.split(' ')[0] || 'Atleta';
   const remaining = Math.max(0, input.currentGoal - input.visitsThisWeek);
 
+  const crowdDiff = input.usualHourOccupancyPct - input.bestHourOccupancyPct;
+  const crowdComp =
+    crowdDiff >= 10 && input.usualHourLabel !== input.bestHourWindow.split(' ')[0]
+      ? ` (vs ${input.usualHourOccupancyPct}% a las ${input.usualHourLabel})`
+      : '';
+
   const fallbackTip =
     input.suggestedGoal && input.suggestedGoal < input.currentGoal
       ? `${firstName}, ajustar tu meta a ${input.suggestedGoal} días te ayudará a asegurar los +50 pts esta semana. Hoy entre ${input.bestHourWindow} entrenarás mucho más cómodo (${input.bestHourOccupancyPct}% de aforo).`
       : remaining === 0
         ? `¡Meta semanal cumplida, ${firstName}! Si entrenas hoy en ${input.branchName}, el horario de ${input.bestHourWindow} estará al ${input.bestHourOccupancyPct}% de capacidad.`
-        : `${firstName}, te ${remaining === 1 ? 'falta 1 visita' : `faltan ${remaining} visitas`} para tus +50 pts. Si vas hoy entre ${input.bestHourWindow} tendrás ~${input.bestHourOccupancyPct}% de aforo (vs ${input.usualHourOccupancyPct}% a las ${input.usualHourLabel}).`;
+        : `${firstName}, te ${remaining === 1 ? 'falta 1 visita' : `faltan ${remaining} visitas`} para tus +50 pts. Si vas hoy entre ${input.bestHourWindow} tendrás ~${input.bestHourOccupancyPct}% de aforo${crowdComp}.`;
 
   const systemPrompt =
     'Eres el Coach IA personal dentro de la app móvil de un gimnasio en México. Escribe un consejo motivador, directo y ultra conciso (máximo 185 caracteres, 1 o 2 oraciones) combinando la mejor hora para entrenar hoy y su progreso de meta semanal.';
