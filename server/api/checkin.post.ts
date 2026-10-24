@@ -22,6 +22,10 @@ interface MemberData {
   membership_plan_id?: string;
   membership_until?: Timestamp | null;
   active_checkin_id?: string | null;
+  last_retention_intervention?: {
+    at?: string;
+    returned_at?: string | null;
+  } | null;
 }
 
 function evaluateMembership(d: MemberData): {
@@ -216,11 +220,25 @@ export default defineEventHandler(async (event): Promise<CheckInResult> => {
     checked_out_at: null,
     expires_at: closeExpiry(Number(branch.close_minutes ?? 1320)),
   });
-  batch.update(db().collection('users').doc(memberSnap.id), {
+  const userUpdatePayload: Record<string, unknown> = {
     last_checkin_at: FieldValue.serverTimestamp(),
     active_checkin_id: recordRef.id,
     active_checkin_branch: branchId,
-  });
+  };
+
+  /// Si el socio tenía una intervención de retención reciente (<30d) sin retorno,
+  /// registrar que regresó al gimnasio.
+  const intervention = member.last_retention_intervention as
+    | { at?: string; returned_at?: string | null }
+    | undefined;
+  if (intervention?.at && !intervention.returned_at) {
+    const intervenedMs = Date.parse(intervention.at);
+    if (Number.isFinite(intervenedMs) && Date.now() - intervenedMs <= 30 * 86_400_000) {
+      userUpdatePayload['last_retention_intervention.returned_at'] = new Date().toISOString();
+    }
+  }
+
+  batch.update(db().collection('users').doc(memberSnap.id), userUpdatePayload);
   batch.update(branchSnap.ref, {
     current_capacity: FieldValue.increment(1),
   });

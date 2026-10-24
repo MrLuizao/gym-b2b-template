@@ -53,6 +53,17 @@ export default defineEventHandler(async (event): Promise<PaymentRecord> => {
   const currentUntil = (member.membership_until as Timestamp | null)?.toMillis() ?? 0;
   const newUntil = Math.max(Date.now(), currentUntil) + 30 * 86_400_000;
 
+  /// Atribución de Retención IA: si el socio fue intervenido en los últimos 30 días
+  /// y aún no se había convertido un pago, atribuir esta renovación.
+  const intervention = member.last_retention_intervention as
+    | { at?: string; playbook?: string; converted_payment_id?: string | null }
+    | undefined;
+  const intervenedMs = intervention?.at ? Date.parse(intervention.at) : NaN;
+  const isRetainedByAi =
+    Number.isFinite(intervenedMs) &&
+    Date.now() - intervenedMs <= 30 * 86_400_000 &&
+    !intervention?.converted_payment_id;
+
   const batch = db().batch();
   batch.set(paymentRef, {
     member_id: memberSnap.id,
@@ -71,15 +82,21 @@ export default defineEventHandler(async (event): Promise<PaymentRecord> => {
     receipt_url: null,
     status: 'APPROVED',
     failure_reason: null,
+    retained_by_ai: isRetainedByAi,
+    retention_playbook: isRetainedByAi ? (intervention?.playbook ?? null) : null,
     created_at: Timestamp.now(),
     created_by: 'reception',
     created_by_uid: staff.uid,
   });
-  batch.update(memberSnap.ref, {
+  const memberUpdate: Record<string, unknown> = {
     membership_plan_id: planSnap.id,
     membership_status: 'ACTIVE',
     membership_until: Timestamp.fromMillis(newUntil),
-  });
+  };
+  if (isRetainedByAi) {
+    memberUpdate['last_retention_intervention.converted_payment_id'] = paymentRef.id;
+  }
+  batch.update(memberSnap.ref, memberUpdate);
   await batch.commit();
 
   return toPayment(await paymentRef.get());

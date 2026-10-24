@@ -10,13 +10,19 @@ import {
 } from 'firebase/firestore';
 import {
   CheckCircle2,
+  Gift,
   MessageCircle,
+  RefreshCw,
   Send,
+  Sparkles,
   User,
-  X,
 } from '@lucide/vue';
 
-import type { Conversation, SupportMessage } from '#shared/types';
+import type {
+  Conversation,
+  SupportCopilotResponse,
+  SupportMessage,
+} from '#shared/types';
 
 const { session } = useAuth();
 const { db } = useFirebase();
@@ -28,6 +34,10 @@ const newMessage = ref('');
 const sending = ref(false);
 const resolving = ref(false);
 const resolveConfirmOpen = ref(false);
+
+/// Copiloto IA
+const copilotData = ref<SupportCopilotResponse | null>(null);
+const loadingCopilot = ref(false);
 
 let unsubConversations: Unsubscribe | null = null;
 let unsubMessages: Unsubscribe | null = null;
@@ -42,13 +52,8 @@ function startListeners(): void {
     return;
   }
 
-  console.log('[Soporte] Starting listeners, branchId:', session.value?.branchId);
-
-  // Listener de conversaciones — filtro simple por sede para no requerir
-  // índice compuesto; 'status' y orden se resuelven en memoria (volumen bajo).
   let convQuery = query(collection(db, 'conversations'));
 
-  // Staff con sede fija solo ve las de su sede
   if (session.value?.branchId) {
     convQuery = query(
       collection(db, 'conversations'),
@@ -56,45 +61,66 @@ function startListeners(): void {
     );
   }
 
-  unsubConversations = onSnapshot(convQuery, (snap) => {
-    console.log('[Soporte] onSnapshot received', snap.size, 'docs');
-    conversations.value = snap.docs
-      .filter((d) => d.data().status === 'open')
-      .sort(
-        (a, b) =>
-          ((b.data().last_message_at as Timestamp)?.toMillis?.() ?? 0) -
-          ((a.data().last_message_at as Timestamp)?.toMillis?.() ?? 0),
-      )
-      .map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        memberId: String(data.member_id ?? ''),
-        memberName: String(data.member_name ?? ''),
-        branchId: String(data.branch_id ?? ''),
-        status: 'open' as const,
-        createdAt: (data.created_at as Timestamp)?.toMillis?.() ?? Date.now(),
-        lastMessageAt:
-          (data.last_message_at as Timestamp)?.toMillis?.() ?? Date.now(),
-        lastMessagePreview: String(data.last_message_preview ?? ''),
-        unreadMember: Number(data.unread_member ?? 0),
-        unreadStaff: Number(data.unread_staff ?? 0),
-      };
-    });
+  unsubConversations = onSnapshot(
+    convQuery,
+    (snap) => {
+      conversations.value = snap.docs
+        .filter((d) => d.data().status === 'open')
+        .sort(
+          (a, b) =>
+            ((b.data().last_message_at as Timestamp)?.toMillis?.() ?? 0) -
+            ((a.data().last_message_at as Timestamp)?.toMillis?.() ?? 0),
+        )
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            memberId: String(data.member_id ?? ''),
+            memberName: String(data.member_name ?? ''),
+            branchId: String(data.branch_id ?? ''),
+            status: 'open' as const,
+            createdAt: (data.created_at as Timestamp)?.toMillis?.() ?? Date.now(),
+            lastMessageAt:
+              (data.last_message_at as Timestamp)?.toMillis?.() ?? Date.now(),
+            lastMessagePreview: String(data.last_message_preview ?? ''),
+            unreadMember: Number(data.unread_member ?? 0),
+            unreadStaff: Number(data.unread_staff ?? 0),
+          };
+        });
 
-    // Si la conversación seleccionada ya no existe, deseleccionar
-    if (selectedId.value && !conversations.value.find((c) => c.id === selectedId.value)) {
-      selectedId.value = null;
+      if (selectedId.value && !conversations.value.find((c) => c.id === selectedId.value)) {
+        selectedId.value = null;
+        copilotData.value = null;
+      }
+    },
+    (err) => {
+      console.error('[Soporte] onSnapshot error:', err);
+    },
+  );
+}
+
+async function loadCopilot(convId: string): Promise<void> {
+  loadingCopilot.value = true;
+  try {
+    const res = await $api<SupportCopilotResponse>(`/api/support/${convId}/copilot`, {
+      method: 'POST',
+    });
+    if (selectedId.value === convId) {
+      copilotData.value = res;
     }
-  }, (err) => {
-    // Error callback: rules rechazando el listener o índice faltante
-    console.error('[Soporte] onSnapshot error:', err);
-  });
+  } catch (err) {
+    console.error('[Soporte] Error cargando Copiloto IA:', err);
+  } finally {
+    if (selectedId.value === convId) {
+      loadingCopilot.value = false;
+    }
+  }
 }
 
 function selectConversation(id: string): void {
   selectedId.value = id;
   messages.value = [];
+  copilotData.value = null;
 
   if (unsubMessages) {
     unsubMessages();
@@ -103,30 +129,47 @@ function selectConversation(id: string): void {
 
   if (!db) return;
 
+  void loadCopilot(id);
+
   const msgQuery = query(
     collection(db, 'conversations', id, 'messages'),
     orderBy('created_at', 'asc'),
   );
 
-  unsubMessages = onSnapshot(msgQuery, (snap) => {
-    messages.value = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        conversationId: id,
-        sender: data.sender === 'staff' ? 'staff' : 'member',
-        senderName: String(data.sender_name ?? ''),
-        text: String(data.text ?? ''),
-        createdAt: (data.created_at as Timestamp)?.toMillis?.() ?? Date.now(),
-        read: data.read === true,
-      } satisfies SupportMessage;
-    });
+  let prevCount = 0;
+  unsubMessages = onSnapshot(
+    msgQuery,
+    (snap) => {
+      messages.value = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          conversationId: id,
+          sender: data.sender === 'staff' ? 'staff' : 'member',
+          senderName: String(data.sender_name ?? ''),
+          text: String(data.text ?? ''),
+          createdAt: (data.created_at as Timestamp)?.toMillis?.() ?? Date.now(),
+          read: data.read === true,
+        } satisfies SupportMessage;
+      });
 
-    // Marcar como leídos en el server
-    void $api(`/api/support/${id}/messages`);
-  }, (err) => {
-    console.error('[Soporte] messages onSnapshot error:', err);
-  });
+      const lastMsg = messages.value[messages.value.length - 1];
+      if (messages.value.length > prevCount && prevCount > 0 && lastMsg?.sender === 'member') {
+        void loadCopilot(id);
+      }
+      prevCount = messages.value.length;
+
+      // Marcar como leídos en el server
+      void $api(`/api/support/${id}/messages`);
+    },
+    (err) => {
+      console.error('[Soporte] messages onSnapshot error:', err);
+    },
+  );
+}
+
+function applySuggestion(text: string): void {
+  newMessage.value = text;
 }
 
 async function sendMessage(): Promise<void> {
@@ -154,6 +197,7 @@ async function resolveConversation(): Promise<void> {
     });
     selectedId.value = null;
     messages.value = [];
+    copilotData.value = null;
     resolveConfirmOpen.value = false;
   } finally {
     resolving.value = false;
@@ -248,7 +292,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Chat -->
-    <div class="flex flex-1 flex-col rounded-2xl border border-stroke bg-surface">
+    <div class="flex flex-1 flex-col rounded-2xl border border-stroke bg-surface overflow-hidden">
       <template v-if="selected">
         <!-- Header del chat -->
         <div class="flex items-center justify-between border-b border-stroke p-4">
@@ -259,12 +303,25 @@ onBeforeUnmount(() => {
               <User class="h-5 w-5 text-accent" />
             </div>
             <div>
-              <NuxtLink
-                :to="`/socios/${selected.memberId}`"
-                class="text-sm font-bold text-text-primary transition hover:text-accent"
-              >
-                {{ selected.memberName }}
-              </NuxtLink>
+              <div class="flex items-center gap-2">
+                <NuxtLink
+                  :to="`/socios/${selected.memberId}`"
+                  class="text-sm font-bold text-text-primary transition hover:text-accent"
+                >
+                  {{ selected.memberName }}
+                </NuxtLink>
+                <span
+                  v-if="copilotData"
+                  class="rounded-full px-2 py-0.5 text-[10px] font-bold border"
+                  :class="
+                    copilotData.urgency === 'high'
+                      ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                      : 'bg-accent/15 text-accent border-accent/30'
+                  "
+                >
+                  {{ copilotData.intentLabel }}
+                </span>
+              </div>
               <p class="text-[10px] text-text-dim">
                 Iniciado {{ formatDate(selected.createdAt) }} · {{ formatTime(selected.createdAt) }}
               </p>
@@ -279,6 +336,49 @@ onBeforeUnmount(() => {
             <CheckCircle2 class="h-3.5 w-3.5" />
             Resolver
           </button>
+        </div>
+
+        <!-- Cinta de Contexto del Socio (Copiloto IA) -->
+        <div
+          v-if="copilotData"
+          class="flex flex-wrap items-center gap-3 border-b border-stroke bg-base/60 px-4 py-2 text-[11px]"
+        >
+          <span class="text-text-muted">
+            Plan:
+            <strong class="text-text-primary">{{ copilotData.memberContext.planName }}</strong>
+            <span
+              class="ml-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase"
+              :class="
+                copilotData.memberContext.membershipStatus === 'ACTIVE'
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'bg-red-500/15 text-red-400'
+              "
+            >
+              {{ copilotData.memberContext.membershipStatus === 'ACTIVE' ? 'Activo' : 'Vencido' }}
+            </span>
+          </span>
+
+          <span v-if="copilotData.memberContext.membershipUntil" class="text-text-muted">
+            Vence: <strong class="text-text-primary">{{ copilotData.memberContext.membershipUntil }}</strong>
+          </span>
+
+          <span class="flex items-center gap-1 text-text-muted">
+            <Gift class="h-3 w-3 text-accent" />
+            <strong class="text-accent">{{ copilotData.memberContext.points }} pts</strong>
+            <span>(racha {{ copilotData.memberContext.goalStreak }} sem)</span>
+          </span>
+
+          <span
+            v-if="copilotData.memberContext.churnRiskLevel !== 'low'"
+            class="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold"
+            :class="
+              copilotData.memberContext.churnRiskLevel === 'high'
+                ? 'bg-red-500/15 text-red-400'
+                : 'bg-amber-500/15 text-amber-400'
+            "
+          >
+            ⚠️ Riesgo Churn {{ copilotData.memberContext.churnRiskPct }}% ({{ copilotData.memberContext.daysSinceLastVisit }}d sin visita)
+          </span>
         </div>
 
         <!-- Mensajes -->
@@ -317,6 +417,41 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
+        <!-- Barra de Respuestas Sugeridas (Copiloto IA) -->
+        <div class="border-t border-stroke bg-base/40 px-4 py-2.5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-accent">
+              <Sparkles class="h-3.5 w-3.5" />
+              Copiloto IA · Respuestas con contexto del socio (1-click)
+            </span>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 text-[10px] text-text-muted hover:text-text-primary cursor-pointer"
+              :disabled="loadingCopilot"
+              @click="selectedId && loadCopilot(selectedId)"
+            >
+              <RefreshCw class="h-3 w-3" :class="loadingCopilot && 'animate-spin'" />
+              {{ copilotData?.aiPowered ? 'Gemini IA · Regenerar' : 'Regenerar' }}
+            </button>
+          </div>
+
+          <div v-if="loadingCopilot" class="text-[11px] text-text-dim py-1">
+            Analizando ficha del socio y redactando borradores...
+          </div>
+
+          <div v-else-if="copilotData?.suggestions?.length" class="flex flex-wrap gap-1.5">
+            <button
+              v-for="(suggestion, idx) in copilotData.suggestions"
+              :key="idx"
+              type="button"
+              class="text-left text-[11px] leading-snug rounded-xl border border-stroke bg-surface hover:border-accent/60 hover:bg-accent/10 px-3 py-1.5 text-text-primary transition cursor-pointer max-w-full"
+              @click="applySuggestion(suggestion)"
+            >
+              {{ suggestion }}
+            </button>
+          </div>
+        </div>
+
         <!-- Input -->
         <form
           class="flex items-center gap-3 border-t border-stroke p-4"
@@ -325,7 +460,7 @@ onBeforeUnmount(() => {
           <input
             v-model="newMessage"
             type="text"
-            placeholder="Escribe un mensaje..."
+            placeholder="Escribe un mensaje o elige una sugerencia del Copiloto IA..."
             class="flex-1 rounded-xl border border-stroke bg-base px-4 py-2.5 text-sm text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
           />
           <button

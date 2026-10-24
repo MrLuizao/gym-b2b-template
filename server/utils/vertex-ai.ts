@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { GoogleAuth } from 'google-auth-library';
-import type { ChurnFeatures, ChurnRiskLevel } from '#shared/types';
+import type { ChurnFeatures, ChurnRiskLevel, RetentionPlaybookId } from '#shared/types';
 import { predictChurnScikitLearn } from './churn-model';
 
 export interface VertexPredictionResult {
   probability: number;
   riskLevel: ChurnRiskLevel;
   topFactors: string[];
+  suggestedPlaybook: RetentionPlaybookId;
   provider: 'vertex_ai' | 'sklearn_local';
   scoredAt: string;
   rawScore?: number;
@@ -179,6 +180,7 @@ export async function predictChurnVertexAI(
       probability: Math.round(probability * 1000) / 1000,
       riskLevel,
       topFactors: localAnalysis.topFactors,
+      suggestedPlaybook: localAnalysis.suggestedPlaybook,
       provider: 'vertex_ai',
       scoredAt: new Date().toISOString(),
       rawScore: probability,

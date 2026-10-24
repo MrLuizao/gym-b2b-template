@@ -1,14 +1,22 @@
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { defineEventHandler, readBody } from 'h3';
+import type { RetentionPlaybookId } from '#shared/types';
 import { getBusinessFeatures } from '../../utils/config';
 import { useAdmin } from '../../utils/firebase-admin';
+import { generateRetentionPlaybookMessage } from '../../utils/gemini';
+import { recordPointsHistory } from '../../utils/points-history';
 import { requireBranchScope, requireStaff } from '../../utils/staff-auth';
+
+const RESCUE_BONUS_POINTS = 25;
 
 /**
  * POST /api/analytics/reengage-member
- * Acciones directas de retención hacia un socio en riesgo:
- * - 'push': Envía notificación push FCM directa al topic personal `member_{id}`
- * - 'ticket': Inicia un hilo de soporte proactivo en `/conversations`
+ * Playbooks de retención asistidos por IA (Gemini + fallback contextual):
+ * - `preview: true` -> Redacta y devuelve el título/mensaje personalizado sin enviarlo aún.
+ * - `action: 'push'` -> Envía notificación push FCM contextual al topic `member_{id}`.
+ * - `action: 'bonus_push'` -> Otorga +25 pts de rescate en transacción + envía push FCM.
+ * - `action: 'ticket'` -> Inicia o actualiza hilo proactivo en `/conversations`.
+ * Sella `last_retention_intervention` en `users/{id}` para medir retorno e Ingresos Salvados.
  */
 export default defineEventHandler(async (event) => {
   const staff = await requireStaff(event);
@@ -19,8 +27,11 @@ export default defineEventHandler(async (event) => {
   const db = getFirestore();
   const body = await readBody<{
     memberId: string;
-    action: 'push' | 'ticket';
+    action: 'push' | 'ticket' | 'bonus_push';
+    playbook?: RetentionPlaybookId;
+    title?: string;
     message?: string;
+    preview?: boolean;
   }>(event);
 
   if (!body?.memberId || !body?.action) {
@@ -37,22 +48,86 @@ export default defineEventHandler(async (event) => {
   const memberData = memberDoc.data()!;
   requireBranchScope(staff, memberData.branch_id);
 
-  const memberName = memberData.name || 'Socio';
+  const memberName = (memberData.name as string) || 'Socio';
+  const feat = memberData.latest_churn_features || {};
+  const playbook: RetentionPlaybookId =
+    body.playbook ||
+    (memberData.churn_suggested_playbook as RetentionPlaybookId) ||
+    'habit_boost';
 
-  if (body.action === 'push') {
-    const text = body.message?.trim() || `¡Hola ${memberName}! Te extrañamos en el gym. Tenemos una rutina especial para ti hoy.`;
+  const generated = await generateRetentionPlaybookMessage({
+    memberName,
+    daysSinceLastVisit: Number(feat.days_since_last_visit ?? 10),
+    avgVisitsPerWeek: Number(feat.avg_visits_per_week_last_4 ?? 1.2),
+    points: Number(memberData.points ?? 0),
+    weeklyGoal: Number(memberData.weekly_goal ?? 4),
+    playbook,
+    action: body.action,
+    topFactors: Array.isArray(memberData.churn_top_factors) ? memberData.churn_top_factors : [],
+  });
+
+  if (body.preview) {
+    return {
+      success: true,
+      preview: true,
+      playbook,
+      action: body.action,
+      title: generated.title,
+      message: generated.message,
+      aiPowered: generated.aiPowered,
+    };
+  }
+
+  const finalTitle = body.title?.trim() || generated.title;
+  const finalText = body.message?.trim() || generated.message;
+  const nowIso = new Date().toISOString();
+
+  const interventionPayload = {
+    at: nowIso,
+    action: body.action,
+    playbook,
+    staff_uid: staff.uid,
+    risk_ml: Number(memberData.churn_risk_ml ?? 0),
+    returned_at: null,
+    converted_payment_id: null,
+  };
+
+  if (body.action === 'push' || body.action === 'bonus_push') {
     const topic = `member_${body.memberId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    if (body.action === 'bonus_push') {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(memberRef);
+        const currentPoints = Number(snap.data()?.points ?? 0);
+        tx.update(memberRef, {
+          points: FieldValue.increment(RESCUE_BONUS_POINTS),
+          points_earned: FieldValue.increment(RESCUE_BONUS_POINTS),
+          last_retention_intervention: interventionPayload,
+        });
+        recordPointsHistory(tx, body.memberId, {
+          type: 'manual_adjustment',
+          delta: RESCUE_BONUS_POINTS,
+          balance: currentPoints + RESCUE_BONUS_POINTS,
+          description: 'Bono de rescate de racha (Coach IA)',
+        });
+      });
+    } else {
+      await memberRef.update({
+        last_retention_intervention: interventionPayload,
+      });
+    }
 
     try {
       await useAdmin().messaging.send({
         topic,
         notification: {
-          title: '¡Te extrañamos en el gym!',
-          body: text,
+          title: finalTitle,
+          body: finalText,
         },
         data: {
           type: 'retention',
-          target: 'home',
+          target: body.action === 'bonus_push' ? 'promos' : 'home',
+          playbook,
         },
         android: { priority: 'high' },
         apns: { payload: { aps: { sound: 'default' } } },
@@ -60,9 +135,21 @@ export default defineEventHandler(async (event) => {
 
       return {
         success: true,
-        action: 'push',
+        action: body.action,
+        playbook,
         memberId: body.memberId,
-        message: 'Push de retención enviado exitosamente',
+        bonusAwarded: body.action === 'bonus_push' ? RESCUE_BONUS_POINTS : 0,
+        intervention: {
+          at: nowIso,
+          action: body.action,
+          playbook,
+          returnedAt: null,
+          convertedPaymentId: null,
+        },
+        message:
+          body.action === 'bonus_push'
+            ? `Bono de +${RESCUE_BONUS_POINTS} pts acreditado y Push enviado`
+            : 'Push de retención enviado exitosamente',
       };
     } catch (err: any) {
       throw createError({
@@ -73,11 +160,6 @@ export default defineEventHandler(async (event) => {
   }
 
   if (body.action === 'ticket') {
-    const text =
-      body.message?.trim() ||
-      `Hola ${memberName}, notamos que no has asistido últimamente. ¿Hay algo en lo que podamos apoyarte con tu entrenamiento o tus clases?`;
-
-    // Buscar si ya existe una conversación abierta con el socio
     const existingSnap = await db
       .collection('conversations')
       .where('member_id', '==', body.memberId)
@@ -93,8 +175,9 @@ export default defineEventHandler(async (event) => {
       convRef = firstDoc.ref;
       await convRef.update({
         last_message_at: now,
-        last_message_preview: text,
+        last_message_preview: finalText,
         unread_member: (firstDoc.data().unread_member || 0) + 1,
+        expires_at: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
       });
     } else {
       convRef = db.collection('conversations').doc();
@@ -105,29 +188,32 @@ export default defineEventHandler(async (event) => {
         status: 'open',
         created_at: now,
         last_message_at: now,
-        last_message_preview: text,
+        last_message_preview: finalText,
         unread_member: 1,
         unread_staff: 0,
+        expires_at: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
       });
     }
 
-    // Agregar mensaje
     await convRef.collection('messages').add({
       sender: 'staff',
-      sender_name: staff.email.split('@')[0] || 'Recepción',
-      text,
+      sender_name: staff.email.split('@')[0] || 'Gerencia',
+      text: finalText,
       created_at: now,
       read: false,
     });
 
-    // Enviar push para notificar al socio que soporte le escribió
+    await memberRef.update({
+      last_retention_intervention: interventionPayload,
+    });
+
     try {
       const topic = `member_${body.memberId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
       await useAdmin().messaging.send({
         topic,
         notification: {
-          title: 'Mensaje de tu gimnasio',
-          body: text,
+          title: finalTitle || 'Mensaje de tu gimnasio',
+          body: finalText,
         },
         data: {
           type: 'support',
@@ -141,7 +227,15 @@ export default defineEventHandler(async (event) => {
     return {
       success: true,
       action: 'ticket',
+      playbook,
       conversationId: convRef.id,
+      intervention: {
+        at: nowIso,
+        action: 'ticket',
+        playbook,
+        returnedAt: null,
+        convertedPaymentId: null,
+      },
       message: 'Ticket de atención creado exitosamente',
     };
   }

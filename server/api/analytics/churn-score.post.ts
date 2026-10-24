@@ -89,6 +89,7 @@ export default defineEventHandler(async (event) => {
     churn_risk_ml: result.probability,
     churn_risk_level: result.riskLevel,
     churn_top_factors: result.topFactors,
+    churn_suggested_playbook: result.suggestedPlaybook,
     churn_provider: result.provider,
     churn_scored_at: result.scoredAt,
   });
@@ -99,6 +100,7 @@ export default defineEventHandler(async (event) => {
     churn_probability: result.probability,
     risk_level: result.riskLevel,
     top_factors: result.topFactors,
+    suggested_playbook: result.suggestedPlaybook,
     provider: result.provider,
     features,
   };

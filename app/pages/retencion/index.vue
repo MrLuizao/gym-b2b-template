@@ -3,18 +3,22 @@ import {
   AlertTriangle,
   ArrowDown,
   BarChart3,
-  Bell,
   Brain,
   CheckCircle2,
   Cloud,
   Cpu,
-  MessageCircle,
-  RefreshCw,
-  Search,
+  DollarSign,
+  Gift,
+  Sparkles,
   User,
   Users,
 } from '@lucide/vue';
-import type { Branch, ChurnMember, ChurnMembersResponse } from '#shared/types';
+import type {
+  Branch,
+  ChurnMember,
+  ChurnMembersResponse,
+  RetentionPlaybookId,
+} from '#shared/types';
 
 const { session } = useAuth();
 const toast = useToast();
@@ -34,7 +38,17 @@ const branches = ref<Branch[]>([]);
 const loading = ref(false);
 const refreshing = ref(false);
 const scoringMemberId = ref<string | null>(null);
-const actionLoadingId = ref<string | null>(null);
+
+/// Modal de Playbook IA
+const playbookModalOpen = ref(false);
+const activeMember = ref<ChurnMember | null>(null);
+const selectedPlaybook = ref<RetentionPlaybookId>('habit_boost');
+const selectedAction = ref<'push' | 'bonus_push' | 'ticket'>('push');
+const draftTitle = ref('');
+const draftMessage = ref('');
+const draftAiPowered = ref(false);
+const generatingPreview = ref(false);
+const executingPlaybook = ref(false);
 
 /// KPIs agregados
 const kpis = ref({
@@ -42,7 +56,50 @@ const kpis = ref({
   mediumRisk: 0,
   lowRisk: 0,
   totalActive: 0,
+  savedRevenue30d: 0,
+  recoveredMembers30d: 0,
 });
+
+const PLAYBOOK_META: Record<
+  RetentionPlaybookId,
+  {
+    label: string;
+    shortDesc: string;
+    defaultAction: 'push' | 'bonus_push' | 'ticket';
+    badgeClass: string;
+  }
+> = {
+  streak_rescue: {
+    label: '🔥 Rescate de Racha (+25 pts)',
+    shortDesc: 'Otorga bono motivacional de +25 pts y recuerda saldo canjeable',
+    defaultAction: 'bonus_push',
+    badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  },
+  schedule_unlock: {
+    label: '📅 Desbloqueo de Horario',
+    shortDesc: 'Sugiere horarios alternativos por alta tasa de cancelación de clases',
+    defaultAction: 'push',
+    badgeClass: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
+  },
+  payment_assist: {
+    label: '💳 Apoyo en Renovación',
+    shortDesc: 'Contacto proactivo para destrabar fricción en cobro y proteger puntos',
+    defaultAction: 'ticket',
+    badgeClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+  },
+  human_care: {
+    label: '🤝 Atención Personalizada',
+    shortDesc: 'Abre hilo directo de gerencia tras tickets de soporte recientes',
+    defaultAction: 'ticket',
+    badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+  },
+  habit_boost: {
+    label: '💪 Impulso de Hábito',
+    shortDesc: 'Mensaje empático para retomar ritmo semanal con sesión corta',
+    defaultAction: 'push',
+    badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  },
+};
 
 const branchOptions = computed(() => {
   const opts = branches.value.map((b) => ({ label: b.name, value: b.id }));
@@ -77,6 +134,8 @@ async function loadData() {
       mediumRisk: 0,
       lowRisk: 0,
       totalActive: 0,
+      savedRevenue30d: 0,
+      recoveredMembers30d: 0,
     };
   } catch (error) {
     console.error('Error loading churn members:', error);
@@ -112,59 +171,111 @@ function branchName(id: string): string {
   return b?.name || id;
 }
 
-/// Acción: Enviar Push de Reactivación
-async function sendPush(member: ChurnMember) {
-  actionLoadingId.value = `${member.id}-push`;
+function playbookInfo(id?: RetentionPlaybookId) {
+  return PLAYBOOK_META[id || 'habit_boost'] || PLAYBOOK_META.habit_boost;
+}
+
+function formatMoney(amount: number): string {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 0,
+  }).format(amount || 0);
+}
+
+function formatInterventionAge(iso?: string): string {
+  if (!iso) return '';
+  const diffMs = Date.now() - Date.parse(iso);
+  const days = Math.max(0, Math.floor(diffMs / 86_400_000));
+  if (days === 0) return 'hoy';
+  if (days === 1) return 'hace 1 día';
+  return `hace ${days} días`;
+}
+
+async function openPlaybookModal(
+  member: ChurnMember,
+  forcedAction?: 'push' | 'bonus_push' | 'ticket',
+) {
+  activeMember.value = member;
+  const pb = member.suggested_playbook || 'habit_boost';
+  selectedPlaybook.value = pb;
+  selectedAction.value = forcedAction || PLAYBOOK_META[pb].defaultAction;
+  playbookModalOpen.value = true;
+  await fetchPlaybookPreview();
+}
+
+async function fetchPlaybookPreview() {
+  if (!activeMember.value) return;
+  generatingPreview.value = true;
   try {
-    await $api('/api/analytics/reengage-member', {
+    const res = await $api<{
+      title: string;
+      message: string;
+      aiPowered: boolean;
+    }>('/api/analytics/reengage-member', {
       method: 'POST',
       body: {
-        memberId: member.id,
-        action: 'push',
+        memberId: activeMember.value.id,
+        action: selectedAction.value,
+        playbook: selectedPlaybook.value,
+        preview: true,
       },
     });
+    draftTitle.value = res.title;
+    draftMessage.value = res.message;
+    draftAiPowered.value = res.aiPowered;
+  } catch (err: any) {
     toast.add({
-      title: 'Push de reactivación enviado',
-      description: `Notificación despachada al socio ${member.name}`,
-      color: 'success',
-    });
-  } catch (error: any) {
-    console.error('Error sending push:', error);
-    toast.add({
-      title: 'Error',
-      description: error?.message || 'No se pudo enviar la notificación.',
+      title: 'Error al generar borrador',
+      description: err?.message || 'No se pudo generar el mensaje.',
       color: 'error',
     });
   } finally {
-    actionLoadingId.value = null;
+    generatingPreview.value = false;
   }
 }
 
-/// Acción: Crear Ticket de Soporte
-async function createTicket(member: ChurnMember) {
-  actionLoadingId.value = `${member.id}-ticket`;
+async function executePlaybook() {
+  if (!activeMember.value || executingPlaybook.value) return;
+  executingPlaybook.value = true;
   try {
-    await $api('/api/analytics/reengage-member', {
+    const res = await $api<{
+      success: boolean;
+      message: string;
+      bonusAwarded?: number;
+      intervention?: ChurnMember['last_intervention'];
+    }>('/api/analytics/reengage-member', {
       method: 'POST',
       body: {
-        memberId: member.id,
-        action: 'ticket',
+        memberId: activeMember.value.id,
+        action: selectedAction.value,
+        playbook: selectedPlaybook.value,
+        title: draftTitle.value.trim(),
+        message: draftMessage.value.trim(),
       },
     });
+
+    if (res.intervention) {
+      activeMember.value.last_intervention = res.intervention;
+    }
+    if (res.bonusAwarded) {
+      activeMember.value.points = (activeMember.value.points || 0) + res.bonusAwarded;
+    }
+
     toast.add({
-      title: 'Ticket proactivo creado',
-      description: `Se abrió conversación con ${member.name} en el panel de Soporte`,
+      title: 'Jugada ejecutada',
+      description: res.message,
       color: 'success',
     });
-  } catch (error: any) {
-    console.error('Error creating ticket:', error);
+    playbookModalOpen.value = false;
+  } catch (err: any) {
     toast.add({
-      title: 'Error',
-      description: error?.message || 'No se pudo iniciar el ticket de soporte.',
+      title: 'Error al ejecutar jugada',
+      description: err?.message || 'No se pudo completar la acción.',
       color: 'error',
     });
   } finally {
-    actionLoadingId.value = null;
+    executingPlaybook.value = false;
   }
 }
 
@@ -177,6 +288,7 @@ async function rescore(member: ChurnMember) {
       churn_probability: number;
       risk_level: 'low' | 'medium' | 'high';
       top_factors: string[];
+      suggested_playbook: RetentionPlaybookId;
       provider: string;
     }>('/api/analytics/churn-score', {
       method: 'POST',
@@ -186,11 +298,12 @@ async function rescore(member: ChurnMember) {
     member.churn_risk_ml = res.churn_probability;
     member.churn_risk_level = res.risk_level;
     member.churn_top_factors = res.top_factors;
+    member.suggested_playbook = res.suggested_playbook;
     member.churn_provider = res.provider as any;
 
     toast.add({
       title: 'Score actualizado',
-      description: `Riesgo calculado: ${(res.churn_probability * 100).toFixed(0)}% (${res.risk_level})`,
+      description: `Riesgo: ${(res.churn_probability * 100).toFixed(0)}% · Jugada: ${playbookInfo(res.suggested_playbook).label}`,
       color: 'success',
     });
   } catch (err: any) {
@@ -234,10 +347,10 @@ onMounted(async () => {
       <div>
         <h1 class="text-2xl font-bold flex items-center gap-2">
           <Brain class="w-6 h-6 text-accent" />
-          Retención de Socios &amp; Churn ML
+          Agente de Retención &amp; Churn IA
         </h1>
         <p class="text-muted-foreground mt-1 text-sm">
-          Detección proactiva de abandono mediante Machine Learning (Scikit-Learn / Vertex AI)
+          Playbooks contextuales con Google Gemini, bonos de rescate de racha y atribución de ingresos salvados
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -254,8 +367,24 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- KPIs de Riesgo -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- KPIs de Riesgo e Ingresos Salvados -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <UCard class="border-l-4 border-l-emerald-500 bg-emerald-500/5">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-emerald-500/15 rounded-xl text-emerald-400">
+            <DollarSign class="w-5 h-5" />
+          </div>
+          <div>
+            <div class="text-2xl font-black text-emerald-400">
+              {{ formatMoney(kpis.savedRevenue30d) }}
+            </div>
+            <div class="text-xs text-muted-foreground">
+              Ingresos Salvados (30d) · {{ kpis.recoveredMembers30d }} recup.
+            </div>
+          </div>
+        </div>
+      </UCard>
+
       <UCard class="border-l-4 border-l-red-500">
         <div class="flex items-center gap-3">
           <div class="p-2.5 bg-red-500/10 rounded-xl text-red-500">
@@ -354,7 +483,7 @@ onMounted(async () => {
             </UBadge>
           </div>
           <span class="text-xs text-muted-foreground">
-            Ordenado por probabilidad de abandono
+            Causas ordenadas por peso matemático real en el modelo
           </span>
         </div>
       </template>
@@ -375,7 +504,12 @@ onMounted(async () => {
         >
           <div class="flex-1 space-y-2">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="font-semibold text-base">{{ member.name }}</span>
+              <NuxtLink
+                :to="`/socios/${member.id}`"
+                class="font-semibold text-base hover:text-accent transition"
+              >
+                {{ member.name }}
+              </NuxtLink>
               <span class="text-xs text-muted-foreground">({{ member.email }})</span>
               <UBadge color="neutral" variant="outline" size="xs">
                 {{ branchName(member.branch_id) }}
@@ -389,6 +523,34 @@ onMounted(async () => {
               >
                 {{ (member.churn_risk_ml * 100).toFixed(0) }}% Riesgo
               </UBadge>
+
+              <!-- Jugada Recomendada -->
+              <span
+                class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border"
+                :class="playbookInfo(member.suggested_playbook).badgeClass"
+              >
+                {{ playbookInfo(member.suggested_playbook).label }}
+              </span>
+
+              <!-- Estado de Intervención -->
+              <span
+                v-if="member.last_intervention?.convertedPaymentId"
+                class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400"
+              >
+                💰 Renovó membresía
+              </span>
+              <span
+                v-else-if="member.last_intervention?.returnedAt"
+                class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400"
+              >
+                ✨ Regresó al gym
+              </span>
+              <span
+                v-else-if="member.last_intervention?.at"
+                class="inline-flex items-center gap-1 text-[10px] text-text-muted px-2 py-0.5 rounded-full bg-base border border-stroke"
+              >
+                Intervenido {{ formatInterventionAge(member.last_intervention.at) }}
+              </span>
 
               <!-- Pill de Motor -->
               <span
@@ -412,14 +574,14 @@ onMounted(async () => {
                 Frecuencia: {{ member.avg_visits_per_week_last_4.toFixed(1) }} visitas/sem
               </span>
               <span class="flex items-center gap-1.5">
-                <User class="w-3.5 h-3.5" />
+                <Gift class="w-3.5 h-3.5 text-accent" />
                 Puntos: {{ member.points }} pts
               </span>
             </div>
 
             <!-- Factores explicativos de IA -->
             <div v-if="member.churn_top_factors?.length" class="flex flex-wrap items-center gap-1.5 pt-1">
-              <span class="text-[11px] text-muted-foreground">Causas probables:</span>
+              <span class="text-[11px] text-muted-foreground">Factores principales:</span>
               <span
                 v-for="factor in member.churn_top_factors"
                 :key="factor"
@@ -445,28 +607,159 @@ onMounted(async () => {
 
             <UButton
               size="xs"
-              variant="subtle"
+              variant="solid"
               color="primary"
-              icon="i-heroicons-bell"
-              :loading="actionLoadingId === `${member.id}-push`"
-              @click="sendPush(member)"
+              @click="openPlaybookModal(member)"
             >
-              Push
-            </UButton>
-
-            <UButton
-              size="xs"
-              variant="subtle"
-              color="neutral"
-              icon="i-heroicons-chat-bubble-left"
-              :loading="actionLoadingId === `${member.id}-ticket`"
-              @click="createTicket(member)"
-            >
-              Ticket
+              <Sparkles class="w-3.5 h-3.5 mr-1" />
+              Jugada IA
             </UButton>
           </div>
         </div>
       </div>
     </UCard>
+
+    <!-- Modal de Jugada IA con Gemini -->
+    <UModal
+      v-model:open="playbookModalOpen"
+      :title="`Jugada de Retención IA · ${activeMember?.name ?? ''}`"
+      :description="playbookInfo(selectedPlaybook).shortDesc"
+    >
+      <template #body>
+        <div v-if="activeMember" class="space-y-4">
+          <!-- Selector de Canal / Acción -->
+          <div>
+            <label class="text-xs font-semibold text-text-muted block mb-1.5">
+              Acción a ejecutar
+            </label>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                class="rounded-xl border p-2.5 text-left text-xs transition cursor-pointer"
+                :class="
+                  selectedAction === 'bonus_push'
+                    ? 'border-accent bg-accent/15 text-text-primary font-bold'
+                    : 'border-stroke bg-base text-text-muted hover:text-text-primary'
+                "
+                @click="
+                  selectedAction = 'bonus_push';
+                  fetchPlaybookPreview();
+                "
+              >
+                🔥 Bono +25 pts + Push
+              </button>
+              <button
+                type="button"
+                class="rounded-xl border p-2.5 text-left text-xs transition cursor-pointer"
+                :class="
+                  selectedAction === 'push'
+                    ? 'border-accent bg-accent/15 text-text-primary font-bold'
+                    : 'border-stroke bg-base text-text-muted hover:text-text-primary'
+                "
+                @click="
+                  selectedAction = 'push';
+                  fetchPlaybookPreview();
+                "
+              >
+                🔔 Push Directo
+              </button>
+              <button
+                type="button"
+                class="rounded-xl border p-2.5 text-left text-xs transition cursor-pointer"
+                :class="
+                  selectedAction === 'ticket'
+                    ? 'border-accent bg-accent/15 text-text-primary font-bold'
+                    : 'border-stroke bg-base text-text-muted hover:text-text-primary'
+                "
+                @click="
+                  selectedAction = 'ticket';
+                  fetchPlaybookPreview();
+                "
+              >
+                💬 Abrir Chat Soporte
+              </button>
+            </div>
+          </div>
+
+          <!-- Contexto del socio -->
+          <div class="rounded-xl border border-stroke bg-base p-3 text-xs space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-text-muted">Ausencia: <strong class="text-text-primary">{{ activeMember.days_since_last_visit }} días</strong></span>
+              <span class="text-text-muted">Saldo actual: <strong class="text-accent">{{ activeMember.points }} pts</strong></span>
+              <span class="text-text-muted">Frecuencia: <strong class="text-text-primary">{{ activeMember.avg_visits_per_week_last_4.toFixed(1) }}/sem</strong></span>
+            </div>
+          </div>
+
+          <div v-if="generatingPreview" class="py-8 text-center text-xs text-text-muted flex flex-col items-center gap-2">
+            <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-accent" />
+            Redactando mensaje personalizado con contexto del socio...
+          </div>
+
+          <div v-else class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-text-muted">
+                Mensaje personalizado (editable)
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full border border-stroke text-text-dim">
+                {{ draftAiPowered ? '✨ Redactado con Google Gemini' : '⚡ Motor Contextual IA' }}
+              </span>
+            </div>
+
+            <div v-if="selectedAction !== 'ticket'">
+              <label class="text-[11px] text-text-dim block mb-1">Título de la notificación</label>
+              <input
+                v-model="draftTitle"
+                type="text"
+                class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              />
+            </div>
+
+            <div>
+              <label class="text-[11px] text-text-dim block mb-1">Cuerpo del mensaje</label>
+              <textarea
+                v-model="draftMessage"
+                rows="3"
+                class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template #footer>
+        <div class="flex w-full items-center justify-between gap-2">
+          <UButton
+            size="xs"
+            variant="ghost"
+            icon="i-heroicons-arrow-path"
+            :loading="generatingPreview"
+            @click="fetchPlaybookPreview"
+          >
+            Regenerar con IA
+          </UButton>
+          <div class="flex items-center gap-2">
+            <UButton
+              color="neutral"
+              variant="outline"
+              label="Cancelar"
+              @click="playbookModalOpen = false"
+            />
+            <UButton
+              color="primary"
+              :loading="executingPlaybook"
+              :disabled="generatingPreview || !draftMessage.trim()"
+              :label="
+                selectedAction === 'bonus_push'
+                  ? 'Acreditar +25 pts y Enviar Push'
+                  : selectedAction === 'ticket'
+                    ? 'Enviar a Chat de Soporte'
+                    : 'Enviar Push ahora'
+              "
+              @click="executePlaybook"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>

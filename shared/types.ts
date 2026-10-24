@@ -633,11 +633,26 @@ export interface RewardRedemption {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Retención & Churn Prediction (ML / Vertex AI)
+// Retención & Churn Prediction (ML / Vertex AI) + Copiloto & Coach IA
 // ─────────────────────────────────────────────────────────────────────
 
 export type ChurnRiskLevel = 'low' | 'medium' | 'high';
 export type ChurnPredictionProvider = 'sklearn_local' | 'vertex_ai';
+
+export type RetentionPlaybookId =
+  | 'streak_rescue'
+  | 'schedule_unlock'
+  | 'payment_assist'
+  | 'human_care'
+  | 'habit_boost';
+
+export interface RetentionInterventionInfo {
+  at: string;
+  action: 'push' | 'ticket' | 'bonus_push';
+  playbook: RetentionPlaybookId;
+  returnedAt?: string | null;
+  convertedPaymentId?: string | null;
+}
 
 export interface ChurnFeatures {
   avg_visits_per_week_last_4: number;
@@ -667,9 +682,13 @@ export interface ChurnMember {
   churn_scored_at?: string;
   churn_provider?: ChurnPredictionProvider;
   churn_top_factors?: string[];
+  suggested_playbook?: RetentionPlaybookId;
+  last_intervention?: RetentionInterventionInfo | null;
   days_since_last_visit: number;
   avg_visits_per_week_last_4: number;
   points: number;
+  goal_streak?: number;
+  weekly_goal?: number;
 }
 
 export interface ChurnMembersResponse {
@@ -680,11 +699,57 @@ export interface ChurnMembersResponse {
     mediumRisk: number;
     lowRisk: number;
     totalActive: number;
+    savedRevenue30d: number;
+    recoveredMembers30d: number;
   };
   filters: {
     risk_level: string;
     branch_id?: string;
   };
+}
+
+export type SupportIntent =
+  | 'billing'
+  | 'classes'
+  | 'complaint'
+  | 'access'
+  | 'general';
+
+export interface SupportCopilotResponse {
+  intent: SupportIntent;
+  intentLabel: string;
+  urgency: 'high' | 'normal';
+  aiPowered: boolean;
+  memberContext: {
+    id: string;
+    name: string;
+    planName: string;
+    membershipStatus: string;
+    membershipUntil: string | null;
+    points: number;
+    goalStreak: number;
+    weeklyGoal: number;
+    churnRiskLevel: ChurnRiskLevel;
+    churnRiskPct: number;
+    daysSinceLastVisit: number;
+  };
+  suggestions: string[];
+}
+
+export interface MemberAiCoachResponse {
+  bestHour: number;
+  bestHourWindow: string;
+  bestHourOccupancyPct: number;
+  usualHour: number;
+  usualHourLabel: string;
+  usualHourOccupancyPct: number;
+  branchName: string;
+  currentGoal: number;
+  suggestedGoal: number | null;
+  habitReason: string | null;
+  coachTip: string;
+  aiPowered: boolean;
+  generatedDate: string;
 }
 
 export interface BusinessFeatures {

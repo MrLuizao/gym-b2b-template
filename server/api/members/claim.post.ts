@@ -17,13 +17,19 @@ export default defineEventHandler(async (event): Promise<{ member: Member }> => 
   await rateLimit(`claim:${user.uid}`, 10, 10 * 60_000);
   const body = await readBody<{ memberNumber?: string; pin?: string }>(event);
 
-  const memberNumber = body?.memberNumber?.trim().toUpperCase() ?? '';
+  let memberNumber = body?.memberNumber?.trim().toUpperCase() ?? '';
   const pin = (body?.pin ?? '').replace(/\D/g, '');
   if (!memberNumber || pin.length !== 6) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Ingresa tu número de socio y el código de 6 dígitos',
     });
+  }
+
+  // Normalizar formato CF-NNNNN si viene con menos dígitos (ej. CF-42 -> CF-00042)
+  const cfMatch = memberNumber.match(/^CF-(\d+)$/);
+  if (cfMatch) {
+    memberNumber = `CF-${cfMatch[1].padStart(5, '0')}`;
   }
 
   const snap = await db()
