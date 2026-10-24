@@ -8,7 +8,22 @@ const props = defineProps<{
   canAdjust?: boolean;
   busy?: boolean;
   closing?: boolean;
+  traffic?: number[];
 }>();
+
+const peakHour = computed(() => {
+  const t = props.traffic;
+  if (!t || t.length !== 24) return null;
+  let maxIdx = 0;
+  for (let i = 1; i < t.length; i++) {
+    const cur = t[i];
+    const top = t[maxIdx];
+    if (cur != null && top != null && cur > top) maxIdx = i;
+  }
+  const peakVal = t[maxIdx];
+  if (peakVal == null || peakVal <= 0) return null;
+  return `${String(maxIdx).padStart(2, '0')}:00`;
+});
 
 /// Trabajo en vuelo: ajuste manual (busy) o cierre de sede (closing).
 const working = computed(() => props.busy || props.closing);
@@ -160,6 +175,29 @@ const barColor = computed(() => {
       >
         {{ closing ? 'Cerrando…' : busy ? 'Guardando…' : 'Ajuste manual' }}
       </span>
+    </div>
+
+    <!-- Curva de afluencia integrada de la sede -->
+    <div class="mt-4 border-t border-stroke/60 pt-3">
+      <div class="mb-1.5 flex items-center justify-between">
+        <span class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+          Afluencia hoy
+        </span>
+        <span v-if="peakHour" class="text-[10px] font-bold text-rose-400">
+          Pico ~{{ peakHour }}
+        </span>
+      </div>
+
+      <div class="h-12 w-full">
+        <BranchTrafficSparkline :values="props.traffic" />
+      </div>
+
+      <div class="mt-1 flex items-center justify-between text-[9px] font-semibold text-text-dim/60">
+        <span>06h</span>
+        <span>12h</span>
+        <span>18h</span>
+        <span>23h</span>
+      </div>
     </div>
   </div>
 </template>

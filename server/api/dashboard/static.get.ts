@@ -56,6 +56,22 @@ export default defineEventHandler(async (event) => {
     traffic[0] ?? { hour: 19, value: 0 },
   );
 
+  const totalMaxCapacity =
+    branches.reduce((sum, b) => sum + Math.max(1, b.maxCapacity), 0) || 1;
+  const branchTraffic: Record<string, number[]> = {};
+
+  branches.forEach((b, idx) => {
+    const snap = forecastSnaps[idx];
+    const wk = (snap?.data()?.by_weekday as Record<string, number[]>) ?? {};
+    const curve = wk[weekday];
+    if (Array.isArray(curve) && curve.length === 24 && curve.some((v) => Number(v) > 0)) {
+      branchTraffic[b.id] = curve.map((v) => Math.round(Number(v) || 0));
+    } else {
+      const ratio = Math.max(0.1, b.maxCapacity / totalMaxCapacity);
+      branchTraffic[b.id] = traffic.map((t) => Math.round(t.value * ratio));
+    }
+  });
+
   /// membersToday se calcula en el cliente a partir del listener de
   /// checkins — aquí devolvemos 0 como placeholder (el valor real viene
   /// del realtime).
@@ -73,5 +89,6 @@ export default defineEventHandler(async (event) => {
       },
     },
     traffic,
+    branchTraffic,
   };
 });

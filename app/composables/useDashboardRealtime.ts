@@ -33,6 +33,7 @@ export function useDashboardRealtime() {
   const branches = ref<Branch[]>([]);
   const recentCheckIns = ref<CheckInRecord[]>([]);
   const traffic = ref<TrafficPoint[]>([]);
+  const branchTraffic = ref<Record<string, number[]>>({});
   const kpis = ref<DashboardKpis | null>(null);
   const pending = ref(true);
   const error = ref<string | null>(null);
@@ -46,9 +47,13 @@ export function useDashboardRealtime() {
       const data = await $api<{
         kpis: DashboardKpis;
         traffic: TrafficPoint[];
+        branchTraffic?: Record<string, number[]>;
       }>('/api/dashboard/static');
       kpis.value = data.kpis;
       traffic.value = data.traffic;
+      if (data.branchTraffic) {
+        branchTraffic.value = data.branchTraffic;
+      }
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : 'Error de red';
     }
@@ -177,6 +182,7 @@ export function useDashboardRealtime() {
     branches,
     recentCheckIns,
     traffic,
+    branchTraffic,
     kpis,
     pending,
     error,

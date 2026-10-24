@@ -394,14 +394,14 @@ onBeforeUnmount(() => {
                 class="max-w-[70%] rounded-2xl px-4 py-2"
                 :class="
                   msg.sender === 'staff'
-                    ? 'bg-accent text-base'
-                    : 'bg-base text-text-primary'
+                    ? 'border border-stroke bg-base text-text-primary'
+                    : 'bg-accent text-base font-medium'
                 "
               >
-                <p class="text-sm">{{ msg.text }}</p>
+                <p class="text-sm leading-relaxed">{{ msg.text }}</p>
                 <p
                   class="mt-1 text-[9px]"
-                  :class="msg.sender === 'staff' ? 'text-base/60' : 'text-text-dim'"
+                  :class="msg.sender === 'staff' ? 'text-text-dim' : 'text-base/70'"
                 >
                   {{ formatTime(msg.createdAt) }}
                 </p>

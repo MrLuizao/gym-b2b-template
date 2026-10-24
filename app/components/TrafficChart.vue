@@ -93,7 +93,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="h-64">
+  <div class="h-full min-h-64">
     <canvas ref="canvasRef" />
   </div>
 </template>

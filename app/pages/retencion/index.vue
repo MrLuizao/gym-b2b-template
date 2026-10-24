@@ -9,6 +9,8 @@ import {
   Cpu,
   DollarSign,
   Gift,
+  RefreshCw,
+  Search,
   Sparkles,
   User,
   Users,
@@ -348,308 +350,346 @@ onMounted(async () => {
   </div>
 
   <div v-else class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-bold flex items-center gap-2">
-          <Brain class="w-6 h-6 text-accent" />
-          Agente de Retención &amp; Churn IA
-        </h1>
-        <p class="text-muted-foreground mt-1 text-sm">
-          Playbooks contextuales con Google Gemini, bonos de rescate de racha y atribución de ingresos salvados
+    <!-- 1. KPIs de Resumen (Exactamente como /membresias) -->
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div class="rounded-2xl border border-stroke bg-surface p-4">
+        <div class="flex items-center gap-2">
+          <DollarSign class="h-4 w-4 text-emerald-400" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Ingresos salvados
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-emerald-400">
+          {{ formatMoney(kpis.savedRevenue30d) }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          {{ kpis.recoveredMembers30d }} socios recuperados
         </p>
       </div>
-      <div class="flex items-center gap-2">
-        <UButton
-          :loading="refreshing"
-          icon="i-heroicons-arrow-path"
-          variant="solid"
-          size="sm"
-          color="primary"
-          @click="refresh"
-        >
-          Actualizar
-        </UButton>
+
+      <div class="rounded-2xl border border-stroke bg-surface p-4">
+        <div class="flex items-center gap-2">
+          <AlertTriangle class="h-4 w-4 text-red-400" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Riesgo Alto
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-red-400">
+          {{ kpis.highRisk }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          &gt;65% · urgente
+        </p>
+      </div>
+
+      <div class="rounded-2xl border border-stroke bg-surface p-4">
+        <div class="flex items-center gap-2">
+          <User class="h-4 w-4 text-amber-400" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Riesgo Medio
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-amber-400">
+          {{ kpis.mediumRisk }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          35–65% · prevención
+        </p>
+      </div>
+
+      <div class="rounded-2xl border border-stroke bg-surface p-4">
+        <div class="flex items-center gap-2">
+          <CheckCircle2 class="h-4 w-4 text-emerald-400" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Riesgo Bajo
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-emerald-400">
+          {{ kpis.lowRisk }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          &lt;35% · fidelizados
+        </p>
+      </div>
+
+      <div class="rounded-2xl border border-stroke bg-surface p-4 col-span-2 lg:col-span-1">
+        <div class="flex items-center gap-2">
+          <Users class="h-4 w-4 text-sky-400" />
+          <p class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
+            Evaluados
+          </p>
+        </div>
+        <p class="mt-2 text-xl font-black text-text-primary">
+          {{ kpis.totalActive }}
+        </p>
+        <p class="text-[10px] font-semibold text-text-dim">
+          socios activos en modelo
+        </p>
       </div>
     </div>
 
-    <!-- KPIs de Riesgo e Ingresos Salvados -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-      <UCard class="border-l-4 border-l-emerald-500 bg-emerald-500/5">
-        <div class="flex items-center gap-3">
-          <div class="p-2.5 bg-emerald-500/15 rounded-xl text-emerald-400">
-            <DollarSign class="w-5 h-5" />
-          </div>
-          <div>
-            <div class="text-2xl font-black text-emerald-400">
-              {{ formatMoney(kpis.savedRevenue30d) }}
-            </div>
-            <div class="text-xs text-muted-foreground">
-              Ingresos Salvados (30d) · {{ kpis.recoveredMembers30d }} recup.
-            </div>
-          </div>
-        </div>
-      </UCard>
-
-      <UCard class="border-l-4 border-l-red-500">
-        <div class="flex items-center gap-3">
-          <div class="p-2.5 bg-red-500/10 rounded-xl text-red-500">
-            <AlertTriangle class="w-5 h-5" />
-          </div>
-          <div>
-            <div class="text-2xl font-bold text-red-500">{{ kpis.highRisk }}</div>
-            <div class="text-xs text-muted-foreground">Riesgo Alto (&gt;65%)</div>
-          </div>
-        </div>
-      </UCard>
-
-      <UCard class="border-l-4 border-l-amber-500">
-        <div class="flex items-center gap-3">
-          <div class="p-2.5 bg-amber-500/10 rounded-xl text-amber-500">
-            <User class="w-5 h-5" />
-          </div>
-          <div>
-            <div class="text-2xl font-bold text-amber-500">{{ kpis.mediumRisk }}</div>
-            <div class="text-xs text-muted-foreground">Riesgo Medio (35–65%)</div>
-          </div>
-        </div>
-      </UCard>
-
-      <UCard class="border-l-4 border-l-green-500">
-        <div class="flex items-center gap-3">
-          <div class="p-2.5 bg-green-500/10 rounded-xl text-green-500">
-            <CheckCircle2 class="w-5 h-5" />
-          </div>
-          <div>
-            <div class="text-2xl font-bold text-green-500">{{ kpis.lowRisk }}</div>
-            <div class="text-xs text-muted-foreground">Riesgo Bajo (&lt;35%)</div>
-          </div>
-        </div>
-      </UCard>
-
-      <UCard class="border-l-4 border-l-blue-500">
-        <div class="flex items-center gap-3">
-          <div class="p-2.5 bg-blue-500/10 rounded-xl text-blue-500">
-            <Users class="w-5 h-5" />
-          </div>
-          <div>
-            <div class="text-2xl font-bold">{{ kpis.totalActive }}</div>
-            <div class="text-xs text-muted-foreground">Socios Activos Evaluados</div>
-          </div>
-        </div>
-      </UCard>
-    </div>
-
-    <!-- Filtros de Búsqueda -->
-    <UCard>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div>
-          <label class="text-xs font-medium mb-1 block text-muted-foreground">Nivel de Riesgo</label>
-          <USelect
-            v-model="riskFilter"
-            :options="[
-              { label: 'Riesgo Alto (Atención urgente)', value: 'high' },
-              { label: 'Riesgo Medio (Alerta preventiva)', value: 'medium' },
-              { label: 'Riesgo Bajo (Fidelizados)', value: 'low' },
-              { label: 'Todos los niveles', value: 'all' },
-            ]"
-            @change="loadData"
-          />
-        </div>
-
-        <div>
-          <label class="text-xs font-medium mb-1 block text-muted-foreground">Sede</label>
-          <USelect
-            v-model="branchFilter"
-            :options="branchOptions"
-            :disabled="isManager && !!session?.branchId"
-            @change="loadData"
-          />
-        </div>
-
-        <div>
-          <label class="text-xs font-medium mb-1 block text-muted-foreground">Quejas pendientes</label>
-          <div class="flex items-center gap-2 pt-2">
-            <USwitch v-model="complaintFilter" @update:model-value="loadData" />
-            <span class="text-xs text-muted-foreground">Solo con quejas</span>
-          </div>
-        </div>
-
-        <div>
-          <label class="text-xs font-medium mb-1 block text-muted-foreground">Buscar socio</label>
-          <UInput
-            v-model="searchQuery"
-            placeholder="Nombre, correo o sede..."
-            icon="i-heroicons-magnifying-glass"
-          />
-        </div>
-      </div>
-    </UCard>
-
-    <!-- Lista de Socios -->
-    <UCard>
-      <template #header>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="font-semibold">Socios Identificados</span>
-            <UBadge color="neutral" variant="subtle" size="xs">
-              {{ filteredMembers.length }}
-            </UBadge>
-          </div>
-          <span class="text-xs text-muted-foreground">
-            Causas ordenadas por peso matemático real en el modelo
+    <!-- 2. Sección Principal (Orden y Botones como /membresias) -->
+    <section>
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-black uppercase tracking-widest text-text-muted">
+            Socios en riesgo de deserción
+          </h2>
+          <span
+            v-if="filteredMembers.length"
+            class="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-black text-accent"
+          >
+            {{ filteredMembers.length }}
           </span>
         </div>
-      </template>
 
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-accent" />
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[11px] font-bold transition"
+            :class="
+              complaintFilter
+                ? 'border-accent bg-accent/15 text-accent'
+                : 'border-stroke bg-surface text-text-muted hover:border-accent hover:text-text-primary'
+            "
+            @click="complaintFilter = !complaintFilter; loadData()"
+          >
+            <span
+              class="h-2 w-2 rounded-full"
+              :class="complaintFilter ? 'bg-accent' : 'bg-text-dim'"
+            />
+            <span>Solo con quejas</span>
+          </button>
+
+          <button
+            type="button"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90 disabled:opacity-50"
+            :disabled="refreshing || loading"
+            @click="refresh"
+          >
+            <RefreshCw class="h-3.5 w-3.5" :class="refreshing && 'animate-spin'" />
+            Actualizar análisis
+          </button>
+        </div>
       </div>
 
-      <div v-else-if="filteredMembers.length === 0" class="text-center py-12 text-muted-foreground">
-        No se encontraron socios en este segmento de riesgo.
-      </div>
-
-      <div v-else class="divide-y divide-stroke">
-        <div
-          v-for="member in filteredMembers"
-          :key="member.id"
-          class="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-surface/50 transition px-2 rounded-lg"
-        >
-          <div class="flex-1 space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <NuxtLink
-                :to="`/socios/${member.id}`"
-                class="font-semibold text-base hover:text-accent transition"
-              >
-                {{ member.name }}
-              </NuxtLink>
-              <span class="text-xs text-muted-foreground">({{ member.email }})</span>
-              <UBadge color="neutral" variant="outline" size="xs">
-                {{ branchName(member.branch_id) }}
-              </UBadge>
-
-              <!-- Pill de Riesgo -->
-              <UBadge
-                :color="member.churn_risk_level === 'high' ? 'error' : member.churn_risk_level === 'medium' ? 'warning' : 'success'"
-                variant="subtle"
-                size="xs"
-              >
-                {{ (member.combined_risk * 100).toFixed(0) }}% Riesgo
-              </UBadge>
-              <span
-                v-if="Math.abs(member.combined_risk - member.churn_risk_ml) >= 0.01"
-                class="text-[11px] text-muted-foreground"
-                title="Probabilidad del modelo sin considerar quejas del chat"
-              >
-                (ML {{ (member.churn_risk_ml * 100).toFixed(0) }}%)
-              </span>
-
-              <!-- Jugada Recomendada -->
-              <span
-                class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border"
-                :class="playbookInfo(member.suggested_playbook).badgeClass"
-              >
-                {{ playbookInfo(member.suggested_playbook).label }}
-              </span>
-
-              <!-- Estado de Intervención -->
-              <span
-                v-if="member.last_intervention?.convertedPaymentId"
-                class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400"
-              >
-                💰 Renovó membresía
-              </span>
-              <span
-                v-else-if="member.last_intervention?.returnedAt"
-                class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400"
-              >
-                ✨ Regresó al gym
-              </span>
-              <span
-                v-else-if="member.last_intervention?.at"
-                class="inline-flex items-center gap-1 text-[10px] text-text-muted px-2 py-0.5 rounded-full bg-base border border-stroke"
-              >
-                Intervenido {{ formatInterventionAge(member.last_intervention.at) }}
-              </span>
-
-              <!-- Pill de Motor -->
-              <span
-                v-if="member.churn_provider"
-                class="inline-flex items-center gap-1 text-[10px] text-muted-foreground px-2 py-0.5 rounded border border-stroke"
-              >
-                <Cloud v-if="member.churn_provider === 'vertex_ai'" class="w-3 h-3 text-warning" />
-                <Cpu v-else class="w-3 h-3 text-accent" />
-                {{ member.churn_provider === 'vertex_ai' ? 'Vertex AI' : 'Scikit-Learn' }}
-              </span>
-            </div>
-
-            <!-- Métricas operativas -->
-            <div class="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-              <span class="flex items-center gap-1.5 font-medium" :class="member.days_since_last_visit >= 10 ? 'text-red-500' : ''">
-                <ArrowDown class="w-3.5 h-3.5" />
-                Sin asistir: {{ member.days_since_last_visit }} días
-              </span>
-              <span class="flex items-center gap-1.5">
-                <BarChart3 class="w-3.5 h-3.5" />
-                Frecuencia: {{ member.avg_visits_per_week_last_4.toFixed(1) }} visitas/sem
-              </span>
-              <span class="flex items-center gap-1.5">
-                <Gift class="w-3.5 h-3.5 text-accent" />
-                Puntos: {{ member.points }} pts
-              </span>
-            </div>
-
-            <!-- Factores explicativos de IA -->
-            <div v-if="member.churn_top_factors?.length" class="flex flex-wrap items-center gap-1.5 pt-1">
-              <span class="text-[11px] text-muted-foreground">Factores principales:</span>
-              <span
-                v-for="factor in (member.churn_top_factors ?? []).filter((f) => !f.startsWith('Queja reciente'))"
-                :key="factor"
-                class="text-[11px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 font-medium"
-              >
-                {{ factor }}
-              </span>
-            </div>
-
-            <!-- Queja pendiente (valor vivo con decaimiento; el factor
-                 guardado por el cron puede estar desfasado, se oculta) -->
-            <div
-              v-if="member.complaint_risk >= 0.3 && member.last_complaint_type && member.last_complaint_type !== 'ninguna'"
-              class="flex items-center gap-1.5 pt-1"
+      <!-- Barra de Filtros -->
+      <div class="mb-4 rounded-2xl border border-stroke bg-surface p-4">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label class="mb-1 block text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Nivel de riesgo
+            </label>
+            <select
+              v-model="riskFilter"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-xs font-semibold text-text-primary outline-none transition focus:border-accent"
+              @change="loadData"
             >
-              <span class="text-[11px] text-muted-foreground">Queja reciente:</span>
-              <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">
-                {{ COMPLAINT_LABELS[member.last_complaint_type] }} · {{ (member.complaint_risk * 100).toFixed(0) }}%
-              </span>
-            </div>
+              <option value="high">Riesgo Alto (Atención urgente)</option>
+              <option value="medium">Riesgo Medio (Alerta preventiva)</option>
+              <option value="low">Riesgo Bajo (Fidelizados)</option>
+              <option value="all">Todos los niveles</option>
+            </select>
           </div>
 
-          <!-- Acciones de Re-engagement -->
-          <div class="flex items-center gap-2 self-end lg:self-center shrink-0">
-            <UButton
-              size="xs"
-              variant="outline"
-              icon="i-heroicons-arrow-path"
-              :loading="scoringMemberId === member.id"
-              title="Recalcular con el modelo ML"
-              @click="rescore(member)"
+          <div>
+            <label class="mb-1 block text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Sede
+            </label>
+            <select
+              v-model="branchFilter"
+              :disabled="isManager && !!session?.branchId"
+              class="w-full rounded-xl border border-stroke bg-base px-3 py-2 text-xs font-semibold text-text-primary outline-none transition focus:border-accent disabled:opacity-50"
+              @change="loadData"
             >
-              Recalcular
-            </UButton>
+              <option
+                v-for="opt in branchOptions"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
 
-            <UButton
-              size="xs"
-              variant="solid"
-              color="primary"
-              @click="openPlaybookModal(member)"
-            >
-              <Sparkles class="w-3.5 h-3.5 mr-1" />
-              Jugada IA
-            </UButton>
+          <div>
+            <label class="mb-1 block text-[10px] font-bold uppercase tracking-widest text-text-dim">
+              Buscar socio
+            </label>
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-dim" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Nombre, correo o sede..."
+                class="w-full rounded-xl border border-stroke bg-base py-2 pl-9 pr-3 text-xs text-text-primary outline-none transition placeholder:text-text-dim focus:border-accent"
+              />
+            </div>
           </div>
         </div>
       </div>
-    </UCard>
+
+      <!-- Contenedor de Lista de Socios (Igual a /membresias) -->
+      <div class="overflow-hidden rounded-2xl border border-stroke bg-surface">
+        <div v-if="loading" class="flex items-center justify-center py-16">
+          <RefreshCw class="h-6 w-6 animate-spin text-accent" />
+        </div>
+
+        <div
+          v-else-if="filteredMembers.length === 0"
+          class="py-16 text-center text-xs text-text-dim"
+        >
+          No se encontraron socios en este segmento de riesgo.
+        </div>
+
+        <div v-else class="divide-y divide-stroke">
+          <div
+            v-for="member in filteredMembers"
+            :key="member.id"
+            class="flex flex-col gap-4 p-4 transition hover:bg-base/40 lg:flex-row lg:items-center lg:justify-between"
+          >
+            <div class="flex-1 space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <NuxtLink
+                  :to="`/socios/${member.id}`"
+                  class="text-sm font-black text-text-primary transition hover:text-accent"
+                >
+                  {{ member.name }}
+                </NuxtLink>
+                <span class="text-xs text-text-muted">({{ member.email }})</span>
+                <span class="rounded-full border border-stroke bg-base px-2 py-0.5 text-[10px] font-bold text-text-muted">
+                  {{ branchName(member.branch_id) }}
+                </span>
+
+                <!-- Pill de Riesgo -->
+                <span
+                  class="rounded-full px-2 py-0.5 text-[10px] font-black border"
+                  :class="
+                    member.churn_risk_level === 'high'
+                      ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                      : member.churn_risk_level === 'medium'
+                        ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                        : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  "
+                >
+                  {{ (member.combined_risk * 100).toFixed(0) }}% Riesgo
+                </span>
+                <span
+                  v-if="Math.abs(member.combined_risk - member.churn_risk_ml) >= 0.01"
+                  class="text-[11px] text-text-dim"
+                  title="Probabilidad del modelo sin considerar quejas del chat"
+                >
+                  (ML {{ (member.churn_risk_ml * 100).toFixed(0) }}%)
+                </span>
+
+                <!-- Jugada Recomendada -->
+                <span
+                  class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border"
+                  :class="playbookInfo(member.suggested_playbook).badgeClass"
+                >
+                  {{ playbookInfo(member.suggested_playbook).label }}
+                </span>
+
+                <!-- Estado de Intervención -->
+                <span
+                  v-if="member.last_intervention?.convertedPaymentId"
+                  class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400"
+                >
+                  💰 Renovó membresía
+                </span>
+                <span
+                  v-else-if="member.last_intervention?.returnedAt"
+                  class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400"
+                >
+                  ✨ Regresó al gym
+                </span>
+                <span
+                  v-else-if="member.last_intervention?.at"
+                  class="inline-flex items-center gap-1 text-[10px] text-text-muted px-2 py-0.5 rounded-full bg-base border border-stroke"
+                >
+                  Intervenido {{ formatInterventionAge(member.last_intervention.at) }}
+                </span>
+
+                <!-- Pill de Motor -->
+                <span
+                  v-if="member.churn_provider"
+                  class="inline-flex items-center gap-1 text-[10px] text-text-dim px-2 py-0.5 rounded border border-stroke"
+                >
+                  <Cloud v-if="member.churn_provider === 'vertex_ai'" class="w-3 h-3 text-amber-400" />
+                  <Cpu v-else class="w-3 h-3 text-accent" />
+                  {{ member.churn_provider === 'vertex_ai' ? 'Vertex AI' : 'Scikit-Learn' }}
+                </span>
+              </div>
+
+              <!-- Métricas operativas -->
+              <div class="flex flex-wrap items-center gap-4 text-xs text-text-muted">
+                <span
+                  class="flex items-center gap-1.5 font-semibold"
+                  :class="member.days_since_last_visit >= 10 ? 'text-red-400' : ''"
+                >
+                  <ArrowDown class="w-3.5 h-3.5" />
+                  Sin asistir: {{ member.days_since_last_visit }} días
+                </span>
+                <span class="flex items-center gap-1.5">
+                  <BarChart3 class="w-3.5 h-3.5" />
+                  Frecuencia: {{ member.avg_visits_per_week_last_4.toFixed(1) }} visitas/sem
+                </span>
+                <span class="flex items-center gap-1.5">
+                  <Gift class="w-3.5 h-3.5 text-accent" />
+                  Puntos: {{ member.points }} pts
+                </span>
+              </div>
+
+              <!-- Factores explicativos de IA -->
+              <div v-if="member.churn_top_factors?.length" class="flex flex-wrap items-center gap-1.5 pt-1">
+                <span class="text-[11px] text-text-dim">Factores principales:</span>
+                <span
+                  v-for="factor in (member.churn_top_factors ?? []).filter((f) => !f.startsWith('Queja reciente'))"
+                  :key="factor"
+                  class="text-[11px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 font-medium"
+                >
+                  {{ factor }}
+                </span>
+              </div>
+
+              <!-- Queja reciente -->
+              <div
+                v-if="member.complaint_risk >= 0.3 && member.last_complaint_type && member.last_complaint_type !== 'ninguna'"
+                class="flex items-center gap-1.5 pt-1"
+              >
+                <span class="text-[11px] text-text-dim">Queja reciente:</span>
+                <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-medium">
+                  {{ COMPLAINT_LABELS[member.last_complaint_type] }} · {{ (member.complaint_risk * 100).toFixed(0) }}%
+                </span>
+              </div>
+            </div>
+
+            <!-- Botones de Acción (Estilo /membresias) -->
+            <div class="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                class="flex cursor-pointer items-center gap-1 rounded-full border border-stroke bg-base px-3 py-1.5 text-[11px] font-bold text-text-muted transition hover:border-accent hover:text-text-primary disabled:opacity-50"
+                :disabled="scoringMemberId === member.id"
+                title="Recalcular con el modelo ML"
+                @click="rescore(member)"
+              >
+                <RefreshCw class="h-3 w-3" :class="scoringMemberId === member.id && 'animate-spin'" />
+                Recalcular
+              </button>
+
+              <button
+                type="button"
+                class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-[11px] font-black text-base transition hover:opacity-90"
+                @click="openPlaybookModal(member)"
+              >
+                <Sparkles class="h-3.5 w-3.5" />
+                Jugada IA
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Modal de Jugada IA con Gemini -->
     <UModal
@@ -723,7 +763,7 @@ onMounted(async () => {
           </div>
 
           <div v-if="generatingPreview" class="py-8 text-center text-xs text-text-muted flex flex-col items-center gap-2">
-            <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-accent" />
+            <RefreshCw class="w-6 h-6 animate-spin text-accent" />
             Redactando mensaje personalizado con contexto del socio...
           </div>
 
@@ -760,35 +800,40 @@ onMounted(async () => {
 
       <template #footer>
         <div class="flex w-full items-center justify-between gap-2">
-          <UButton
-            size="xs"
-            variant="ghost"
-            icon="i-heroicons-arrow-path"
-            :loading="generatingPreview"
+          <button
+            type="button"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke bg-base px-3 py-1.5 text-xs font-bold text-text-muted transition hover:text-text-primary disabled:opacity-50"
+            :disabled="generatingPreview"
             @click="fetchPlaybookPreview"
           >
+            <RefreshCw class="h-3 w-3" :class="generatingPreview && 'animate-spin'" />
             Regenerar con IA
-          </UButton>
+          </button>
           <div class="flex items-center gap-2">
-            <UButton
-              color="neutral"
-              variant="outline"
-              label="Cancelar"
+            <button
+              type="button"
+              class="flex cursor-pointer items-center gap-1.5 rounded-full border border-stroke bg-surface px-4 py-1.5 text-xs font-bold text-text-muted transition hover:border-accent hover:text-text-primary"
               @click="playbookModalOpen = false"
-            />
-            <UButton
-              color="primary"
-              :loading="executingPlaybook"
-              :disabled="generatingPreview || !draftMessage.trim()"
-              :label="
-                selectedAction === 'bonus_push'
-                  ? 'Acreditar +25 pts y Enviar Push'
-                  : selectedAction === 'ticket'
-                    ? 'Enviar a Chat de Soporte'
-                    : 'Enviar Push ahora'
-              "
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-black text-base transition hover:opacity-90 disabled:opacity-50"
+              :disabled="generatingPreview || !draftMessage.trim() || executingPlaybook"
               @click="executePlaybook"
-            />
+            >
+              <RefreshCw v-if="executingPlaybook" class="h-3.5 w-3.5 animate-spin" />
+              <span>
+                {{
+                  selectedAction === 'bonus_push'
+                    ? 'Acreditar +25 pts y Enviar Push'
+                    : selectedAction === 'ticket'
+                      ? 'Enviar a Chat de Soporte'
+                      : 'Enviar Push ahora'
+                }}
+              </span>
+            </button>
           </div>
         </div>
       </template>

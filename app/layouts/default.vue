@@ -168,7 +168,7 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
       },
       {
         to: '/retencion',
-        label: 'Retención IA',
+        label: 'IA Reportes',
         icon: Brain,
         roles: ['ADMIN', 'MANAGER'],
       },
