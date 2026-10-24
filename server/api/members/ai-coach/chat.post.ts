@@ -3,7 +3,21 @@ import { db } from '../../../utils/db';
 import { generateCoachChatWithGemini, type ChatMessage } from '../../../utils/gemini';
 import { requireMember } from '../../../utils/member-auth';
 
+/**
+ * Parámetro a nivel de código para encender/apagar el Coach de Bolsillo.
+ * Cambiar este valor a `true` (o definir AI_COACH_CHAT_ENABLED='1') para habilitarlo.
+ */
+const AI_COACH_CHAT_ENABLED = process.env.AI_COACH_CHAT_ENABLED === '1' || false;
+
 export default defineEventHandler(async (event): Promise<MemberAiCoachChatResponse> => {
+  if (!AI_COACH_CHAT_ENABLED) {
+    throw createError({
+      statusCode: 404,
+      statusMessage:
+        'La función de Coach IA conversacional se encuentra temporalmente inactiva a nivel de código.',
+    });
+  }
+
   const memberCtx = await requireMember(event);
   const body = await readBody<{
     message?: string;
