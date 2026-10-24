@@ -752,6 +752,19 @@ export interface MemberAiCoachResponse {
   generatedDate: string;
 }
 
+export interface MemberAiCoachChatRequest {
+  message: string;
+  history?: Array<{
+    role: 'user' | 'model';
+    text: string;
+  }>;
+}
+
+export interface MemberAiCoachChatResponse {
+  reply: string;
+  aiPowered: boolean;
+}
+
 export interface BusinessFeatures {
   ai_churn_prediction: {
     enabled: boolean;

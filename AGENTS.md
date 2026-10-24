@@ -13,11 +13,17 @@ No existe `brand_id` operativo; el branding vive en `/config/brand`.
 Timezone del negocio: `America/Mexico_City` — todas las fechas de
 ocurrencia (`class_date`, dailyStats) se calculan en esa TZ.
 
+## ⚡ Regla de Oro de Agilidad y Pruebas
+
+- **NO ejecutar pruebas unitarias (`npm test`, `vitest`, etc.) de forma automática**: Las pruebas solo se realizan **cuando el usuario lo indique expresamente**. No correr suites de prueba ni análisis pesados por iniciativa propia.
+- **Flujo de trabajo ágil y directo**: Resolver solicitudes con modificaciones concisas, precisas y directas al código. Evitar diagnósticos redundantes, pasos intermedios innecesarios o procesos largos.
+- **Validación ligera de sintaxis**: En cambios complejos, la única verificación es sintaxis rápida, sin bloquear al usuario con compilaciones pesadas innecesarias.
+
 ## Comandos
 
 ```bash
 npm run dev        # dev server (http://localhost:3000)
-npm run typecheck  # vue-tsc — debe quedar en 0 errores
+npm run typecheck  # vue-tsc — solo si el usuario pide chequeo de tipos
 ```
 
 Si `npm` no está en PATH: `export PATH="/Users/luis/.nvm/versions/node/v24.13.0/bin:$PATH"`

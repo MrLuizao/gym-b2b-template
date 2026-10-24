@@ -335,3 +335,158 @@ Meta sugerida: ${input.suggestedGoal ? `${input.suggestedGoal} días/sem` : 'Man
 
   return { tip: fallbackTip, aiPowered: false };
 }
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+}
+
+export function buildFallbackCoachReply(msg: string): string {
+  const lower = msg.toLowerCase();
+
+  if (
+    lower.includes('calient') ||
+    lower.includes('estir') ||
+    lower.includes('activ') ||
+    lower.includes('calentar')
+  ) {
+    return (
+      '🔥 **Calentamiento dinámico recomendado (8-10 min):**\n\n' +
+      '1. **Movilidad articular (3 min):** Rotaciones de tobillos, apertura de cadera y movilidad torácica con bandas.\n' +
+      '2. **Activación muscular (3 min):** 2 series de 12 repeticiones de glute bridges, plancha frontal activa y sentadillas con peso corporal.\n' +
+      '3. **Aproximación progresiva (4 min):** 2 series ligeras con la barra vacía o peso bajo antes de tu primera serie de trabajo.\n\n' +
+      '¡Listo para entrenar con máxima potencia y sin riesgo de lesión!'
+    );
+  }
+
+  if (
+    lower.includes('comer') ||
+    lower.includes('nutri') ||
+    lower.includes('alimento') ||
+    lower.includes('pre') ||
+    lower.includes('post') ||
+    lower.includes('prote') ||
+    lower.includes('comida')
+  ) {
+    return (
+      '🥗 **Guía de nutrición deportiva para tu sesión:**\n\n' +
+      '• **Pre-entreno (30-60 min antes):** Carbohidratos de rápida absorción para energía inmediata (ej. 1 plátano con miel o crema de cacahuate, o avena con fruta) + 400ml de agua.\n' +
+      '• **Post-entreno (dentro de las 2 hrs):** 20-30g de proteína de alta calidad (batido de suero, pollo o claras) + carbohidratos complejos para reparar tejido y recargar glucógeno.\n\n' +
+      '¡La nutrición es el 50% de tu avance en el gym!'
+    );
+  }
+
+  if (
+    lower.includes('dolor') ||
+    lower.includes('molest') ||
+    lower.includes('lesi') ||
+    lower.includes('espalda') ||
+    lower.includes('rodilla') ||
+    lower.includes('hombro')
+  ) {
+    return (
+      '⚠️ **Atención prioritaria y seguridad:**\n\n' +
+      'Si sientes un dolor punzante, ardor o pinchazo, **suspende el ejercicio de inmediato**.\n\n' +
+      '• No intentes forzar repeticiones extras con dolor articular.\n' +
+      '• Revisa tu alineación postural y reduce la carga a pesos que domines con técnica perfecta.\n' +
+      '• Pide apoyo al coach de piso en tu sede para revisar tu técnica o acude con un fisioterapeuta si la molestia no cede.\n\n' +
+      '¡Entrenar inteligente es la clave para la longevidad deportiva!'
+    );
+  }
+
+  if (
+    lower.includes('descanso') ||
+    lower.includes('serie') ||
+    lower.includes('tiempo') ||
+    lower.includes('pausa')
+  ) {
+    return (
+      '⏱️ **Tiempos de descanso según tu objetivo:**\n\n' +
+      '• **Ejercicios multiarticulares pesados (Sentadilla, Peso Muerto, Press Banca):** 2 a 3 minutos para recuperación total del sistema nervioso.\n' +
+      '• **Hipertrofia general (mancuernas y máquinas):** 60 a 90 segundos.\n' +
+      '• **Aislamiento y bombeo final:** 45 a 60 segundos.\n\n' +
+      'Usa el temporizador de tu reloj o celular para mantener el ritmo y no enfriarte.'
+    );
+  }
+
+  if (
+    lower.includes('rutina') ||
+    lower.includes('ejercicio') ||
+    lower.includes('pecho') ||
+    lower.includes('espalda') ||
+    lower.includes('pierna') ||
+    lower.includes('brazo')
+  ) {
+    return (
+      '🏋️ **Estructura recomendada para tu sesión:**\n\n' +
+      '1. **Levantamiento principal (Fuerza):** 4 series de 6 a 8 repeticiones pesadas pero controladas.\n' +
+      '2. **Accesorios principales (Hipertrofia):** 3 series de 10 a 12 repeticiones dejando 1-2 reps en reserva (RIR 1-2).\n' +
+      '3. **Finalizador metabólico:** 2 a 3 series de 12-15 reps con énfasis en la contracción.\n\n' +
+      '¡Enfócate en la sobrecarga progresiva y cuida siempre la fase excéntrica lenta (2-3 seg)!'
+    );
+  }
+
+  return (
+    '💪 ¡Gran iniciativa! La constancia y la técnica adecuada son la base de los verdaderos resultados. Recuerda mantenerte bien hidratado durante tu sesión y escuchar las señales de tu cuerpo.\n\n' +
+    '¿Tienes alguna duda sobre tu rutina de hoy, técnica de algún movimiento o qué comer al terminar?'
+  );
+}
+
+export async function generateCoachChatWithGemini(
+  messages: ChatMessage[],
+  systemInstruction?: string,
+): Promise<{ reply: string; aiPowered: boolean }> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.text || '';
+
+  if (apiKey && messages.length > 0) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7500);
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const contents = messages.map((m) => ({
+        role: m.role === 'model' ? 'model' : 'user',
+        parts: [{ text: m.text }],
+      }));
+
+      const body: Record<string, unknown> = {
+        contents,
+        generationConfig: {
+          temperature: 0.6,
+          maxOutputTokens: 550,
+        },
+      };
+
+      if (systemInstruction) {
+        body.systemInstruction = {
+          parts: [{ text: systemInstruction }],
+        };
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as GeminiResponse;
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) {
+          return { reply: text, aiPowered: true };
+        }
+      }
+    } catch {
+      // Fallback contextual
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    reply: buildFallbackCoachReply(lastUserMsg),
+    aiPowered: false,
+  };
+}
