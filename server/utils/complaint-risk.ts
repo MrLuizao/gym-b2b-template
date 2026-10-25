@@ -92,6 +92,53 @@ export async function recordComplaintFromMessage(memberId: string, text: string)
         last_complaint_severity: analysis.severity,
       });
     });
+
+    // Si la severidad es alta (>0.5) y no hay conversación abierta, crear ticket proactivo
+    if (analysis.severity > 0.5) {
+      try {
+        const existingConv = await db()
+          .collection('conversations')
+          .where('member_id', '==', memberId)
+          .where('status', '==', 'open')
+          .limit(1)
+          .get();
+
+        if (existingConv.empty) {
+          const memberDoc = await ref.get();
+          const member = memberDoc.data();
+
+          const now = new Date().toISOString();
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+          const convRef = db().collection('conversations').doc();
+          await convRef.set({
+            member_id: memberId,
+            member_name: member?.name || 'Socio',
+            branch_id: member?.branch_id || null,
+            status: 'open',
+            created_at: now,
+            last_message_at: now,
+            last_message_preview: `Queja detectada: ${analysis.complaint_type}`,
+            unread_member: 0,
+            unread_staff: 1,
+            expires_at: expiresAt,
+            is_proactive: true,
+            proactive_reason: `Queja de ${analysis.complaint_type} detectada (severity: ${analysis.severity.toFixed(2)})`,
+          });
+
+          await convRef.collection('messages').add({
+            sender: 'staff',
+            sender_name: 'Sistema',
+            text: `Notamos que mencionaste un problema con ${analysis.complaint_type}. ¿Podemos ayudarte a resolverlo?`,
+            created_at: now,
+            read: false,
+            expires_at: expiresAt,
+          });
+        }
+      } catch (err) {
+        console.warn('[complaint-risk] error creating proactive ticket:', err);
+      }
+    }
   } catch (err) {
     console.warn('[complaint-risk] análisis falló:', err);
   }

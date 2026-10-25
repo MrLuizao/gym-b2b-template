@@ -29,6 +29,7 @@ export default defineEventHandler(async (event): Promise<Member> => {
     idNumber?: string;
     sex?: 'M' | 'F' | 'O' | null;
     birthDate?: string | null;
+    membershipStatus?: 'ACTIVE' | 'EXPIRED';
   }>(event);
 
   const update: Record<string, unknown> = {};
@@ -63,6 +64,12 @@ export default defineEventHandler(async (event): Promise<Member> => {
       !Number.isNaN(Date.parse(body.birthDate))
         ? body.birthDate
         : null;
+  }
+  /// Cambio de status de membresía (activar/desactivar)
+  if (body?.membershipStatus !== undefined) {
+    if (body.membershipStatus === 'ACTIVE' || body.membershipStatus === 'EXPIRED') {
+      update.membership_status = body.membershipStatus;
+    }
   }
   /// Sede, plan y vigencia NO se editan aquí: la reasignación de sede
   /// es un proceso operativo aparte, y plan/vigencia solo cambian con

@@ -1,4 +1,7 @@
 export default defineNuxtRouteMiddleware((to) => {
+  if (to.path.startsWith('/api/')) {
+    return;
+  }
   const { isAuthenticated, session } = useAuth();
   if (to.path === '/login') {
     return isAuthenticated.value

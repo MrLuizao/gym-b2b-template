@@ -8,7 +8,7 @@ export default defineEventHandler((event) => {
   setResponseHeaders(event, {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Firebase-AppCheck',
     'Access-Control-Max-Age': '86400',
   });
 

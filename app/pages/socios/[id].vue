@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, Download, KeyRound, Mail, Pencil, X } from '@lucide/vue';
+import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, Download, KeyRound, Mail, Pencil, X, Trash2, UserX } from '@lucide/vue';
 
 import type { Branch, CheckInRecord, MemberDetail, MembershipPlan, PaymentRecord } from '#shared/types';
 
@@ -42,6 +42,11 @@ const payForm = ref({ planId: '', amount: 0, method: 'Efectivo' });
 
 const resendingPin = ref(false);
 const pinFeedback = ref<string | null>(null);
+
+const deactivating = ref(false);
+const deleting = ref(false);
+const deactivateModalOpen = ref(false);
+const deleteModalOpen = ref(false);
 
 /// Recepción regenera el PIN (socio sin correo recibido / alta antigua)
 /// — el server lo reenvía a contact_email y lo devuelve para dictarlo.
@@ -374,6 +379,80 @@ async function saveMember(): Promise<void> {
     saving.value = false;
   }
 }
+
+function openDeactivateModal(): void {
+  deactivateModalOpen.value = true;
+}
+
+async function deactivateMember(): Promise<void> {
+  const m = detail.value?.member;
+  if (!m || deactivating.value) return;
+  deactivating.value = true;
+  try {
+    await $api(`/api/members/${m.id}`, {
+      method: 'PUT',
+      body: { membershipStatus: 'EXPIRED' },
+    });
+    detail.value = await $api<MemberDetail>(`/api/members/${m.id}`);
+    deactivateModalOpen.value = false;
+    useToast().add({
+      title: 'Socio desactivado',
+      description: `${m.name} ya no podrá hacer check-in ni reservar clases.`,
+      color: 'success',
+    });
+  } catch (error: any) {
+    useToast().add({
+      title: 'Error al desactivar',
+      description: error?.message || 'No se pudo desactivar el socio.',
+      color: 'error',
+    });
+  } finally {
+    deactivating.value = false;
+  }
+}
+
+async function activateMember(): Promise<void> {
+  const m = detail.value?.member;
+  if (!m || deactivating.value) return;
+  deactivating.value = true;
+  try {
+    await $api(`/api/members/${m.id}`, {
+      method: 'PUT',
+      body: { membershipStatus: 'ACTIVE' },
+    });
+    detail.value = await $api<MemberDetail>(`/api/members/${m.id}`);
+  } finally {
+    deactivating.value = false;
+  }
+}
+
+function openDeleteModal(): void {
+  deleteModalOpen.value = true;
+}
+
+async function deleteMember(): Promise<void> {
+  const m = detail.value?.member;
+  if (!m || deleting.value) return;
+  deleting.value = true;
+  try {
+    await $api(`/api/members/${m.id}`, { method: 'DELETE' });
+    useToast().add({
+      title: 'Socio eliminado',
+      description: `${m.name} ha sido eliminado del sistema.`,
+      color: 'success',
+    });
+    deleteModalOpen.value = false;
+    router.push('/socios');
+  } catch (error: any) {
+    useToast().add({
+      title: 'Error al eliminar',
+      description: error?.message || 'No se pudo eliminar el socio.',
+      color: 'error',
+    });
+  } finally {
+    deleting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -443,6 +522,33 @@ async function saveMember(): Promise<void> {
           >
             <Pencil class="h-3 w-3" />
             Editar
+          </button>
+          <button
+            v-if="isAdmin && detail.member.membershipStatus === 'ACTIVE'"
+            :disabled="deactivating"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-orange-500/50 bg-orange-500/20 px-3 py-1 text-[10px] font-black text-orange-500 transition hover:bg-orange-500/30"
+            @click="openDeactivateModal"
+          >
+            <UserX class="h-3 w-3" />
+            Desactivar
+          </button>
+          <button
+            v-if="isAdmin && detail.member.membershipStatus === 'EXPIRED'"
+            :disabled="deactivating"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-black text-emerald-500 transition hover:bg-emerald-500/20"
+            @click="activateMember"
+          >
+            <Check class="h-3 w-3" />
+            Activar
+          </button>
+          <button
+            v-if="isAdmin"
+            :disabled="deleting"
+            class="flex cursor-pointer items-center gap-1.5 rounded-full border border-red-500/50 bg-red-500/20 px-3 py-1 text-[10px] font-black text-red-500 transition hover:bg-red-500/30"
+            @click="openDeleteModal"
+          >
+            <Trash2 class="h-3 w-3" />
+            Eliminar
           </button>
         </div>
       </div>
@@ -971,6 +1077,54 @@ async function saveMember(): Promise<void> {
             :disabled="!payForm.planId || payForm.amount < 1"
             :loading="paying"
             @click="submitPayment"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <!-- Modal de confirmación de desactivación -->
+    <UModal
+      v-model:open="deactivateModalOpen"
+      title="Desactivar socio"
+      :description="`¿Estás seguro de desactivar a ${detail?.member.name}? No podrá hacer check-in ni reservar clases.`"
+    >
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="deactivateModalOpen = false"
+          />
+          <UButton
+            label="Desactivar"
+            color="warning"
+            :loading="deactivating"
+            @click="deactivateMember"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <!-- Modal de confirmación de eliminación -->
+    <UModal
+      v-model:open="deleteModalOpen"
+      title="Eliminar socio"
+      :description="`¿Estás seguro de ELIMINAR a ${detail?.member.name}? Esta acción NO se puede deshacer.`"
+    >
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancelar"
+            color="neutral"
+            variant="outline"
+            @click="deleteModalOpen = false"
+          />
+          <UButton
+            label="Eliminar"
+            color="error"
+            :loading="deleting"
+            @click="deleteMember"
           />
         </div>
       </template>
