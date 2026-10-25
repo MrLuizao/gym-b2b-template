@@ -127,7 +127,42 @@ def generate_synthetic_gym_dataset(n_samples=2500, random_state=42):
     return df
 
 
+HORIZON_DAYS = 30
+
+
+def _to_dt(v):
+    """Firestore Timestamp / datetime / ISO / ms -> datetime UTC (o None)."""
+    from datetime import datetime, timezone
+
+    if v is None:
+        return None
+    if hasattr(v, "timestamp") and not isinstance(v, (int, float)):
+        try:
+            return datetime.fromtimestamp(v.timestamp(), tz=timezone.utc)
+        except Exception:
+            return None
+    if isinstance(v, (int, float)):
+        return datetime.fromtimestamp(v / 1000, tz=timezone.utc)
+    if isinstance(v, str):
+        try:
+            d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
 def load_firestore_data():
+    """
+    Dataset por FOTOS históricas: cada doc `users/{id}/churn_features/{fecha}`
+    es una observación. Etiqueta = 1 si la membresía venció (status != ACTIVE y
+    `membership_until` dentro de los HORIZON_DAYS siguientes a la foto);
+    0 si la foto tiene >= HORIZON_DAYS de antigüedad y el socio siguió activo.
+    Fotos recientes de socios activos se descartan (aún no sabemos el
+    desenlace — evita sesgo de censura).
+    """
+    from datetime import datetime, timedelta, timezone
+
     import firebase_admin
     from firebase_admin import credentials, firestore
 
@@ -140,42 +175,50 @@ def load_firestore_data():
         firebase_admin.initialize_app(cred)
     db = firestore.client()
 
-    print("Extrayendo features de socios desde Firestore...")
+    now = datetime.now(timezone.utc)
+    horizon = timedelta(days=HORIZON_DAYS)
+    print("Extrayendo historial de features desde Firestore...")
     records = []
     users_snap = db.collection("users").where("membership_status", "in", ["ACTIVE", "EXPIRED"]).stream()
 
     for user in users_snap:
-        u_data = user.to_dict()
-        feat = u_data.get("latest_churn_features")
-        if not feat:
-            # Buscar en subcolección
-            latest_feat_snap = (
-                db.collection("users")
-                .document(user.id)
-                .collection("churn_features")
-                .order_by("scored_at", direction=firestore.DESCENDING)
-                .limit(1)
-                .stream()
-            )
-            for f in latest_feat_snap:
-                feat = f.to_dict()
-                break
+        u = user.to_dict()
+        churned = u.get("membership_status") == "EXPIRED"
+        until = _to_dt(u.get("membership_until"))
+        if churned and until is None:
+            continue  # sin fecha de vencimiento no se puede etiquetar con rigor
 
-        if feat:
+        for f in db.collection("users").document(user.id).collection("churn_features").stream():
+            feat = f.to_dict()
+            snap_dt = _to_dt(feat.get("scored_at"))
+            if snap_dt is None:
+                try:
+                    snap_dt = datetime.fromisoformat(f.id).replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+
+            if churned:
+                if not (snap_dt < until <= snap_dt + horizon):
+                    # Foto muy anterior al vencimiento -> sigue activo 30d después
+                    if until > snap_dt + horizon:
+                        label = 0
+                    else:
+                        continue
+                else:
+                    label = 1
+            else:
+                if now - snap_dt < horizon:
+                    continue  # desenlace aún desconocido
+                label = 0
+
             row = {col: feat.get(col, 0) for col in FEATURE_COLS}
-            row[TARGET_COL] = 1 if u_data.get("membership_status") == "EXPIRED" else 0
+            row[TARGET_COL] = label
+            row["user_id"] = user.id
             records.append(row)
 
-    if len(records) < 50:
-        print(f"Pocos registros en Firestore ({len(records)}). Complementando con sintéticos...")
-        synthetic_df = generate_synthetic_gym_dataset(n_samples=1500)
-        if records:
-            df = pd.concat([pd.DataFrame(records), synthetic_df], ignore_index=True)
-        else:
-            df = synthetic_df
-    else:
-        df = pd.DataFrame(records)
-
+    df = pd.DataFrame(records)
+    if not df.empty:
+        print(f"Observaciones: {len(df)} · socios: {df['user_id'].nunique()} · churn=1: {int(df[TARGET_COL].sum())}")
     return df
 
 
@@ -187,20 +230,43 @@ def main():
         default="server/models/churn-weights.json",
         help="Ruta de salida JSON (default: server/models/churn-weights.json)",
     )
+    parser.add_argument("--min-positives", type=int, default=30,
+                        help="Mínimo de casos churn=1 reales para aceptar el entrenamiento (default 30)")
+    parser.add_argument("--min-auc", type=float, default=0.65,
+                        help="AUC mínimo en test para escribir el modelo (default 0.65)")
+    parser.add_argument("--force", action="store_true",
+                        help="Escribir aunque no se cumpla --min-auc")
     args = parser.parse_args()
 
+    groups = None
     if args.synthetic or not os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
         print("Usando generador de datos sintéticos calibrados...")
+        data_source = "synthetic"
         df = generate_synthetic_gym_dataset()
     else:
+        data_source = "firestore"
         df = load_firestore_data()
+        positives = int(df[TARGET_COL].sum()) if not df.empty else 0
+        if positives < args.min_positives or df[TARGET_COL].nunique() < 2:
+            print(f"ABORTADO: {positives} casos de abandono reales (mínimo {args.min_positives}).")
+            print("Aún no hay historial suficiente; el modelo actual no se modifica.")
+            print("Usa --synthetic si quieres regenerar el modelo base de demostración.")
+            sys.exit(1)
+        groups = df["user_id"]
 
     X = df[FEATURE_COLS]
     y = df[TARGET_COL]
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    if groups is not None:
+        # Split por socio: sus fotos nunca quedan en train y test a la vez.
+        from sklearn.model_selection import GroupShuffleSplit
+
+        tr, te = next(GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42).split(X, y, groups))
+        X_train, X_test, y_train, y_test = X.iloc[tr], X.iloc[te], y.iloc[tr], y.iloc[te]
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
 
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
@@ -219,6 +285,10 @@ def main():
     print("\n--- Reporte de Clasificación ---")
     print(classification_report(y_test, y_pred, digits=3))
 
+    if data_source == "firestore" and auc < args.min_auc and not args.force:
+        print(f"ABORTADO: AUC {auc:.3f} < {args.min_auc}. El modelo actual no se modifica (--force para ignorar).")
+        sys.exit(1)
+
     # Exportar parámetros a JSON para inferencia pura en TypeScript
     export_payload = {
         "model_type": "LogisticRegression",
@@ -229,7 +299,10 @@ def main():
             "auc_roc": round(float(auc), 4),
             "train_samples": len(X_train),
             "test_samples": len(X_test),
+            "positives": int(y.sum()),
         },
+        "data_source": data_source,
+        "horizon_days": HORIZON_DAYS,
         "features": FEATURE_COLS,
         "scaler": {
             "mean": [round(float(m), 4) for m in scaler.mean_],

@@ -223,6 +223,22 @@ Sin vínculo no ve datos del gym.
   Evalúa a los socios activos, actualiza `churn_risk_ml`, `churn_risk_level` y
   extrae las causas principales en `churn_top_factors` ("Ausente hace 18 días", etc.).
   Registra telemetría de uso en `usage_analytics` para facturación mensual.
+- **Push automático** (`server/utils/auto-retention.ts`, al final de
+  `churn-predict`): solo con `AI_CHURN_AUTO_PUSH=1`. Envía el push Gemini
+  del playbook a socios de riesgo **alto** (combinado) sin intervención en
+  los últimos 14 días (manual o automática), máx. 60 por corrida. Sella
+  `last_retention_intervention` con `auto: true` solo si el push salió
+  (si FCM falla se reintenta al día siguiente) → cuenta en "ingresos
+  salvados". El resultado va en `auto_push` de la respuesta del cron.
+- **Reentrenamiento con datos reales** (`scripts/train-churn-model.py`, con
+  `FIREBASE_SERVICE_ACCOUNT`): cada foto diaria `users/{id}/churn_features/{fecha}`
+  es una observación; etiqueta 1 si la membresía venció (`membership_until`)
+  dentro de 30 días tras la foto, 0 si siguió activa; fotos recientes de
+  activos se descartan (censura). Split por socio. **Aborta sin tocar el
+  modelo** si hay <30 abandonos reales (`--min-positives`) o AUC <0.65
+  (`--min-auc`, `--force` lo ignora); ya no mezcla sintéticos en silencio.
+  El JSON lleva `data_source` (`synthetic`/`firestore`). Requiere meses de
+  historial acumulado — mientras tanto el modelo es sintético.
 - **Quejas del chat → riesgo combinado** (`server/utils/complaint-risk.ts` +
   `sentiment-analysis.ts`): cada mensaje del socio en `messages.post` se
   clasifica en segundo plano (`event.waitUntil`, solo si el módulo está

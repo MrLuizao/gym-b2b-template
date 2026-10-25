@@ -2,6 +2,11 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { defineEventHandler, getHeader, getQuery, readBody } from 'h3';
 import type { ChurnFeatures, ChurnPredictionProvider } from '#shared/types';
 import { predictChurnScikitLearn } from '../../utils/churn-model';
+import {
+  type AutoPushCandidate,
+  inCooldown,
+  runAutoRetentionPushes,
+} from '../../utils/auto-retention';
 import { churnFieldsWithComplaints } from '../../utils/complaint-risk';
 import { getBusinessFeatures } from '../../utils/config';
 import { recordFeatureUsage } from '../../utils/telemetry';
@@ -68,6 +73,8 @@ export default defineEventHandler(async (event) => {
   let highRiskCount = 0;
   let mediumRiskCount = 0;
   let lowRiskCount = 0;
+  const autoPushEnabled = churnConfig.settings.auto_push_enabled === true;
+  const autoCandidates: AutoPushCandidate[] = [];
 
   for (const doc of membersSnap.docs) {
     const memberId = doc.id;
@@ -110,6 +117,20 @@ export default defineEventHandler(async (event) => {
     else if (fields.churn_risk_level === 'medium') mediumRiskCount++;
     else lowRiskCount++;
 
+    if (
+      autoPushEnabled &&
+      fields.churn_risk_level === 'high' &&
+      !inCooldown(data)
+    ) {
+      autoCandidates.push({
+        memberId,
+        data,
+        playbook: result.suggestedPlaybook,
+        topFactors: fields.churn_top_factors,
+        riskMl: result.probability,
+      });
+    }
+
     const memberRef = db.collection('users').doc(memberId);
     batch.update(memberRef, {
       ...fields,
@@ -131,6 +152,11 @@ export default defineEventHandler(async (event) => {
     await batch.commit();
   }
 
+  // Push automático (solo riesgo alto, con enfriamiento de 14 días)
+  const autoPush = autoPushEnabled
+    ? await runAutoRetentionPushes(autoCandidates)
+    : null;
+
   // Registrar telemetría de uso para facturación
   try {
     await recordFeatureUsage({
@@ -147,6 +173,7 @@ export default defineEventHandler(async (event) => {
     success: true,
     processed,
     provider,
+    auto_push: autoPush,
     kpis: {
       high: highRiskCount,
       medium: mediumRiskCount,
