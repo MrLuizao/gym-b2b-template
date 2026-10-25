@@ -6,7 +6,7 @@ los endpoints en `server/api/**` escriben con firebase-admin y validan
 rol/sede server-side (`server/utils/staff-auth.ts`).
 
 Repo hermano — app del socio (Flutter):
-`/Users/luis/Develop/Personal/rirhub-app` (tiene su propio `AGENTS.md`).
+`/Users/luis/Develop/Personal/rirhub-app` (tiene su propio `AGENTS.md` con las reglas de arquitectura y el estándar obligatorio de **Estética Luxury tipo Spotify + Micro-interacciones hápticas**: `PressableScale`, `AppHaptics`, halos de luz ambiental, barra `BackdropFilter` y casillas táctiles de PIN).
 
 **Modelo de negocio**: un proyecto Firebase = un negocio con varias sedes.
 No existe `brand_id` operativo; el branding vive en `/config/brand`.
@@ -48,6 +48,9 @@ su ficha vía `POST /api/members/claim` (número + PIN, single-use — se
 borra al reclamar). `POST /api/members/{id}/claim-pin` regenera/reenvía
 (staff, scope de sede). `contact_email` ≠ `email` (login Google/Apple).
 Sin vínculo no ve datos del gym.
+- **Desactivación y eliminación de socios (`/socios/[id]`)**:
+  - **Desactivar / Reactivar (`PUT /api/members/{id}` con `membershipStatus: 'EXPIRED' | 'ACTIVE'`)**: Admin (todas las sedes) y Gerente (su sede) pueden desactivar temporalmente a un socio sin borrar su historial (le impide hacer check-in y reservar clases).
+  - **Eliminar (`DELETE /api/members/{id}`)**: Exclusivo para `ADMIN` (elimina el documento `users/{id}` previa confirmación modal).
 
 ### Check-ins y aforo en tiempo real
 

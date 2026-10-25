@@ -66,3 +66,13 @@ email is the Google/Apple login. They may differ.
 - Member's `branch_id` determines their home branch
 - Plans with `all_branches: false` restrict check-ins to home branch
 - Staff sees members filtered by their branch (unless admin)
+
+## Member Deactivation & Deletion (`/socios/[id]`)
+
+- **Deactivate / Activate (`PUT /api/members/{id}`)**:
+  - Accepts `membershipStatus: 'EXPIRED' | 'ACTIVE'`
+  - Allowed for `ADMIN` (any branch) and `MANAGER` (own branch); `RECEPTIONIST` cannot edit
+  - Setting `EXPIRED` immediately blocks check-in and class bookings while preserving payment and visit history
+- **Permanent Delete (`DELETE /api/members/{id}`)**:
+  - Allowed **only for `ADMIN`** (`403` for `MANAGER` and `RECEPTIONIST`)
+  - Deletes `users/{id}` from Firestore after confirmation modal in `/socios/[id].vue`
