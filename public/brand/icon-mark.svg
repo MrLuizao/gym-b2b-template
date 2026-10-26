@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- RIR-HUB · standalone mark (transparent bg) — favicon, overlays, watermark -->
+  <g fill="#7c6cf6">
+    <rect x="64" y="168" width="26" height="176" rx="13"/>
+    <rect x="422" y="168" width="26" height="176" rx="13"/>
+    <rect x="100" y="120" width="54" height="272" rx="27"/>
+    <rect x="358" y="120" width="54" height="272" rx="27"/>
+    <rect x="100" y="229" width="312" height="54" rx="27"/>
+  </g>
+</svg>

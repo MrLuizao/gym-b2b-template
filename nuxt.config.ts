@@ -13,9 +13,10 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'RIR-HUB',
+      title: 'RIR-HUB · Consola B2B',
       htmlAttrs: { lang: 'es' },
       link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         {
           rel: 'preconnect',

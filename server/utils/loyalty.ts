@@ -6,17 +6,43 @@ import { recordPointsHistory } from './points-history';
 
 const TZ = 'America/Mexico_City';
 
-/// Puntos que gana el socio al cumplir su meta semanal de asistencias.
+/// Puntos base que gana el socio al cumplir su meta semanal estándar (4 días).
 export const GOAL_BONUS_POINTS = 50;
 
-/// Bonos por racha de semanas consecutivas cumpliendo la meta.
+/// Puntos por cumplir la meta semanal según la meta ajustada por el socio.
+/// Escala según el nivel de exigencia (ej. 2 días: 25 pts, 4 días: 50 pts, 6 días: 80 pts).
+export function getGoalBonusPoints(goal: number): number {
+  const map: Record<number, number> = {
+    1: 15,
+    2: 25,
+    3: 35,
+    4: 50,
+    5: 65,
+    6: 80,
+    7: 100,
+  };
+  const clamped = Math.max(1, Math.min(7, Math.round(goal || 4)));
+  return map[clamped] ?? Math.round(clamped * 12.5);
+}
+
+/// Bonos base por racha de semanas consecutivas (para meta estándar de 4 días).
 /// Clave = semanas consecutivas, valor = puntos extra.
 export const STREAK_BONUSES: Record<number, number> = {
-  2: 25, // 2 semanas seguidas → +25 pts extra
-  4: 50, // 4 semanas seguidas → +50 pts extra
-  8: 100, // 8 semanas seguidas → +100 pts extra
-  12: 150, // 12 semanas seguidas → +150 pts extra
+  2: 25, // 2 semanas seguidas → +25 pts extra base
+  4: 50, // 4 semanas seguidas → +50 pts extra base
+  8: 100, // 8 semanas seguidas → +100 pts extra base
+  12: 150, // 12 semanas seguidas → +150 pts extra base
 };
+
+/// Calcula el bono de racha escalado a la meta ajustada del socio (proporcional a goal / 4).
+/// Si un socio sostiene una meta de 6 visitas, sus bonos de racha son 1.5x superiores.
+export function getStreakBonus(newStreak: number, goal: number): number {
+  const base = STREAK_BONUSES[newStreak];
+  if (!base) return 0;
+  const clampedGoal = Math.max(1, Math.min(7, Math.round(goal || 4)));
+  const multiplier = clampedGoal / 4;
+  return Math.round(base * multiplier);
+}
 
 /// Semana en CDMX con inicio en lunes. `key` = fecha del lunes (única por
 /// semana, sirve para "ya premiado esta semana").
@@ -94,9 +120,10 @@ export async function recordVisitAndReward(
       const streakContinues = prevStreakWeek === lastWeekKey;
       const newStreak = streakContinues ? prevStreak + 1 : 1;
 
-      /// Verificar si hay bono por racha.
-      const streakBonus = STREAK_BONUSES[newStreak] ?? 0;
-      const totalBonus = GOAL_BONUS_POINTS + streakBonus;
+      /// Calcular puntos por meta y bono de racha según la meta semanal ajustada.
+      const goalBonusPoints = getGoalBonusPoints(goal);
+      const streakBonus = getStreakBonus(newStreak, goal);
+      const totalBonus = goalBonusPoints + streakBonus;
       const newBalance = currentPoints + totalBonus;
 
       tx.update(userRef, {
@@ -110,8 +137,8 @@ export async function recordVisitAndReward(
 
       recordPointsHistory(tx, userId, {
         type: 'weekly_goal',
-        delta: GOAL_BONUS_POINTS,
-        balance: currentPoints + GOAL_BONUS_POINTS,
+        delta: goalBonusPoints,
+        balance: currentPoints + goalBonusPoints,
         description: `Meta semanal cumplida (${goal} visitas)`,
       });
 
@@ -120,18 +147,18 @@ export async function recordVisitAndReward(
           type: 'streak_bonus',
           delta: streakBonus,
           balance: newBalance,
-          description: `Bono por ${newStreak} semanas de racha`,
+          description: `Bono por ${newStreak} semanas de racha (meta: ${goal} visitas/sem)`,
         });
       }
 
-      return { awarded: true, streak: newStreak, streakBonus };
+      return { awarded: true, streak: newStreak, streakBonus, goalBonusPoints };
     }
-    return { awarded: false, streak: 0, streakBonus: 0 };
+    return { awarded: false, streak: 0, streakBonus: 0, goalBonusPoints: 0 };
   });
 
   if (awarded.awarded) {
     try {
-      const totalPts = GOAL_BONUS_POINTS + awarded.streakBonus;
+      const totalPts = awarded.goalBonusPoints + awarded.streakBonus;
       const streakMsg =
         awarded.streakBonus > 0
           ? ` (+${awarded.streakBonus} bono por ${awarded.streak} semanas de racha)`

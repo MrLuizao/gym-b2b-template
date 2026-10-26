@@ -27,7 +27,7 @@ const form = ref({
   title: '',
   subtitle: '',
   badge: 'ALIADO',
-  brandColor: '#f4e701',
+  brandColor: '#8b5cf6',
   imageUrl: '',
   ctaLabel: 'Ver oferta',
   placement: 'carousel' as SponsorAd['placement'],

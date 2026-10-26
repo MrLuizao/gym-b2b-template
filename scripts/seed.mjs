@@ -57,7 +57,7 @@ console.log('Sembrando en proyecto', sa.project_id);
 await db.collection('config').doc('brand').set({
   name: 'RIR-HUB',
   logo_url: '',
-  colors: { primary: '#f97316', accent: '#f97316', background: '#0a0a0a' },
+  colors: { primary: '#8b5cf6', accent: '#ec4899', background: '#08080d' },
   timezone: TZ,
   currency: 'MXN',
   socials: {},

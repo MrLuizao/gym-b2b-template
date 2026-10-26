@@ -101,22 +101,8 @@ async function submit(): Promise<void> {
       class="flex w-full flex-col justify-center px-6 py-10 sm:px-10 lg:w-[440px] lg:shrink-0 xl:w-[480px]"
     >
       <div class="mx-auto w-full max-w-sm">
-        <div class="flex items-center gap-3">
-          <div
-            class="flex h-11 w-11 items-center justify-center rounded-xl bg-accent"
-          >
-            <Dumbbell class="h-6 w-6 text-base" />
-          </div>
-          <div>
-            <p class="text-sm font-black tracking-tight text-text-primary">
-              RIR-HUB
-            </p>
-            <p
-              class="text-[9px] font-bold uppercase tracking-[0.25em] text-text-dim"
-            >
-              B2B &amp; DMS
-            </p>
-          </div>
+        <div class="mb-2">
+          <RirhubLogo size="lg" tagline="B2B & DMS · CONSOLA ADMINISTRATIVA" />
         </div>
 
         <h2
@@ -213,7 +199,7 @@ async function submit(): Promise<void> {
           <button
             type="submit"
             :disabled="submitting"
-            class="group flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3.5 text-xs font-black uppercase tracking-[0.2em] text-base transition hover:brightness-110 disabled:opacity-50"
+            class="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-violet-500/25 transition hover:opacity-95 hover:shadow-violet-500/40 disabled:opacity-50"
           >
             {{ submitting ? 'Ingresando…' : 'Ingresar al panel' }}
             <ArrowRight
@@ -255,51 +241,55 @@ async function submit(): Promise<void> {
         <!-- Escena: dots (textura perforada como la referencia) -->
         <div
           v-if="s.scene === 'dots'"
-          class="absolute inset-0 bg-[#0e1118]"
+          class="absolute inset-0 bg-[#0c0c14]"
         >
           <div
             class="absolute inset-0 [background-image:radial-gradient(rgba(248,250,252,0.13)_1px,transparent_1.6px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_65%_40%,black_25%,transparent_75%)]"
           />
           <div
-            class="absolute -right-32 top-1/4 h-[480px] w-[480px] rounded-full bg-accent/[0.08] blur-[110px]"
+            class="absolute -right-32 top-1/4 h-[480px] w-[480px] rounded-full bg-gradient-to-tr from-[#6d5df1]/25 via-[#8b5cf6]/15 to-[#ec4899]/20 blur-[110px]"
           />
           <div
-            class="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_90%,rgba(244,231,1,0.06),transparent_55%)]"
+            class="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_90%,rgba(109,93,241,0.18),transparent_55%)]"
           />
         </div>
         <!-- Escena: bars (aforo/actividad) -->
         <div
           v-else-if="s.scene === 'bars'"
-          class="absolute inset-0 bg-[#0e1118]"
+          class="absolute inset-0 bg-[#0c0c14]"
         >
           <div class="absolute inset-x-0 bottom-0 flex items-end gap-5 px-16 opacity-90">
             <div
               v-for="(h, j) in [35, 60, 42, 78, 55, 90, 66, 48, 84, 38, 70, 58]"
               :key="j"
               class="flex-1 rounded-t-md"
-              :class="j === 5 ? 'bg-accent/80' : 'bg-surface'"
+              :class="
+                j === 5
+                  ? 'bg-gradient-to-t from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] shadow-lg shadow-violet-500/30'
+                  : 'bg-surface'
+              "
               :style="{ height: `${h * 4}px` }"
             />
           </div>
           <div
-            class="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-[#0e1118]/70"
+            class="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-[#0c0c14]/70"
           />
           <div
-            class="absolute -left-24 top-0 h-[400px] w-[400px] rounded-full bg-accent/[0.06] blur-[100px]"
+            class="absolute -left-24 top-0 h-[400px] w-[400px] rounded-full bg-[#8b5cf6]/15 blur-[100px]"
           />
         </div>
         <!-- Escena: beam (push/difusión) -->
         <div
           v-else
-          class="absolute inset-0 bg-[#0e1118]"
+          class="absolute inset-0 bg-[#0c0c14]"
         >
           <div
-            class="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/15 blur-[70px]"
+            class="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-[#6d5df1]/30 to-[#ec4899]/30 blur-[70px]"
           />
           <div
             v-for="r in 3"
             :key="r"
-            class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent/20"
+            class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#8b5cf6]/30"
             :style="{
               width: `${160 + r * 150}px`,
               height: `${160 + r * 150}px`,
@@ -307,7 +297,7 @@ async function submit(): Promise<void> {
             }"
           />
           <div
-            class="absolute inset-0 [background-image:linear-gradient(rgba(30,38,56,0.5)_1px,transparent_1px),linear-gradient(90deg,rgba(30,38,56,0.5)_1px,transparent_1px)] [background-size:60px_60px] opacity-40"
+            class="absolute inset-0 [background-image:linear-gradient(rgba(109,93,241,0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(109,93,241,0.15)_1px,transparent_1px)] [background-size:60px_60px] opacity-40"
           />
         </div>
 
@@ -341,7 +331,7 @@ async function submit(): Promise<void> {
         <div class="h-px w-16 overflow-hidden bg-stroke">
           <div
             :key="slideTick"
-            class="h-full bg-accent"
+            class="h-full bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899]"
             :style="{ animation: `slide-progress ${SLIDE_MS}ms linear forwards` }"
           />
         </div>
@@ -370,7 +360,7 @@ async function submit(): Promise<void> {
       :class="leaving && 'translate-x-0'"
     >
       <div
-        class="absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_100%,rgba(244,231,1,0.16),transparent_60%)]"
+        class="absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_100%,rgba(109,93,241,0.22),rgba(236,72,153,0.12),transparent_60%)]"
       />
     </div>
   </div>

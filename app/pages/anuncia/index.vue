@@ -31,7 +31,7 @@ const form = ref({
   title: '',
   subtitle: '',
   badge: 'ALIADO',
-  brandColor: '#f4e701',
+  brandColor: '#8b5cf6',
   imageUrl: '',
   ctaLabel: 'Ver oferta',
   description: '',
@@ -290,10 +290,8 @@ onMounted(async () => {
         v-else-if="loadError || !info?.enabled"
         class="mx-auto max-w-lg rounded-2xl border border-stroke bg-surface p-10 text-center"
       >
-        <div
-          class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-accent"
-        >
-          <Dumbbell class="h-6 w-6 text-base" />
+        <div class="mb-4 flex justify-center">
+          <RirhubLogo size="lg" :show-tagline="false" />
         </div>
         <h1 class="mt-4 text-lg font-black text-text-primary">
           Publicidad con {{ info?.brandName || 'RIR-HUB' }}
@@ -307,10 +305,8 @@ onMounted(async () => {
 
       <template v-else>
         <div class="mb-8 text-center">
-          <div
-            class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-accent"
-          >
-            <Dumbbell class="h-6 w-6 text-base" />
+          <div class="mb-4 flex justify-center">
+            <RirhubLogo size="lg" tagline="PLATAFORMA DE ANUNCIANTES" />
           </div>
           <h1 class="mt-4 text-2xl font-black tracking-tight text-text-primary">
             Anuncia tu negocio en la app de {{ info.brandName }}

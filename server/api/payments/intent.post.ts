@@ -40,6 +40,37 @@ export default defineEventHandler(async (event) => {
 
   const member = memberSnap.data() ?? {};
   const plan = planSnap.data() ?? {};
+
+  /// Si el socio tiene membresía ACTIVA y vigente, solo puede subir de
+  /// nivel (elegir un plan de mayor precio que el actual).
+  const currentUntilMs =
+    typeof member.membership_until?.toMillis === 'function'
+      ? (member.membership_until.toMillis() as number)
+      : typeof member.membership_until === 'number'
+        ? member.membership_until
+        : null;
+  const isCurrentlyActive =
+    member.membership_status === 'ACTIVE' &&
+    (currentUntilMs === null || currentUntilMs > Date.now());
+
+  if (isCurrentlyActive && typeof member.membership_plan_id === 'string' && member.membership_plan_id) {
+    const currentPlanSnap = await db()
+      .collection('plans')
+      .doc(member.membership_plan_id)
+      .get();
+    if (currentPlanSnap.exists) {
+      const currentPrice = Number(currentPlanSnap.data()?.price ?? 0);
+      const targetPrice = Number(plan.price ?? 0);
+      if (targetPrice <= currentPrice) {
+        throw createError({
+          statusCode: 400,
+          message:
+            'Mientras tu membresía esté activa solo puedes subir a un plan de mayor nivel',
+        });
+      }
+    }
+  }
+
   const stripe = useStripe();
 
   let customerId = member.stripe_customer_id as string | undefined;

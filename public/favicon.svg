@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- RIR-HUB · mark: barbell reads as "H" (hub) — RIR = Reps In Reserve -->
+  <rect width="512" height="512" rx="112" fill="#7c6cf6"/>
+  <g fill="#ffffff">
+    <!-- outer plates -->
+    <rect x="64" y="168" width="26" height="176" rx="13"/>
+    <rect x="422" y="168" width="26" height="176" rx="13"/>
+    <!-- inner plates (stems of the H) -->
+    <rect x="100" y="120" width="54" height="272" rx="27"/>
+    <rect x="358" y="120" width="54" height="272" rx="27"/>
+    <!-- the bar (crossbar of the H) -->
+    <rect x="100" y="229" width="312" height="54" rx="27"/>
+  </g>
+</svg>

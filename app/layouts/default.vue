@@ -239,16 +239,10 @@ onMounted(() => {
     <aside
       class="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-stroke bg-surface md:flex"
     >
-      <div class="flex items-center gap-3 border-b border-stroke px-6 py-5">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">
-          <Dumbbell class="h-5 w-5 text-base" />
-        </div>
-        <div>
-          <p class="text-sm font-black tracking-wide text-text-primary">RIR-HUB</p>
-          <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-dim">
-            B2B & DMS
-          </p>
-        </div>
+      <div class="border-b border-stroke px-5 py-5">
+        <NuxtLink to="/" class="group block">
+          <RirhubLogo size="md" tagline="B2B & DMS" />
+        </NuxtLink>
       </div>
 
       <nav class="flex-1 space-y-5 overflow-y-auto px-3 py-5">
@@ -267,13 +261,17 @@ onMounted(() => {
               class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition"
               :class="
                 route.path === item.to
-                  ? 'bg-accent/10 text-text-primary'
+                  ? 'bg-gradient-to-r from-violet-500/15 to-pink-500/10 text-white font-bold border-l-2 border-violet-500 shadow-sm'
                   : 'text-text-muted hover:bg-white/5 hover:text-text-primary'
               "
             >
               <span
                 class="h-4 w-1 rounded-full"
-                :class="route.path === item.to ? 'bg-accent' : 'bg-transparent'"
+                :class="
+                  route.path === item.to
+                    ? 'bg-gradient-to-b from-[#6d5df1] to-[#ec4899]'
+                    : 'bg-transparent'
+                "
               />
               <component :is="item.icon" class="h-4 w-4" />
               {{ item.label }}
@@ -290,12 +288,18 @@ onMounted(() => {
 
       <div class="border-t border-stroke px-4 py-4">
         <div class="flex items-center gap-3">
-          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-accent/20 text-[11px] font-black text-accent">
+          <div
+            class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-[#6d5df1]/30 via-[#8b5cf6]/20 to-[#ec4899]/30 text-[11px] font-black text-white border border-white/10"
+          >
             {{ (session?.name ?? 'ST').slice(0, 2).toUpperCase() }}
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-xs font-bold text-text-primary">{{ session?.name }}</p>
-            <p class="truncate text-[10px] text-text-dim">{{ session?.email }}</p>
+            <p class="truncate text-xs font-bold text-text-primary">
+              {{ session?.name }}
+            </p>
+            <p class="truncate text-[10px] text-text-dim">
+              {{ session?.email }}
+            </p>
           </div>
           <button
             class="rounded-lg p-1.5 text-text-dim transition hover:bg-white/5 hover:text-accent"
@@ -493,7 +497,7 @@ onMounted(() => {
       :class="signingOut && 'translate-x-0'"
     >
       <div
-        class="absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_100%,rgba(244,231,1,0.16),transparent_60%)]"
+        class="absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_100%,rgba(109,93,241,0.22),rgba(236,72,153,0.12),transparent_60%)]"
       />
     </div>
   </div>

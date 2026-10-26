@@ -54,7 +54,7 @@ const editForm = ref({
   title: '',
   subtitle: '',
   badge: 'ALIADO',
-  brandColor: '#f4e701',
+  brandColor: '#8b5cf6',
   imageUrl: '',
   ctaLabel: 'Ver oferta',
   placement: 'carousel' as SponsorAd['placement'],
@@ -232,7 +232,7 @@ const preview = computed(() => {
     title: a?.title ?? '',
     subtitle: a?.subtitle ?? '',
     ctaLabel: a?.ctaLabel ?? '',
-    brandColor: argbToHex(a?.brandColor) ?? '#f4e701',
+    brandColor: argbToHex(a?.brandColor) ?? '#8b5cf6',
     placement: a?.placement ?? 'carousel',
     description: a?.description ?? '',
     address: a?.address ?? '',
@@ -345,7 +345,7 @@ function startEdit(): void {
     title: ad.value.title,
     subtitle: ad.value.subtitle,
     badge: ad.value.badge,
-    brandColor: argbToHex(ad.value.brandColor) ?? '#f4e701',
+    brandColor: argbToHex(ad.value.brandColor) ?? '#8b5cf6',
     imageUrl: ad.value.imageUrl,
     ctaLabel: ad.value.ctaLabel,
     placement: ad.value.placement,
@@ -393,7 +393,7 @@ function confirmSave(): void {
     changes.push('Se actualizará el subtítulo');
   if (editForm.value.badge !== a.badge)
     changes.push(`Badge: '${a.badge}' → '${editForm.value.badge || 'ALIADO'}'`);
-  if (editForm.value.brandColor !== (argbToHex(a.brandColor) ?? '#f4e701'))
+  if (editForm.value.brandColor !== (argbToHex(a.brandColor) ?? '#8b5cf6'))
     changes.push(
       `Color de marca: ${argbToHex(a.brandColor) ?? 'acento'} → ${editForm.value.brandColor}`,
     );

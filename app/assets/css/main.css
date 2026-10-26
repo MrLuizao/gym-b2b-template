@@ -2,10 +2,13 @@
 @import "@nuxt/ui";
 
 @theme {
-  --color-base: #0b0e14;
-  --color-surface: #131823;
-  --color-stroke: #1e2638;
-  --color-accent: #f4e701;
+  --color-base: #08080d;
+  --color-surface: #0f0f17;
+  --color-stroke: #1c1b29;
+  --color-accent: #8b5cf6;
+  --color-logo-indigo: #6d5df1;
+  --color-logo-violet: #8b5cf6;
+  --color-logo-pink: #ec4899;
   --color-text-primary: #f8fafc;
   --color-text-muted: #94a3b8;
   --color-text-dim: #64748b;
@@ -14,17 +17,17 @@
 }
 
 @theme static {
-  --color-accent-50: #fffef0;
-  --color-accent-100: #fdfad0;
-  --color-accent-200: #faf5a0;
-  --color-accent-300: #f7ef5e;
-  --color-accent-400: #f5ea2e;
-  --color-accent-500: #f4e701;
-  --color-accent-600: #d4c600;
-  --color-accent-700: #a89e00;
-  --color-accent-800: #7d7500;
-  --color-accent-900: #5a5400;
-  --color-accent-950: #3a3600;
+  --color-accent-50: #faf8ff;
+  --color-accent-100: #f3efff;
+  --color-accent-200: #e8e0ff;
+  --color-accent-300: #d4c4fd;
+  --color-accent-400: #b59cf8;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c46eb;
+  --color-accent-700: #6d35d6;
+  --color-accent-800: #5a2bb3;
+  --color-accent-900: #4b2493;
+  --color-accent-950: #1e0d42;
 }
 
 :root {
@@ -39,7 +42,7 @@ body,
 
 body {
   font-family: var(--font-sans);
-  background-color: #0b0e14;
+  background-color: #08080d;
   color: #f8fafc;
   -webkit-font-smoothing: antialiased;
 }
@@ -50,12 +53,31 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e2638;
+  background: #1c1b29;
   border-radius: 99px;
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.logo-gradient-text {
+  background: linear-gradient(135deg, #6d5df1 0%, #8b5cf6 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.logo-gradient-bg {
+  background: linear-gradient(135deg, #6d5df1 0%, #8b5cf6 50%, #ec4899 100%);
+}
+
+.glow-logo {
+  box-shadow: 0 0 35px -5px rgba(139, 92, 246, 0.35);
+}
+
+/* Contraste óptimo para botones con bg-accent */
+.bg-accent.text-base {
+  color: #ffffff !important;
 }
 
 @keyframes access-pop {

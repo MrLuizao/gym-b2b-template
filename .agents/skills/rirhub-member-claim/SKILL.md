@@ -58,6 +58,7 @@ email is the Google/Apple login. They may differ.
 
 - `POST /api/payments` — records cash/card/transfer payment
 - `POST /api/payments/intent` — Stripe PaymentIntent (rate-limited 10/min)
+  - **Active Tier Upgrade Rule**: If the member's membership is currently `ACTIVE` and not expired (`membership_until > now`), `POST /api/payments/intent` validates that the target plan's `price` is strictly greater than their current plan's `price` (`targetPrice > currentPrice`). Downgrades or same-tier renewals while active are rejected with `400` (and locked in Flutter's `MembershipCheckoutScreen`). Expired memberships can select any active plan.
 - Links to member via `user_id`, extends membership `expires_at`
 - Page: member detail → payments tab
 
