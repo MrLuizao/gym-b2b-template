@@ -97,17 +97,13 @@ async function submit(): Promise<void> {
 <template>
   <div class="flex min-h-screen bg-base">
     <!-- Formulario -->
-    <div
-      class="flex w-full flex-col justify-center px-6 py-10 sm:px-10 lg:w-[440px] lg:shrink-0 xl:w-[480px]"
-    >
+    <div class="flex w-full flex-col justify-center px-6 py-10 sm:px-10 lg:w-[440px] lg:shrink-0 xl:w-[480px]">
       <div class="mx-auto w-full max-w-sm">
         <div class="mb-2">
           <RirhubLogo size="lg" tagline="B2B & DMS · CONSOLA ADMINISTRATIVA" />
         </div>
 
-        <h2
-          class="mt-10 text-3xl font-black tracking-tight text-text-primary"
-        >
+        <h2 class="mt-10 text-3xl font-black tracking-tight text-text-primary">
           Inicia sesión
         </h2>
         <p class="mt-2 text-xs leading-relaxed text-text-dim">
@@ -120,100 +116,60 @@ async function submit(): Promise<void> {
 
         <form class="mt-9 space-y-5" @submit.prevent="submit()">
           <div>
-            <label
-              for="email"
-              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >
+            <label for="email" class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Email corporativo
             </label>
             <div class="relative mt-2">
-              <Mail
-                class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-dim"
-              />
-              <input
-                id="email"
-                v-model="email"
-                type="email"
-                autocomplete="email"
-                placeholder="staff@tunegocio.mx"
-                class="w-full rounded-xl border border-stroke bg-surface py-3 pl-11 pr-4 text-sm text-text-primary outline-none transition placeholder:text-text-dim/60 focus:border-accent"
-              />
+              <Mail class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-dim" />
+              <input id="email" v-model="email" type="email" autocomplete="email" placeholder="staff@tunegocio.mx"
+                class="w-full rounded-xl border border-stroke bg-surface py-3 pl-11 pr-4 text-sm text-text-primary outline-none transition placeholder:text-text-dim/60 focus:border-accent" />
             </div>
           </div>
 
           <div>
-            <label
-              for="password"
-              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >
+            <label for="password" class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Contraseña
             </label>
             <div class="relative mt-2">
-              <Lock
-                class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-dim"
-              />
-              <input
-                id="password"
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="current-password"
-                placeholder="••••••••"
-                class="w-full rounded-xl border border-stroke bg-surface py-3 pl-11 pr-12 text-sm text-text-primary outline-none transition placeholder:text-text-dim/60 focus:border-accent"
-              />
-              <button
-                type="button"
-                :aria-label="showPassword ? 'Ocultar' : 'Mostrar'"
+              <Lock class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-dim" />
+              <input id="password" v-model="password" :type="showPassword ? 'text' : 'password'"
+                autocomplete="current-password" placeholder="••••••••"
+                class="w-full rounded-xl border border-stroke bg-surface py-3 pl-11 pr-12 text-sm text-text-primary outline-none transition placeholder:text-text-dim/60 focus:border-accent" />
+              <button type="button" :aria-label="showPassword ? 'Ocultar' : 'Mostrar'"
                 class="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-dim transition hover:text-text-primary"
-                @click="showPassword = !showPassword"
-              >
+                @click="showPassword = !showPassword">
                 <component :is="showPassword ? EyeOff : Eye" class="h-4 w-4" />
               </button>
             </div>
           </div>
 
           <div v-if="!firebase.enabled">
-            <label
-              for="role"
-              class="text-[10px] font-bold uppercase tracking-widest text-text-dim"
-            >
+            <label for="role" class="text-[10px] font-bold uppercase tracking-widest text-text-dim">
               Perfil (demo)
             </label>
-            <select
-              id="role"
-              v-model="role"
-              class="mt-2 w-full cursor-pointer rounded-xl border border-stroke bg-surface px-4 py-3 text-sm text-text-primary outline-none transition focus:border-accent"
-            >
+            <select id="role" v-model="role"
+              class="mt-2 w-full cursor-pointer rounded-xl border border-stroke bg-surface px-4 py-3 text-sm text-text-primary outline-none transition focus:border-accent">
               <option value="ADMIN">Admin global</option>
               <option value="MANAGER">Gerente de sede</option>
               <option value="RECEPTIONIST">Recepcionista</option>
             </select>
           </div>
 
-          <p
-            v-if="errorMessage"
-            class="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-xs font-bold text-red-400"
-          >
+          <p v-if="errorMessage"
+            class="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-xs font-bold text-red-400">
             {{ errorMessage }}
           </p>
 
-          <button
-            type="submit"
-            :disabled="submitting"
-            class="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-violet-500/25 transition hover:opacity-95 hover:shadow-violet-500/40 disabled:opacity-50"
-          >
+          <button type="submit" :disabled="submitting"
+            class="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-violet-500/25 transition hover:opacity-95 hover:shadow-violet-500/40 disabled:opacity-50">
             {{ submitting ? 'Ingresando…' : 'Ingresar al panel' }}
-            <ArrowRight
-              v-if="!submitting"
-              class="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-            />
+            <ArrowRight v-if="!submitting" class="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </button>
         </form>
 
         <p class="mt-10 text-[10px] text-text-dim">
-          <NuxtLink
-            to="/legal/aviso-privacidad"
-            class="underline underline-offset-2 transition hover:text-text-primary"
-          >
+          <NuxtLink to="/legal/aviso-privacidad"
+            class="underline underline-offset-2 transition hover:text-text-primary">
             Aviso de privacidad
           </NuxtLink>
         </p>
@@ -221,84 +177,49 @@ async function submit(): Promise<void> {
     </div>
 
     <!-- Slideshow -->
-    <div
-      class="relative hidden flex-1 overflow-hidden border-l border-stroke lg:block"
-    >
+    <div class="relative hidden flex-1 overflow-hidden border-l border-stroke lg:block">
       <!-- Escenas -->
-      <div
-        v-for="(s, i) in slides"
-        :key="i"
-        class="absolute inset-0 transition-all duration-700 ease-out"
-        :class="
-          i === slideIndex
-            ? 'translate-x-0 opacity-100'
-            : i < slideIndex ||
-                (slideIndex === 0 && i === slides.length - 1)
-              ? '-translate-x-8 opacity-0'
-              : 'translate-x-8 opacity-0'
-        "
-      >
+      <div v-for="(s, i) in slides" :key="i" class="absolute inset-0 transition-all duration-700 ease-out" :class="i === slideIndex
+          ? 'translate-x-0 opacity-100'
+          : i < slideIndex ||
+            (slideIndex === 0 && i === slides.length - 1)
+            ? '-translate-x-8 opacity-0'
+            : 'translate-x-8 opacity-0'
+        ">
         <!-- Escena: dots (textura perforada como la referencia) -->
-        <div
-          v-if="s.scene === 'dots'"
-          class="absolute inset-0 bg-[#0c0c14]"
-        >
+        <div v-if="s.scene === 'dots'" class="absolute inset-0 bg-[#0c0c14]">
           <div
-            class="absolute inset-0 [background-image:radial-gradient(rgba(248,250,252,0.13)_1px,transparent_1.6px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_65%_40%,black_25%,transparent_75%)]"
-          />
+            class="absolute inset-0 [background-image:radial-gradient(rgba(248,250,252,0.13)_1px,transparent_1.6px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_65%_40%,black_25%,transparent_75%)]" />
           <div
-            class="absolute -right-32 top-1/4 h-[480px] w-[480px] rounded-full bg-gradient-to-tr from-[#6d5df1]/25 via-[#8b5cf6]/15 to-[#ec4899]/20 blur-[110px]"
-          />
+            class="absolute -right-32 top-1/4 h-[480px] w-[480px] rounded-full bg-gradient-to-tr from-[#6d5df1]/25 via-[#8b5cf6]/15 to-[#ec4899]/20 blur-[110px]" />
           <div
-            class="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_90%,rgba(109,93,241,0.18),transparent_55%)]"
-          />
+            class="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_90%,rgba(109,93,241,0.18),transparent_55%)]" />
         </div>
         <!-- Escena: bars (aforo/actividad) -->
-        <div
-          v-else-if="s.scene === 'bars'"
-          class="absolute inset-0 bg-[#0c0c14]"
-        >
+        <div v-else-if="s.scene === 'bars'" class="absolute inset-0 bg-[#0c0c14]">
           <div class="absolute inset-x-0 bottom-0 flex items-end gap-5 px-16 opacity-90">
-            <div
-              v-for="(h, j) in [35, 60, 42, 78, 55, 90, 66, 48, 84, 38, 70, 58]"
-              :key="j"
-              class="flex-1 rounded-t-md"
-              :class="
-                j === 5
+            <div v-for="(h, j) in [35, 60, 42, 78, 55, 90, 66, 48, 84, 38, 70, 58]" :key="j" class="flex-1 rounded-t-md"
+              :class="j === 5
                   ? 'bg-gradient-to-t from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] shadow-lg shadow-violet-500/30'
                   : 'bg-surface'
-              "
-              :style="{ height: `${h * 4}px` }"
-            />
+                " :style="{ height: `${h * 4}px` }" />
           </div>
-          <div
-            class="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-[#0c0c14]/70"
-          />
-          <div
-            class="absolute -left-24 top-0 h-[400px] w-[400px] rounded-full bg-[#8b5cf6]/15 blur-[100px]"
-          />
+          <div class="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-[#0c0c14]/70" />
+          <div class="absolute -left-24 top-0 h-[400px] w-[400px] rounded-full bg-[#8b5cf6]/15 blur-[100px]" />
         </div>
         <!-- Escena: beam (push/difusión) -->
-        <div
-          v-else
-          class="absolute inset-0 bg-[#0c0c14]"
-        >
+        <div v-else class="absolute inset-0 bg-[#0c0c14]">
           <div
-            class="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-[#6d5df1]/30 to-[#ec4899]/30 blur-[70px]"
-          />
-          <div
-            v-for="r in 3"
-            :key="r"
+            class="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-[#6d5df1]/30 to-[#ec4899]/30 blur-[70px]" />
+          <div v-for="r in 3" :key="r"
             class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#8b5cf6]/30"
             :style="{
               width: `${160 + r * 150}px`,
               height: `${160 + r * 150}px`,
               opacity: 0.5 - r * 0.13,
-            }"
-          />
+            }" />
           <div
-            class="absolute inset-0 [background-image:linear-gradient(rgba(109,93,241,0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(109,93,241,0.15)_1px,transparent_1px)] [background-size:60px_60px] opacity-40"
-          />
+            class="absolute inset-0 [background-image:linear-gradient(rgba(109,93,241,0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(109,93,241,0.15)_1px,transparent_1px)] [background-size:60px_60px] opacity-40" />
         </div>
 
         <div class="absolute inset-0 bg-gradient-to-t from-base/80 via-transparent to-base/40" />
@@ -308,13 +229,8 @@ async function submit(): Promise<void> {
       <div class="absolute left-10 top-10 max-w-xs xl:left-14 xl:top-14">
         <Transition name="fade" mode="out-in">
           <div v-if="slides[slideIndex]" :key="slideIndex">
-            <component
-              :is="slides[slideIndex]?.icon"
-              class="h-6 w-6 text-accent"
-            />
-            <p
-              class="mt-4 text-xl font-black leading-snug tracking-tight text-text-primary"
-            >
+            <component :is="slides[slideIndex]?.icon" class="h-6 w-6 text-accent" />
+            <p class="mt-4 text-xl font-black leading-snug tracking-tight text-text-primary">
               {{ slides[slideIndex]?.title }}
             </p>
             <p class="mt-2 text-xs leading-relaxed text-text-muted">
@@ -325,30 +241,17 @@ async function submit(): Promise<void> {
       </div>
 
       <!-- Controles: barra de progreso + flechas -->
-      <div
-        class="absolute bottom-8 right-10 flex items-center gap-4 xl:right-14"
-      >
+      <div class="absolute bottom-8 right-10 flex items-center gap-4 xl:right-14">
         <div class="h-px w-16 overflow-hidden bg-stroke">
-          <div
-            :key="slideTick"
-            class="h-full bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899]"
-            :style="{ animation: `slide-progress ${SLIDE_MS}ms linear forwards` }"
-          />
+          <div :key="slideTick" class="h-full bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899]"
+            :style="{ animation: `slide-progress ${SLIDE_MS}ms linear forwards` }" />
         </div>
-        <button
-          type="button"
-          aria-label="Anterior"
-          class="text-text-muted transition hover:text-text-primary"
-          @click="goSlide(slideIndex - 1)"
-        >
+        <button type="button" aria-label="Anterior" class="text-text-muted transition hover:text-text-primary"
+          @click="goSlide(slideIndex - 1)">
           <ChevronLeft class="h-5 w-5" />
         </button>
-        <button
-          type="button"
-          aria-label="Siguiente"
-          class="text-text-muted transition hover:text-text-primary"
-          @click="goSlide(slideIndex + 1)"
-        >
+        <button type="button" aria-label="Siguiente" class="text-text-muted transition hover:text-text-primary"
+          @click="goSlide(slideIndex + 1)">
           <ChevronRight class="h-5 w-5" />
         </button>
       </div>
@@ -357,11 +260,9 @@ async function submit(): Promise<void> {
     <!-- Wipe de salida — cubre la pantalla de izquierda a derecha -->
     <div
       class="pointer-events-none fixed inset-0 z-50 -translate-x-full bg-base transition-transform duration-700 ease-[cubic-bezier(0.7,0,0.25,1)]"
-      :class="leaving && 'translate-x-0'"
-    >
+      :class="leaving && 'translate-x-0'">
       <div
-        class="absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_100%,rgba(109,93,241,0.22),rgba(236,72,153,0.12),transparent_60%)]"
-      />
+        class="absolute inset-x-0 bottom-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_100%,rgba(109,93,241,0.22),rgba(236,72,153,0.12),transparent_60%)]" />
     </div>
   </div>
 </template>
@@ -371,20 +272,24 @@ async function submit(): Promise<void> {
   from {
     width: 0%;
   }
+
   to {
     width: 100%;
   }
 }
+
 .fade-enter-active,
 .fade-leave-active {
   transition:
     opacity 0.45s ease,
     transform 0.45s ease;
 }
+
 .fade-enter-from {
   opacity: 0;
   transform: translateY(8px);
 }
+
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-8px);

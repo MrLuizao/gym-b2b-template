@@ -18,6 +18,7 @@ ocurrencia (`class_date`, dailyStats) se calculan en esa TZ.
 - **NO ejecutar pruebas unitarias (`npm test`, `vitest`, etc.) de forma automática**: Las pruebas solo se realizan **cuando el usuario lo indique expresamente**. No correr suites de prueba ni análisis pesados por iniciativa propia.
 - **Flujo de trabajo ágil y directo**: Resolver solicitudes con modificaciones concisas, precisas y directas al código. Evitar diagnósticos redundantes, pasos intermedios innecesarios o procesos largos.
 - **Validación ligera de sintaxis**: En cambios complejos, la única verificación es sintaxis rápida, sin bloquear al usuario con compilaciones pesadas innecesarias.
+- **PROHIBIDO poner sombras (`shadow-*`, `box-shadow`, `drop-shadow`) en botones (`<button>`, `<UButton>`, o `<a>` con aspecto de botón)** en todos los repositorios (`rirhub-b2b`, `rirhub-landing`, `rirhub-app`). Los botones deben ser completamente limpios y planos en su contorno, sin resplandores ni sombreados exteriores.
 
 ## Comandos
 
