@@ -18,10 +18,9 @@ definePageMeta({ layout: false });
 const { login, session } = useAuth();
 const firebase = useFirebase();
 
-/// En modo demo se prellenan para entrar rápido; con Firebase activo
-/// los campos arrancan vacíos (esta pantalla se muestra en demos).
-const email = ref(firebase.enabled ? '' : 'admin@rirhub.mx');
-const password = ref(firebase.enabled ? '' : 'demo1234');
+/// Credenciales demo prellenadas para entrar rápido en presentaciones.
+const email = ref('admin@rirhub.mx');
+const password = ref('demo1234');
 const role = ref<StaffRole>('ADMIN');
 const showPassword = ref(false);
 const errorMessage = ref<string | null>(null);
@@ -161,7 +160,7 @@ async function submit(): Promise<void> {
           </p>
 
           <button type="submit" :disabled="submitting"
-            class="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-violet-500/25 transition hover:opacity-95 hover:shadow-violet-500/40 disabled:opacity-50">
+            class="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] py-3.5 text-xs font-black uppercase tracking-[0.2em] text-white transition hover:opacity-95 disabled:opacity-50">
             {{ submitting ? 'Ingresando…' : 'Ingresar al panel' }}
             <ArrowRight v-if="!submitting" class="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </button>
