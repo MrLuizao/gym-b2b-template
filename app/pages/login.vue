@@ -20,7 +20,7 @@ const firebase = useFirebase();
 
 /// Credenciales demo prellenadas para entrar rápido en presentaciones.
 const email = ref('admin@rirhub.mx');
-const password = ref('demo1234');
+const password = ref('RirHub2026!');
 const role = ref<StaffRole>('ADMIN');
 const showPassword = ref(false);
 const errorMessage = ref<string | null>(null);
@@ -179,11 +179,11 @@ async function submit(): Promise<void> {
     <div class="relative hidden flex-1 overflow-hidden border-l border-stroke lg:block">
       <!-- Escenas -->
       <div v-for="(s, i) in slides" :key="i" class="absolute inset-0 transition-all duration-700 ease-out" :class="i === slideIndex
-          ? 'translate-x-0 opacity-100'
-          : i < slideIndex ||
-            (slideIndex === 0 && i === slides.length - 1)
-            ? '-translate-x-8 opacity-0'
-            : 'translate-x-8 opacity-0'
+        ? 'translate-x-0 opacity-100'
+        : i < slideIndex ||
+          (slideIndex === 0 && i === slides.length - 1)
+          ? '-translate-x-8 opacity-0'
+          : 'translate-x-8 opacity-0'
         ">
         <!-- Escena: dots (textura perforada como la referencia) -->
         <div v-if="s.scene === 'dots'" class="absolute inset-0 bg-[#0c0c14]">
@@ -199,8 +199,8 @@ async function submit(): Promise<void> {
           <div class="absolute inset-x-0 bottom-0 flex items-end gap-5 px-16 opacity-90">
             <div v-for="(h, j) in [35, 60, 42, 78, 55, 90, 66, 48, 84, 38, 70, 58]" :key="j" class="flex-1 rounded-t-md"
               :class="j === 5
-                  ? 'bg-gradient-to-t from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] shadow-lg shadow-violet-500/30'
-                  : 'bg-surface'
+                ? 'bg-gradient-to-t from-[#6d5df1] via-[#8b5cf6] to-[#ec4899] shadow-lg shadow-violet-500/30'
+                : 'bg-surface'
                 " :style="{ height: `${h * 4}px` }" />
           </div>
           <div class="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-[#0c0c14]/70" />
